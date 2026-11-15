@@ -26,6 +26,8 @@ import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import { Banner } from '@astryxdesign/core/Banner';
 
+import type { AppearanceThemeFamily } from '@/common/contracts/appearance-setting-vo';
+import { DARK_ONLY_THEME_SLUGS, THEME_SLUG_BY_FAMILY } from '@/frontend/app/themeFamilies';
 import { AUTHOR_SUPPORT_CONTACT } from '@/common/constants/author-support';
 import Md from '@/frontend/components/shared/markdown/Markdown';
 import { writeTextToClipboard } from '@/frontend/lib/clipboard';
@@ -39,6 +41,22 @@ import wordmarkReverse from '../../../../assets/brand/refrain/wordmark-reverse.s
 import wechatPayQr from '../../../../assets/support/wechat-pay-qr.jpg';
 import douyinQr from '../../../../assets/support/douyin-qr.jpg';
 
+function subscribeRootThemeClass(callback: () => void): () => void {
+    if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
+        return () => {};
+    }
+    const observer = new MutationObserver(callback);
+    observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class'],
+    });
+    return () => observer.disconnect();
+}
+
+function getRootDarkSnapshot(): boolean {
+    return typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+}
+
 /**
  * 关于与更新设置面板
  *
@@ -47,6 +65,12 @@ import douyinQr from '../../../../assets/support/douyin-qr.jpg';
 const AboutSetting: React.FC = () => {
     const { t } = useI18nTranslation('settings');
     const theme = useSetting((s) => s.values.get('appearance.theme'));
+    const themeFamily = useSetting((s) => s.values.get('appearance.themeFamily')) || 'neutral';
+    const rootHasDarkClass = React.useSyncExternalStore(
+        subscribeRootThemeClass,
+        getRootDarkSnapshot,
+        () => false,
+    );
 
     const { data: currentVersion = '' } = useSWR<string>(
         'system/app-version',
@@ -154,8 +178,11 @@ const AboutSetting: React.FC = () => {
         caption: `${channel.title} · ${channel.description}`,
     }));
 
-    // 依主题模式配置选择图标，不调用 matchMedia，遵从 Electron IPC 注入的主题类名
-    const isDark = theme === 'dark' || (theme !== 'light' && typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
+    const themeSlug = THEME_SLUG_BY_FAMILY[themeFamily as AppearanceThemeFamily] ?? 'dp-neutral';
+    // 深色专用主题（如 Gothic）始终以深色渲染；其余主题在 system/未指定浅色时跟随根节点 .dark 类名
+    const isDark = DARK_ONLY_THEME_SLUGS.has(themeSlug)
+        || theme === 'dark'
+        || (theme !== 'light' && rootHasDarkClass);
 
     return (
         <SettingsPageShell
@@ -369,7 +396,7 @@ const AboutSetting: React.FC = () => {
                                             type="button"
                                             aria-label={`${channel.title} - ${t('about.links.supportZoomHint', { defaultValue: '点击二维码可放大查看' })}`}
                                             onClick={() => setSupportLightboxIndex(index)}
-                                            className="mx-auto block w-fit cursor-pointer overflow-hidden rounded-lg border border-border transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            className="mx-auto block w-fit cursor-pointer overflow-hidden rounded-lg border border-border transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                                         >
                                             <img
                                                 src={channel.src}

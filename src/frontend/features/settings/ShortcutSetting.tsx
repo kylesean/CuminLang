@@ -352,7 +352,7 @@ const RecordDialogBody: React.FC<RecordDialogBodyProps> = ({
                             }
                             recordContainerRef.current?.focus();
                         }}
-                        className="w-full bg-transparent border-0 p-0 cursor-pointer outline-none"
+                        className="w-full rounded-lg bg-transparent border-0 p-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                     >
                         <VStack gap={2} hAlign="center" vAlign="center">
                             <HStack gap={2} vAlign="center">
@@ -786,7 +786,7 @@ const ShortcutRow: React.FC<{
                     aria-haspopup="dialog"
                     title={editLabel}
                     onClick={() => setIsDialogOpen(true)}
-                    className="inline-flex items-center rounded-lg px-2 py-1 -mx-2 cursor-pointer transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    className="inline-flex items-center rounded-lg px-2 py-1 -mx-2 cursor-pointer transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                 >
                     <KeyBadge keys={value} />
                 </button>

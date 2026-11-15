@@ -412,21 +412,23 @@ const AppearanceSetting: React.FC = () => {
                     description={t('appearance.subtitlePreviewHint')}
                     icon={Captions}
                     action={(
-                        <SegmentedControl
-                            label={t('appearance.subtitlePreviewTitle')}
-                            value={previewMode}
-                            onChange={setPreviewMode}
-                            size="sm"
-                        >
-                            <SegmentedControlItem
-                                value="main"
-                                label={t('appearance.subtitlePreviewMain')}
-                            />
-                            <SegmentedControlItem
-                                value="side"
-                                label={t('appearance.subtitlePreviewSide')}
-                            />
-                        </SegmentedControl>
+                        <div className="shrink-0">
+                            <SegmentedControl
+                                label={t('appearance.subtitlePreviewTitle')}
+                                value={previewMode}
+                                onChange={setPreviewMode}
+                                size="sm"
+                            >
+                                <SegmentedControlItem
+                                    value="main"
+                                    label={t('appearance.subtitlePreviewMain')}
+                                />
+                                <SegmentedControlItem
+                                    value="side"
+                                    label={t('appearance.subtitlePreviewSide')}
+                                />
+                            </SegmentedControl>
+                        </div>
                     )}
                 >
                     <Card variant="default" padding={4} width="100%">

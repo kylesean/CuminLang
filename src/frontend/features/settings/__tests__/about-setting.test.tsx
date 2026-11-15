@@ -7,11 +7,15 @@ import '@/frontend/i18n';
 import { AUTHOR_SUPPORT_CONTACT } from '@/common/constants/author-support';
 import AboutSetting from '../AboutSetting';
 import { settingsApi } from '../settingsApi';
+import wordmark from '../../../../../assets/brand/refrain/wordmark.svg';
+import wordmarkReverse from '../../../../../assets/brand/refrain/wordmark-reverse.svg';
+
+let mockSettingValues = new Map<string, string>([['appearance.theme', 'dark']]);
 
 vi.mock('../settingsStore', () => ({
     // 桩只需覆盖被测组件读取的 values 字段；选择器签名在测试侧无跨模块校验，收紧为具体形状即可
     default: (selector: (state: { values: Map<string, string> }) => unknown) =>
-        selector({ values: new Map([['appearance.theme', 'dark']]) }),
+        selector({ values: mockSettingValues }),
 }));
 
 vi.mock('../settingsApi', () => ({
@@ -42,6 +46,8 @@ const renderWithFreshSWR = (ui: React.ReactElement) => {
 describe('AboutSetting', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockSettingValues = new Map([['appearance.theme', 'dark']]);
+        document.documentElement.classList.remove('dark', 'light');
     });
 
     it('renders app title and checks for updates in up-to-date state', async () => {
@@ -137,6 +143,52 @@ describe('AboutSetting', () => {
         await waitFor(() => {
             expect(settingsApi.copyText).toHaveBeenCalledWith(AUTHOR_SUPPORT_CONTACT.douyin);
             expect(toast.success).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    it.each([
+        { theme: 'light', themeFamily: 'neutral', rootClass: 'light', expectedSrc: wordmark },
+        { theme: 'dark', themeFamily: 'neutral', rootClass: 'dark', expectedSrc: wordmarkReverse },
+        { theme: 'light', themeFamily: 'gothic', rootClass: 'light', expectedSrc: wordmarkReverse },
+        { theme: 'system', themeFamily: 'neutral', rootClass: 'dark', expectedSrc: wordmarkReverse },
+        { theme: 'system', themeFamily: 'neutral', rootClass: 'light', expectedSrc: wordmark },
+    ])(
+        'selects theme-adapted wordmark for theme=$theme, family=$themeFamily, rootClass=$rootClass',
+        async ({ theme, themeFamily, rootClass, expectedSrc }) => {
+            mockSettingValues = new Map([
+                ['appearance.theme', theme],
+                ['appearance.themeFamily', themeFamily],
+            ]);
+            document.documentElement.classList.add(rootClass);
+            vi.mocked(settingsApi.getAppVersion).mockResolvedValue('0.15.2');
+            vi.mocked(settingsApi.checkUpdate).mockResolvedValue({ status: 'ok', releases: [] });
+
+            renderWithFreshSWR(<AboutSetting />);
+
+            const logo = await screen.findByAltText('Refrain');
+            expect(logo.getAttribute('src')).toBe(expectedSrc);
+        },
+    );
+
+    it('updates wordmark reactively when root dark class changes in system theme mode', async () => {
+        mockSettingValues = new Map([
+            ['appearance.theme', 'system'],
+            ['appearance.themeFamily', 'neutral'],
+        ]);
+        document.documentElement.classList.add('light');
+        vi.mocked(settingsApi.getAppVersion).mockResolvedValue('0.15.2');
+        vi.mocked(settingsApi.checkUpdate).mockResolvedValue({ status: 'ok', releases: [] });
+
+        renderWithFreshSWR(<AboutSetting />);
+
+        const logo = await screen.findByAltText('Refrain');
+        expect(logo.getAttribute('src')).toBe(wordmark);
+
+        document.documentElement.classList.remove('light');
+        document.documentElement.classList.add('dark');
+
+        await waitFor(() => {
+            expect(logo.getAttribute('src')).toBe(wordmarkReverse);
         });
     });
 });
