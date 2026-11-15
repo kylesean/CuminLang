@@ -1,7 +1,7 @@
 {
   "name": "refrain",
   "productName": "Refrain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Immersive media player and AI-native language learning desktop app",
   "main": ".vite/build/main.cjs",
   "desktopName": "refrain.desktop",
