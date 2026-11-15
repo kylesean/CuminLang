@@ -56,7 +56,11 @@ const HomePage = () => {
         { revalidateOnMount: true, dedupingInterval: 0 }
     );
     const [fullHistoryReady, setFullHistoryReady] = React.useState(false);
-    const { data: vpsFull } = useSWR(
+    const {
+        data: vpsFull,
+        error: vpsFullError,
+        isValidating: vpsFullValidating,
+    } = useSWR(
         fullHistoryReady ? apiPath('watch-history/list') : null,
         fileBrowserApi.listWatchHistory,
         {
@@ -69,7 +73,17 @@ const HomePage = () => {
             },
         }
     );
-    const vps = Array.isArray(vpsFull) ? vpsFull : Array.isArray(vpsBasic) ? vpsBasic : undefined;
+    // 完整列表曾缓存过空数组且本次拉取失败/尚未返回时，保留已就绪的基础列表，避免页面闪回空态
+    const useFullHistory = Array.isArray(vpsFull)
+        && !vpsFullError
+        && !(vpsFull.length === 0 && Array.isArray(vpsBasic) && vpsBasic.length > 0 && vpsFullValidating);
+    const vps = useFullHistory
+        ? vpsFull
+        : Array.isArray(vpsBasic)
+            ? vpsBasic
+            : Array.isArray(vpsFull)
+                ? vpsFull
+                : undefined;
     const clear = usePlaybackSession((s) => s.clear);
     const [num, setNum] = React.useState(4);
     // 从第四个开始截取num个

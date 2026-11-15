@@ -121,4 +121,41 @@ describe('HomePage & ProjectListCard watch-history SWR sync', () => {
         });
         expect(screen.getByTestId('watch-history-card-vid-2')).toBeDefined();
     });
+
+    it('完整列表曾缓存空数组且本次拉取失败或尚未返回时，不应覆盖已就绪的基础列表', async () => {
+        // 先以空列表完成首次挂载（在 SWR 缓存中留下 `watch-history/list` = []）
+        historyList = [];
+        const firstRender = render(
+            <SWRConfig value={{ dedupingInterval: 0 }}>
+                <MemoryRouter>
+                    <HomePage />
+                </MemoryRouter>
+            </SWRConfig>,
+        );
+        await waitFor(() => {
+            expect(fileBrowserApi.listWatchHistory).toHaveBeenCalledTimes(1);
+        });
+        firstRender.unmount();
+
+        // 随后产生新记录，但完整列表（例如 ffprobe 异常）请求失败；基础列表已有记录
+        historyList = [makeVideo('vid-3', 'new-lesson.mp4')];
+        vi.mocked(fileBrowserApi.listWatchHistory).mockRejectedValue(new Error('ffprobe failed'));
+
+        render(
+            <SWRConfig value={{ dedupingInterval: 0 }}>
+                <MemoryRouter>
+                    <HomePage />
+                </MemoryRouter>
+            </SWRConfig>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('watch-history-card-vid-3')).toBeDefined();
+        });
+        await waitFor(() => {
+            expect(fileBrowserApi.listWatchHistory).toHaveBeenCalledTimes(2);
+        });
+        expect(screen.getByTestId('watch-history-card-vid-3')).toBeDefined();
+        expect(screen.queryByTestId('mock-yt-hero')).toBeNull();
+    });
 });
