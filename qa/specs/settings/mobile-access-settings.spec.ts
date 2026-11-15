@@ -1,3 +1,4 @@
+import net from 'node:net';
 import { expect, type Page } from '@playwright/test';
 import { readConfigValue, test } from '../../support/fixtures';
 import { openSettingsSection } from '../../support/settings-page';
@@ -25,12 +26,44 @@ async function openMobileAccess(page: Page): Promise<void> {
     await openSettingsSection(page, SECTION_NAME, page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
 }
 
+/** 默认监听端口；若本机已有桌面端占用则自动退让到临时空闲端口。 */
+const DEFAULT_MOBILE_PORT = 27182;
+
+async function isPortFree(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+        const probe = net.createServer();
+        probe.once('error', () => resolve(false));
+        probe.once('listening', () => {
+            probe.close(() => resolve(true));
+        });
+        probe.listen(port);
+    });
+}
+
+async function allocateFreePort(): Promise<number> {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.once('error', reject);
+        server.listen(0, () => {
+            const addr = server.address();
+            const port = typeof addr === 'object' && addr ? addr.port : 0;
+            server.close(() => resolve(port));
+        });
+    });
+}
+
 /**
  * 打开手机访问服务，并等页面把访问地址列出来。
  *
  * @param page 应用主窗口页面。
  */
 async function enableMobileAccess(page: Page): Promise<void> {
+    if (!(await isPortFree(DEFAULT_MOBILE_PORT))) {
+        const freePort = await allocateFreePort();
+        const portInput = page.getByRole('spinbutton', { name: '端口' });
+        await portInput.fill(String(freePort));
+        await portInput.blur();
+    }
     const toggle = page.getByRole('switch', { name: ENABLE_SWITCH_NAME });
     // Astryx 的 Switch 渲染成原生 checkbox，勾选状态在 checked 属性上而不是 aria-checked。
     if (!(await toggle.isChecked())) {

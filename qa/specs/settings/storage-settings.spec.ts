@@ -47,8 +47,9 @@ test.describe('存储设置', () => {
         fs.chmodSync(readOnlyParent, 0o500);
         await libraryInput.fill(path.join(readOnlyParent, 'library'));
 
-        // 保存失败必须让用户看见原因，否则就是「页面上填了、实际没保存」的静默失败
-        const saveError = page.getByRole('alert');
+        // 保存失败必须让用户看见原因，否则就是「页面上填了、实际没保存」的静默失败；
+        // 限定到 main 内以避免命中全局 @astryxdesign/core 隐藏的 live-region alert。
+        const saveError = page.getByRole('main').getByRole('alert');
         await expect(saveError).toBeVisible();
         await expect(saveError).toContainText('当前存储目录暂时无法访问');
         expect(readConfigValue(userDataDir, 'storage.path')).toBe(initialPath);

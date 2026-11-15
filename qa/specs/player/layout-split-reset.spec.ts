@@ -28,6 +28,11 @@ async function openPlayer(page: Page): Promise<void> {
         window.location.hash = `#/player/qa?file=${encodeURIComponent(file)}&seek=0&lang=zh`;
     }, FIXTURE_VIDEO);
     await expect(page.getByTestId(SENTENCE_CARD_TESTID).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId(INNER_HANDLE)).toBeVisible();
+    // 等两帧让窗口放大与 flex 分栏测量完成，避免拖拽拿到过期几何坐标。
+    await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
 }
 
 async function readSplitSizes(page: Page): Promise<SplitSizes> {
@@ -42,11 +47,34 @@ async function readSplitSizes(page: Page): Promise<SplitSizes> {
     });
 }
 
-async function dragHandle(page: Page, testId: string, dx: number, dy: number): Promise<void> {
-    const before = await readSplitSizes(page);
+async function waitForStableBox(page: Page, testId: string) {
     const handle = page.getByTestId(testId);
     await expect(handle).toBeVisible();
-    const box = await handle.boundingBox();
+    let prev = await handle.boundingBox();
+    await expect
+        .poll(async () => {
+            await page.evaluate(() => new Promise<void>((resolve) => {
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+            }));
+            const curr = await handle.boundingBox();
+            const stable = Boolean(
+                prev
+                && curr
+                && Math.abs(prev.x - curr.x) < 1
+                && Math.abs(prev.y - curr.y) < 1
+                && Math.abs(prev.width - curr.width) < 1
+                && Math.abs(prev.height - curr.height) < 1,
+            );
+            prev = curr;
+            return stable;
+        })
+        .toBe(true);
+    return handle.boundingBox();
+}
+
+async function dragHandle(page: Page, testId: string, dx: number, dy: number): Promise<void> {
+    const before = await readSplitSizes(page);
+    const box = await waitForStableBox(page, testId);
     if (!box) {
         throw new Error(`${testId} 不可见，无法构造拖动前提`);
     }

@@ -77,6 +77,8 @@ export function selectInRow(page: Page, row: SettingRowKey): Locator {
  * @param option 下拉项的中文文案。
  */
 export async function chooseInRow(page: Page, row: SettingRowKey, option: string): Promise<void> {
-    await selectInRow(page, row).click();
+    const combobox = selectInRow(page, row);
+    await combobox.scrollIntoViewIfNeeded();
+    await combobox.click();
     await page.getByRole('option', { name: option }).click();
 }

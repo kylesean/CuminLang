@@ -1,6 +1,6 @@
 import { expect, type Page, type Locator } from '@playwright/test';
 import { launchAppSession, readConfigValue, test } from '../../support/fixtures';
-import { openSettingsSection, reloadSettingsPage, selectInRow, switchSettingsSection } from '../../support/settings-page';
+import { chooseInRow, openSettingsSection, reloadSettingsPage, selectInRow, switchSettingsSection } from '../../support/settings-page';
 
 /** 主题按钮文案到根节点 `data-theme` 值的映射。 */
 const THEME_VALUE = { 深色: 'dark', 浅色: 'light' } as const;
@@ -109,8 +109,7 @@ test.describe('外观设置', () => {
         const page = session.page;
         await openAppearanceSetting(page);
 
-        await selectInRow(page, 'language').click();
-        await page.getByRole('option', { name: 'English' }).click();
+        await chooseInRow(page, 'language', 'English');
 
         await expect.poll(() => readConfigValue(userDataDir, 'i18n.language')).toBe('en-US');
 
