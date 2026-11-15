@@ -15,7 +15,7 @@ const electronMocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
     app: {
         isPackaged: true,
-        getPath: () => '/tmp/refrain-system-controller-test',
+        getPath: () => '/tmp/cuminlang-system-controller-test',
         getVersion: electronMocks.getVersion,
         relaunch: electronMocks.relaunch,
         quit: electronMocks.quit,
@@ -83,8 +83,8 @@ function createMocks() {
         })),
         getSystemConfig: vi.fn(async () => 'stored-value'),
         setSystemConfig: vi.fn(async () => undefined),
-        resolveCacheDirectory: vi.fn(async () => '/tmp/refrain-cache'),
-        resolveLogsDirectory: vi.fn(async () => '/tmp/refrain-logs'),
+        resolveCacheDirectory: vi.fn(async () => '/tmp/cuminlang-cache'),
+        resolveLogsDirectory: vi.fn(async () => '/tmp/cuminlang-logs'),
     } as unknown as SystemService;
     const controller = new SystemController(windowPort, systemService);
     return { controller, windowPort, systemService };
@@ -155,10 +155,10 @@ describe('SystemController', () => {
         expect(electronMocks.openPath).toHaveBeenCalledWith('/tmp/folder');
 
         await controller.openCacheDir();
-        expect(electronMocks.openPath).toHaveBeenCalledWith('/tmp/refrain-cache');
+        expect(electronMocks.openPath).toHaveBeenCalledWith('/tmp/cuminlang-cache');
 
         await controller.openLogsDir();
-        expect(electronMocks.openPath).toHaveBeenCalledWith('/tmp/refrain-logs');
+        expect(electronMocks.openPath).toHaveBeenCalledWith('/tmp/cuminlang-logs');
 
         electronMocks.openPath.mockResolvedValueOnce('ENOENT');
         await expect(controller.openLogsDir()).rejects.toThrow('打开日志目录失败：ENOENT');
@@ -177,8 +177,8 @@ describe('SystemController', () => {
         });
         expect(systemService.checkUpdate).toHaveBeenCalledWith('0.1.0', { mode: 'toast' });
 
-        await controller.openUrl('https://github.com/kylesean/Refrain');
-        expect(electronMocks.openExternal).toHaveBeenCalledWith('https://github.com/kylesean/Refrain');
+        await controller.openUrl('https://github.com/kylesean/CuminLang');
+        expect(electronMocks.openExternal).toHaveBeenCalledWith('https://github.com/kylesean/CuminLang');
 
         await controller.setWindowButtonsVisible(true);
         await controller.changeWindowSize('player');
@@ -210,7 +210,7 @@ describe('SystemController', () => {
 
         expect(registrations.has('system/open-folder/logs')).toBe(true);
         await captured.get('system/open-folder/logs')!(null, undefined);
-        expect(electronMocks.openPath).toHaveBeenCalledWith('/tmp/refrain-logs');
+        expect(electronMocks.openPath).toHaveBeenCalledWith('/tmp/cuminlang-logs');
 
         await captured.get('system/clipboard/write')!(null, 'copied text');
         expect(electronMocks.writeText).toHaveBeenCalledWith('copied text');

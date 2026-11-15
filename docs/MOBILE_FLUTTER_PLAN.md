@@ -1,6 +1,6 @@
-# Refrain 移动端（Flutter + Forui）独立开发计划
+# CuminLang 移动端（Flutter + Forui）独立开发计划
 
-> 本文档是 Refrain 原生移动端（Android + iOS）的独立重构与开发总规划。目标是用 **Flutter 3.50.0+** 与社区 UI 组件库 **[Forui](https://forui.dev/)（`forui ^0.28.0`）** 从零构建一款交互优雅、编解码兼容、与 Refrain 桌面端（Electron）学习闭环深度协同的跨平台局域网/离线学习伴侣应用，彻底取代上游遗留的纯 Swift iOS 工程。
+> 本文档是 CuminLang 原生移动端（Android + iOS）的独立重构与开发总规划。目标是用 **Flutter 3.50.0+** 与社区 UI 组件库 **[Forui](https://forui.dev/)（`forui ^0.28.0`）** 从零构建一款交互优雅、编解码兼容、与 CuminLang 桌面端（Electron）学习闭环深度协同的跨平台局域网/离线学习伴侣应用，彻底取代上游遗留的纯 Swift iOS 工程。
 
 ---
 
@@ -8,7 +8,7 @@
 
 ### 1.1 上游遗留 iOS 端的核心问题
 
-Refrain 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端（原 `ios/` 目录，已彻底清理）。结合真机实测与源码评审，继续在旧工程上修补性价比极低，原因如下：
+CuminLang 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端（原 `ios/` 目录，已彻底清理）。结合真机实测与源码评审，继续在旧工程上修补性价比极低，原因如下：
 
 1. **单平台绑定与三端逻辑割裂**：仅支持 iOS（依赖 XcodeGen + macOS Xcode 环境），缺少 Android 版本；播放器状态机、字幕时间索引、查词逻辑在桌面端、内置移动网页版（`src/mobile/`）与原生 iOS 之间各写了一套，维护成本成倍放大。
 2. **原生 `AVPlayer` 解码兼容性致命短板**：
@@ -29,7 +29,7 @@ Refrain 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端�
 | UI 组件库 | **`forui`** + `forui_hooks` | `forui ^0.28.0`（[forui.dev](https://forui.dev/)） | 受 `shadcn/ui` 启发，内置 `FLucideIcons`、完整 `FThemeData` token 体系与 `touch` / `desktop` 双尺度，天然契合 [`docs/DESIGN.md`](DESIGN.md) |
 | 音视频内核 | **`media_kit`** + `media_kit_video` + `media_kit_native_event_loop` | `libmpv` + FFmpeg 内核 | 原生直解 MKV / MP4 / AVI、**AV1 / VP9 / H.264 / HEVC**，彻底消灭“有声无画”；支持无变调倍速、毫秒级 seek 与播放器实例复用 |
 | 状态与路由 | `flutter_riverpod` + `forui_hooks` + `go_router` | 社区稳定版 | Riverpod 管理连接会话、播放器同步状态与异步缓存；`forui_hooks` 零样板绑定 `FPopover` / `FTabs` / `FAccordion` 等控制器 |
-| 网络与发现 | `dio` + `bonsoir`（mDNS） | 社区稳定版 | `dio` 统一处理 Token 注入、Range 断点下载、超时与错误结构化；`bonsoir` 支持扫描桌面端广播的 `_refrain._tcp` 服务 |
+| 网络与发现 | `dio` + `bonsoir`（mDNS） | 社区稳定版 | `dio` 统一处理 Token 注入、Range 断点下载、超时与错误结构化；`bonsoir` 支持扫描桌面端广播的 `_cuminlang._tcp` 服务 |
 | 扫码与存储 | `mobile_scanner` + `flutter_secure_storage` + `drift` / SQLite | 社区稳定版 | `mobile_scanner` 扫码读取桌面端配对二维码；Token 安全落盘；本地缓存历史、词汇与离线下载索引 |
 | 后台音频 | `audio_service` | 社区稳定版 | 支持锁屏媒体控制（Play/Pause/上一句/下一句）与熄屏播客听读模式 |
 
@@ -39,12 +39,12 @@ Refrain 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端�
 
 ---
 
-## 3. 设计系统对齐：Refrain × Forui
+## 3. 设计系统对齐：CuminLang × Forui
 
 严格遵循 [`docs/DESIGN.md`](DESIGN.md) 的三条核心约束迁移到 Forui：
 
 1. **主题只改变风格，不改变尺度**：字号、行高、间距、圆角统一收敛到 `FThemeData` / `FStyle` / `FTypography`，禁止页面内部手写 `fontSize: 13` 或随意改动控件高度。
-2. **双主题色彩体系**：使用 Forui CLI / Forui Create 生成主题骨架并定制为 Refrain 品牌调色板：
+2. **双主题色彩体系**：使用 Forui CLI / Forui Create 生成主题骨架并定制为 CuminLang 品牌调色板：
    - **浅色（Warm Paper）**：画布 `#F5F4F0`、卡片 `#FFFFFF`、边框 `rgba(20,20,20,0.10)`、主文字 `#1C1C1C`、次文字 `#6F6C66`、品牌强调金 `#B07A00`。
    - **深色（Dark Charcoal）**：画布 `#0B0B0B`、表面 `#151515`、边框 `rgba(255,255,255,0.08)`、主文字 `#EDEDED`、次文字 `#8F8F8F`、品牌强调金 `#F5C518`。
    - **媒体画面叠加层例外**：压在视频画面上的控制栏、返回键、倍速胶囊无论浅色/深色主题统一保持深底白字高对比度，不接入主题背景切换。
@@ -67,7 +67,7 @@ Refrain 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端�
 ### M1：零门槛连接与配对中心（解决“连不上、不会填”）
 
 - **扫码一扫即连（主力路径）**：桌面端「设置 → 手机访问」展示包含局域网候选 IP 列表、端口与访问令牌的二维码（JSON Payload，如 `{"urls":["http://192.168.6.211:27182"],"token":"...","v":1}`）。手机端打开扫码框，自动依次探测哪个 IP 可达并完成鉴权握手。
-- **局域网 mDNS 自动发现**：扫描 `_refrain._tcp.local`，自动列出同网段内开启了服务的电脑主机名与端口，点击后仅需校验/扫码注入令牌。
+- **局域网 mDNS 自动发现**：扫描 `_cuminlang._tcp.local`，自动列出同网段内开启了服务的电脑主机名与端口，点击后仅需校验/扫码注入令牌。
 - **多主机历史管理 & 网络诊断**：保存常用桌面端（办公室电脑 / 家里台式机），一键切换；连接失败时给出明确排查引导（例如：`连接超时` → 提示检查同一 Wi-Fi 及桌面端系统防火墙如 Linux `ufw` 放行端口；`401` → 一键重扫更新令牌）。
 
 ### M2：媒体库与继续学习首页（Home / Library）
@@ -130,7 +130,7 @@ Refrain 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端�
 | 阶段 | 新增/扩展能力 | 接口或改动说明 |
 | --- | --- | --- |
 | P0 | 健康检查与版本协商 | `GET /api/health`（返回服务版本、主机名、是否支持转码、可用能力位） |
-| P0 | 扫码配对与 mDNS 广播 | 桌面端「手机访问」设置页渲染完整 JSON Payload 二维码；可选广播 `_refrain._tcp` |
+| P0 | 扫码配对与 mDNS 广播 | 桌面端「手机访问」设置页渲染完整 JSON Payload 二维码；可选广播 `_cuminlang._tcp` |
 | P1 | 媒体编码元信息透出 | `/api/recent` 与 `/api/videos/:id` 补充 `vcodec`、`acodec`、`width`、`height`、`duration` |
 | P1 | 下载源格式偏好 | 桌面端 YouTube 下载设置增加「优先移动端兼容编码（H.264 / avc1）」选项 |
 | P2 | 词汇收藏与复习同步 | `POST /api/vocabulary/mark`、`GET /api/review/due`、`POST /api/review/submit` |
@@ -144,7 +144,7 @@ Refrain 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端�
 
 ### 6.1 工程目录建议
 
-- 保持桌面端 Electron 仓库与移动端代码边界清晰：建议放在独立仓库 `refrain-mobile`（或在适当时机作为本仓库平级工程引入，不污染 Electron `package.json` / `forge.config.ts` / `vitest` 流水线）。
+- 保持桌面端 Electron 仓库与移动端代码边界清晰：建议放在独立仓库 `cuminlang-mobile`（或在适当时机作为本仓库平级工程引入，不污染 Electron `package.json` / `forge.config.ts` / `vitest` 流水线）。
 - 内部采用 **Feature-First** 结构：
   ```text
   lib/
@@ -180,7 +180,7 @@ Refrain 此前随上游（DashPlayer）继承了一个纯 SwiftUI iOS 客户端�
 - **交付物**：
   - 初始化 Flutter 3.50 + Forui 0.28.0 工程，完成 Warm Paper / Dark Charcoal 两套 `FThemeData` 定义与基础组件封装。
   - 桌面端补齐 `GET /api/health` 与设置页配对二维码；手机端实现扫码配对、手填兜底、多主机记录及防火墙/令牌错误诊断页。
-- **验收标准**：Android 真机通过扫码 3 秒内连上本机运行中的 Refrain 桌面端并展示媒体库首屏。
+- **验收标准**：Android 真机通过扫码 3 秒内连上本机运行中的 CuminLang 桌面端并展示媒体库首屏。
 
 ### Phase 1：媒体库与沉浸式学习播放器（预计 2 周）
 - **交付物**：

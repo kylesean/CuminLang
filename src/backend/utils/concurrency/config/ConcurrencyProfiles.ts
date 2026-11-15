@@ -59,7 +59,7 @@ export interface ConcurrencyProfiles {
 }
 
 /**
- * Refrain 默认并发配置。
+ * CuminLang 默认并发配置。
  */
 export const defaultConcurrencyProfiles: ConcurrencyProfiles = {
     semaphore: {

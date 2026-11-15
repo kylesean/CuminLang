@@ -25,7 +25,7 @@ import { togglePlayerView } from '@/frontend/features/player/lib/player-view-con
 import ContextSuggestionChip from './ContextSuggestionChip';
 import LearningMomentChip from './LearningMomentChip';
 
-const LEARNING_MOMENT_MEMORY_KEY = 'refrain:learning-moment:v1';
+const LEARNING_MOMENT_MEMORY_KEY = 'cuminlang:learning-moment:v1';
 
 /**
  * 读取持久化的学习时刻限频记忆。

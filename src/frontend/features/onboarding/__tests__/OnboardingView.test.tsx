@@ -156,7 +156,7 @@ describe('OnboardingView Component', () => {
         vi.mocked(settingsApi.cancelSherpaTtsModelDownload).mockResolvedValue({ cancelled: true });
         vi.mocked(settingsApi.getStorageStatus).mockResolvedValue({
             configuredPath: '',
-            resolvedPath: '/Users/test/Refrain',
+            resolvedPath: '/Users/test/CuminLang',
             exists: true,
             isDirectory: true,
             readable: true,

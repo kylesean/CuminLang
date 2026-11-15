@@ -10,7 +10,7 @@
  */
 export const MOBILE_CONTENT_SECURITY_POLICY = [
     "default-src 'self'",
-    "script-src 'self' 'sha256-LeCQc9kiUm2ivPLx7zGnbe+zkyXMqG6TY21qGEnOic4='",
+    "script-src 'self' 'sha256-IDDvfQGc+6VRZmmNskCCMGXrmazDxMoA+Ibj4EWgu9Y='",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",

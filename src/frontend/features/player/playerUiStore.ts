@@ -275,7 +275,7 @@ export const usePlayerUi = create(
       setHardsubMaskRect: (rect) => set(() => ({ hardsubMaskRect: normalizeHardsubMaskRect(rect) })),
     })),
     {
-      name: 'refrain-subtitle-tracks',
+      name: 'cuminlang-subtitle-tracks',
       /** 内容没变就不落盘：运行时状态高频变化时避开每帧一次同步写。 */
       storage: createJSONStorage(createContentDedupedStorage),
       /**

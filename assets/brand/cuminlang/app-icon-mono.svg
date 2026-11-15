@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="title">
+  <title id="title">CuminLang</title>
+  <rect id="plate" x="96" y="96" width="832" height="832" rx="185" fill="#181614"/>
+  <g id="glyph" transform="translate(189.4,189.4) scale(2.5200)">
+    <path fill="#FAF7F2" d="M 187.18 60.82 A 95 95 0 1 0 187.18 195.18 L 156.42 164.42 A 51.5 51.5 0 1 1 156.42 91.58 Z"/>
+    <path fill="#FAF7F2" d="M 224 94.09 A 47.5 47.5 0 0 1 186 159.91 A 47.5 47.5 0 0 1 224 94.09 Z"/>
+  </g>
+</svg>

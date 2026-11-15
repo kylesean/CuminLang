@@ -31,7 +31,7 @@ describe('SenseVoiceGatewayImpl', () => {
     });
 
     it('模型文件齐全时传入 --sense-voice-* 参数并清洗输出文本', async () => {
-        const modelsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'refrain-sensevoice-test-'));
+        const modelsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cuminlang-sensevoice-test-'));
         tempDirs.push(modelsRoot);
         const modelDir = path.join(modelsRoot, SENSE_VOICE_MODEL_DIRECTORY);
         fs.mkdirSync(modelDir, { recursive: true });
@@ -73,7 +73,7 @@ describe('SenseVoiceGatewayImpl', () => {
     });
 
     it('缺少模型权重时立即抛出清晰错误而不调用 CLI', async () => {
-        const modelsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'refrain-sensevoice-missing-'));
+        const modelsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cuminlang-sensevoice-missing-'));
         tempDirs.push(modelsRoot);
         const cli = { run: vi.fn(), killActive: vi.fn() } as unknown as SherpaOnnxCli;
         const gateway = new SenseVoiceGatewayImpl(cli);

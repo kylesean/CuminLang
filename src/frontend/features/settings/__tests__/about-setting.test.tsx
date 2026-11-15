@@ -7,8 +7,6 @@ import '@/frontend/i18n';
 import { AUTHOR_SUPPORT_CONTACT } from '@/common/constants/author-support';
 import AboutSetting from '../AboutSetting';
 import { settingsApi } from '../settingsApi';
-import wordmark from '../../../../../assets/brand/refrain/wordmark.svg';
-import wordmarkReverse from '../../../../../assets/brand/refrain/wordmark-reverse.svg';
 
 let mockSettingValues = new Map<string, string>([['appearance.theme', 'dark']]);
 
@@ -59,7 +57,7 @@ describe('AboutSetting', () => {
 
         renderWithFreshSWR(<AboutSetting />);
 
-        expect(screen.getByAltText('Refrain')).toBeDefined();
+        expect(screen.getByRole('img', { name: 'CuminLang' })).toBeDefined();
         expect(await screen.findByText("You're up to date")).toBeDefined();
         expect(screen.getByRole('button', { name: /Check for Updates/ })).toBeDefined();
     });
@@ -72,7 +70,7 @@ describe('AboutSetting', () => {
                 {
                     version: 'v0.16.0',
                     content: 'Added new features and bug fixes',
-                    url: 'https://github.com/kylesean/Refrain/releases/tag/v0.16.0',
+                    url: 'https://github.com/kylesean/CuminLang/releases/tag/v0.16.0',
                 },
             ],
         });
@@ -115,7 +113,7 @@ describe('AboutSetting', () => {
         fireEvent.click(openLogsBtn);
 
         await waitFor(() => {
-            expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/restart Refrain|重启 Refrain/i));
+            expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/restart CuminLang|重启 CuminLang/i));
         });
     });
 
@@ -147,14 +145,14 @@ describe('AboutSetting', () => {
     });
 
     it.each([
-        { theme: 'light', themeFamily: 'neutral', rootClass: 'light', expectedSrc: wordmark },
-        { theme: 'dark', themeFamily: 'neutral', rootClass: 'dark', expectedSrc: wordmarkReverse },
-        { theme: 'light', themeFamily: 'gothic', rootClass: 'light', expectedSrc: wordmarkReverse },
-        { theme: 'system', themeFamily: 'neutral', rootClass: 'dark', expectedSrc: wordmarkReverse },
-        { theme: 'system', themeFamily: 'neutral', rootClass: 'light', expectedSrc: wordmark },
+        { theme: 'light', themeFamily: 'neutral', rootClass: 'light', expectedSeed: '#CE7818' },
+        { theme: 'dark', themeFamily: 'neutral', rootClass: 'dark', expectedSeed: '#E09428' },
+        { theme: 'light', themeFamily: 'gothic', rootClass: 'light', expectedSeed: '#E09428' },
+        { theme: 'system', themeFamily: 'neutral', rootClass: 'dark', expectedSeed: '#E09428' },
+        { theme: 'system', themeFamily: 'neutral', rootClass: 'light', expectedSeed: '#CE7818' },
     ])(
-        'selects theme-adapted wordmark for theme=$theme, family=$themeFamily, rootClass=$rootClass',
-        async ({ theme, themeFamily, rootClass, expectedSrc }) => {
+        'adapts brand seed color for theme=$theme, family=$themeFamily, rootClass=$rootClass',
+        async ({ theme, themeFamily, rootClass, expectedSeed }) => {
             mockSettingValues = new Map([
                 ['appearance.theme', theme],
                 ['appearance.themeFamily', themeFamily],
@@ -165,12 +163,13 @@ describe('AboutSetting', () => {
 
             renderWithFreshSWR(<AboutSetting />);
 
-            const logo = await screen.findByAltText('Refrain');
-            expect(logo.getAttribute('src')).toBe(expectedSrc);
+            const logo = await screen.findByRole('img', { name: 'CuminLang' });
+            const seed = logo.querySelector('[data-brand-seed="true"]');
+            expect(seed?.getAttribute('fill')).toBe(expectedSeed);
         },
     );
 
-    it('updates wordmark reactively when root dark class changes in system theme mode', async () => {
+    it('updates brand seed color reactively when root dark class changes in system theme mode', async () => {
         mockSettingValues = new Map([
             ['appearance.theme', 'system'],
             ['appearance.themeFamily', 'neutral'],
@@ -181,14 +180,15 @@ describe('AboutSetting', () => {
 
         renderWithFreshSWR(<AboutSetting />);
 
-        const logo = await screen.findByAltText('Refrain');
-        expect(logo.getAttribute('src')).toBe(wordmark);
+        const logo = await screen.findByRole('img', { name: 'CuminLang' });
+        const seed = logo.querySelector('[data-brand-seed="true"]');
+        expect(seed?.getAttribute('fill')).toBe('#CE7818');
 
         document.documentElement.classList.remove('light');
         document.documentElement.classList.add('dark');
 
         await waitFor(() => {
-            expect(logo.getAttribute('src')).toBe(wordmarkReverse);
+            expect(seed?.getAttribute('fill')).toBe('#E09428');
         });
     });
 });

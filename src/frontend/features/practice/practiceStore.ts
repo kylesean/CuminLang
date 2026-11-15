@@ -12,10 +12,10 @@ export type DictationStyle = 'slots' | 'blind';
 export type PracticeSentenceFilter = 'all' | 'unpracticed' | 'weak' | 'vocab';
 
 const STORAGE_KEYS = {
-    dictationStyle: 'refrain.practice.dictation_style',
-    shadowingStyle: 'refrain.practice.shadowing_style',
-    soundCues: 'refrain.practice.sound_cues',
-    autoRecordFlow: 'refrain.practice.auto_record_flow',
+    dictationStyle: 'cuminlang.practice.dictation_style',
+    shadowingStyle: 'cuminlang.practice.shadowing_style',
+    soundCues: 'cuminlang.practice.sound_cues',
+    autoRecordFlow: 'cuminlang.practice.auto_record_flow',
 } as const;
 
 function readStorage<T extends string>(key: string, fallback: T, valid?: readonly string[]): T {

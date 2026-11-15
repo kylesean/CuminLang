@@ -47,7 +47,7 @@ export const useTrainingModeStore = create(
       setRewindOnResume: (v) => set({ rewindOnResume: v }),
     })),
     {
-      name: 'refrain-training-config',
+      name: 'cuminlang-training-config',
     }
   )
 );

@@ -1,4 +1,4 @@
-# Refrain
+# CuminLang
 
 > 基于 [solidSpoon/DashPlayer](https://github.com/solidSpoon/DashPlayer) 早期版本派生，现已独立演进与维护的现代音视频播放与 AI 原生沉浸式语言学习桌面应用。
 
@@ -6,10 +6,10 @@
 
 <p>
   <a href="LICENSE" target="_blank">
-    <img alt="AGPL-3.0 license" src="https://img.shields.io/github/license/kylesean/Refrain.svg" />
+    <img alt="AGPL-3.0 license" src="https://img.shields.io/github/license/kylesean/CuminLang.svg" />
   </a>
-  <a href="https://github.com/kylesean/Refrain/releases/latest" target="_blank">
-    <img alt="Releases" src="https://img.shields.io/github/v/release/kylesean/Refrain?label=Release" />
+  <a href="https://github.com/kylesean/CuminLang/releases/latest" target="_blank">
+    <img alt="Releases" src="https://img.shields.io/github/v/release/kylesean/CuminLang?label=Release" />
   </a>
   <img alt="Electron" src="https://img.shields.io/badge/Electron-47848F?logo=electron&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-087EA4?logo=react&logoColor=white" />
@@ -32,32 +32,32 @@
 ## 界面预览
 
 ### 视频学习主界面与双语字幕文稿
-![Refrain 视频播放与字幕文稿](docs/screenshots/player.png)
+![CuminLang 视频播放与字幕文稿](docs/screenshots/player.png)
 
 ### 播客沉浸听读模式
-![Refrain 播客沉浸听读模式](docs/screenshots/podcast.png)
+![CuminLang 播客沉浸听读模式](docs/screenshots/podcast.png)
 
 ### 跟读与听写练习工坊
-![Refrain 跟读与听写练习工坊](docs/screenshots/practice.png)
+![CuminLang 跟读与听写练习工坊](docs/screenshots/practice.png)
 
 ### 设置中心与多主题外观
-![Refrain 设置中心与多主题外观](docs/screenshots/settings.png)
+![CuminLang 设置中心与多主题外观](docs/screenshots/settings.png)
 
 ---
 
 ## 安装说明
 
-前往 [Latest Release](https://github.com/kylesean/Refrain/releases/latest) 下载对应平台安装包（桌面安装包暂未购买商业代码签名证书，如遇系统安全拦截可按以下方式放行）：
+前往 [Latest Release](https://github.com/kylesean/CuminLang/releases/latest) 下载对应平台安装包（桌面安装包暂未购买商业代码签名证书，如遇系统安全拦截可按以下方式放行）：
 
 - **macOS（`.dmg`，`arm64` / `x64`）**：拖入 `Applications`。若系统提示应用已损坏或无法验证开发者，可在 `系统设置 → 隐私与安全性` 中选择「仍要打开」，或执行：
   ```bash
-  xattr -c /Applications/Refrain.app
+  xattr -c /Applications/CuminLang.app
   ```
 - **Windows（`.exe` / `.msi`）**：双击安装；若 SmartScreen 提示未识别应用，点击「更多信息 → 仍要运行」。`.exe` 与 `.msi` 安装格式请勿混用。
 - **Linux（`.AppImage` / `.deb` / `.rpm`）**：
   ```bash
   # AppImage
-  chmod +x Refrain-*.AppImage && ./Refrain-*.AppImage
+  chmod +x CuminLang-*.AppImage && ./CuminLang-*.AppImage
   # 若缺少 FUSE，可附加 --appimage-extract-and-run 或安装 libfuse2
   ```
 

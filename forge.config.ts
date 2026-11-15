@@ -109,7 +109,7 @@ const adhocResignMacApp = async (packageResult: { platform: string; outputPaths:
 const config: ForgeConfig = {
     packagerConfig: {
         // `@electron-forge/plugin-vite` defaults to packaging only `/.vite/**`.
-        // Refrain has runtime deps (incl. native modules) that must ship with the app.
+        // CuminLang has runtime deps (incl. native modules) that must ship with the app.
         // Keep the package small by still ignoring everything else.
         ignore: (file: string) => {
             if (!file) return false;
@@ -160,7 +160,7 @@ const config: ForgeConfig = {
         // 打包版配音录音会报"麦克风权限被拒绝"（开发环境用的是 Electron 壳自身的授权，
         // 所以只在安装包里复现）。用途文案会原样显示在系统弹框里。
         extendInfo: {
-            NSMicrophoneUsageDescription: 'Refrain 需要使用麦克风录制配音音频。',
+            NSMicrophoneUsageDescription: 'CuminLang 需要使用麦克风录制配音音频。',
         },
         // extraResource 的内容落在 app.asar 之外（安装目录下 <app>/resources/），因此**不受**
         // asar 完整性校验（EnableEmbeddedAsarIntegrityValidation）与 OnlyLoadAppFromAsar 保护：
@@ -177,22 +177,22 @@ const config: ForgeConfig = {
         // **构建期**读仓库里的 whisper-runtime-meta.mjs，CI 从源码仓库跑，不读安装包）。
         // 继续打包只会徒增安装包体积，并把构建期工具暴露在用户的安装目录里。
         extraResource: ['./drizzle', './lib', './resources'],
-        // Linux 命名统一为 refrain：此处 executableName、各 Linux maker 的
+        // Linux 命名统一为 cuminlang：此处 executableName、各 Linux maker 的
         // name/bin 与 package.json 的 desktopName 必须一致，桌面环境才能把窗口（Wayland
-        // app_id / X11 WM_CLASS）匹配到安装包里的 refrain.desktop，否则 Dock 只显示通用占位图标。
-        executableName: 'refrain',
-        name: 'Refrain',
+        // app_id / X11 WM_CLASS）匹配到安装包里的 cuminlang.desktop，否则 Dock 只显示通用占位图标。
+        executableName: 'cuminlang',
+        name: 'CuminLang',
     },
     rebuildConfig: {},
     makers: [
         new MakerSquirrel({
-            name: 'Refrain',
+            name: 'CuminLang',
             // 安装动画只在安装耗时超过 4 秒（且非静默安装）时才弹出；窗口尺寸等于 GIF 的像素尺寸，
             // 且窗口全透明，所以素材必须是自带圆角底板、四角透明的图（详见 Squirrel 的 AnimatedGifWindow）。
-            // install.gif 由 assets/brand/refrain/tools/export_app_icons.py 生成：单帧、325×339、墨色圆角底板。
+            // install.gif 由 assets/brand/cuminlang/tools/export_app_icons.py 生成：单帧、325×339、墨色圆角底板。
             loadingGif: './assets/icons/install.gif',
             setupIcon: './assets/icons/icon.ico',
-            iconUrl: 'https://raw.githubusercontent.com/kylesean/Refrain/main/assets/icons/icon.ico',
+            iconUrl: 'https://raw.githubusercontent.com/kylesean/CuminLang/main/assets/icons/icon.ico',
         }),
         // DMG 窗口尺寸由 1x 背景图的像素尺寸决定（appdmg 读 background.png 的宽高当窗口大小，
         // background@2x.png 仅用于 retina 渲染），因此下面两个图标坐标用的就是背景图那套 640x500 坐标，
@@ -209,9 +209,9 @@ const config: ForgeConfig = {
         }),
         new MakerRpm({
             options: {
-                name: 'refrain',
-                bin: 'refrain',
-                productName: 'Refrain',
+                name: 'cuminlang',
+                bin: 'cuminlang',
+                productName: 'CuminLang',
                 icon: './assets/icons/icon.png',
                 // RPM 4.20+（ubuntu-latest 新版）的 %mkbuilddir 会把 %install 工作目录切到 BUILD/<pkg>-build，
                 // 导致 electron-installer-redhat 默认模板里的 `cp -r usr/*` 找不到 %{_topdir}/BUILD/usr
@@ -220,20 +220,20 @@ const config: ForgeConfig = {
         }),
         new MakerDeb({
             options: {
-                name: 'refrain',
-                bin: 'refrain',
-                productName: 'Refrain',
+                name: 'cuminlang',
+                bin: 'cuminlang',
+                productName: 'CuminLang',
                 icon: './assets/icons/icon.png',
             },
         }),
-        // AppImage：单文件免安装格式，产物命名 Refrain-<version>-<arch>.AppImage。
+        // AppImage：单文件免安装格式，产物命名 CuminLang-<version>-<arch>.AppImage。
         // bin 必须与 packagerConfig.executableName 一致，maker 会按它校验打包产物内的可执行文件。
         // icon 给出 hicolor 多尺寸集合，maker 自动把最大尺寸作为 .DirIcon 默认图标。
         new MakerAppImage({
             options: {
-                name: 'refrain',
-                bin: 'refrain',
-                productName: 'Refrain',
+                name: 'cuminlang',
+                bin: 'cuminlang',
+                productName: 'CuminLang',
                 icon: {
                     '16x16': './assets/icons/16x16.png',
                     '24x24': './assets/icons/24x24.png',
@@ -247,12 +247,12 @@ const config: ForgeConfig = {
             },
         }),
         new MakerWix({
-            name: 'Refrain',
+            name: 'CuminLang',
             description: 'Immersive media player and AI-native language learning desktop app',
             manufacturer: 'kylesean',
             version: packageJson.version,
             icon: './assets/icons/icon.ico',
-            exe: 'refrain.exe',
+            exe: 'cuminlang.exe',
             ui: {
                 chooseDirectory: true,
             },
@@ -292,7 +292,7 @@ const config: ForgeConfig = {
         {
             name: '@electron-forge/publisher-github',
             config: {
-                repository: { owner: 'kylesean', name: 'Refrain' },
+                repository: { owner: 'kylesean', name: 'CuminLang' },
             },
         },
     ],
@@ -315,7 +315,7 @@ const config: ForgeConfig = {
                     if (!oldPath.toLowerCase().endsWith('.msi')) continue;
                     const dir = path.dirname(oldPath);
                     const arch = result.arch; // 'x64' | 'ia32' | 'arm64'
-                    const newPath = path.join(dir, `Refrain-${version}-${arch}.msi`);
+                    const newPath = path.join(dir, `CuminLang-${version}-${arch}.msi`);
                     if (oldPath !== newPath) {
                         await fs.rename(oldPath, newPath);
                         // 更新 artifacts，确保 Publisher 上传重命名后的文件

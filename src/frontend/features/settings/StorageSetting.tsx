@@ -384,7 +384,7 @@ const StorageSetting: React.FC = () => {
                                     <TextInput
                                         label={t('storage.libraryPathTitle')}
                                         isLabelHidden
-                                        placeholder="Documents/Refrain"
+                                        placeholder="Documents/CuminLang"
                                         value={field.value ?? ''}
                                         onChange={(val) => field.onChange(val)}
                                         onBlur={field.onBlur}

@@ -35,7 +35,7 @@
  */
 export const DESKTOP_CONTENT_SECURITY_POLICY = [
     "default-src 'self'",
-    "script-src 'self' 'sha256-J6gATYV44rH71/SECO9X3591jTqbu3nAwGp6CVlzJBo='",
+    "script-src 'self' 'sha256-MXgb0E6spdQrSQojy+6RQyQY7Mtvuupacn+XsUgMVTk='",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' media: data: blob:",
     "font-src 'self' data:",

@@ -1,10 +1,10 @@
 # Third-Party Notices
 
-Refrain 基于 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) 开源，并在仓库内包含、使用或按需拉取以下开源项目与数据资源。
+CuminLang 基于 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) 开源，并在仓库内包含、使用或按需拉取以下开源项目与数据资源。
 
 ## 上游派生致谢
 
-- **[solidSpoon/DashPlayer](https://github.com/solidSpoon/DashPlayer)**（AGPL-3.0）：Refrain 最初基于 DashPlayer 早期版本派生，随后独立重构、扩展并持续维护。
+- **[solidSpoon/DashPlayer](https://github.com/solidSpoon/DashPlayer)**（AGPL-3.0）：CuminLang 最初基于 DashPlayer 早期版本派生，随后独立重构、扩展并持续维护。
 
 ## 随包资源与数据
 
@@ -13,7 +13,7 @@ Refrain 基于 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) 开�
 
 ## 运行时二进制与按需下载组件
 
-在构建打包或用户按需启用离线能力时，Refrain 会引用以下上游组件：
+在构建打包或用户按需启用离线能力时，CuminLang 会引用以下上游组件：
 
 - **[FFmpeg](https://ffmpeg.org/)**（GPL / LGPL；Windows 构建使用 [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) `win64-gpl` / `winarm64-gpl`，macOS / Linux 构建来自 `ffmpeg.martin-riedl.de` 快照）：媒体转码与音视频处理。完整对应源代码与许可证说明可参见各构建发布方仓库。
 - **[whisper.cpp](https://github.com/ggml-org/whisper.cpp)**（MIT License）：本地离线语音识别运行时及对应模型（含 Vulkan SDK 运行时分发库，遵循 Apache-2.0 / MIT 相关条款）。

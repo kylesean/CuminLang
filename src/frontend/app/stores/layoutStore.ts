@@ -64,10 +64,10 @@ export type UseLayoutActions = {
     toggleSidebarCollapsed: () => void;
 };
 
-const SIDEBAR_COLLAPSED_STORAGE_KEY = 'refrain.sidebar_collapsed';
-const TRANSCRIPT_VISIBLE_STORAGE_KEY = 'refrain.transcript_visible';
-const PODCAST_TRANSCRIPT_VISIBLE_STORAGE_KEY = 'refrain.podcast_transcript_visible';
-const TRANSCRIPT_VIEW_MODE_STORAGE_KEY = 'refrain.transcript_view_mode';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'cuminlang.sidebar_collapsed';
+const TRANSCRIPT_VISIBLE_STORAGE_KEY = 'cuminlang.transcript_visible';
+const PODCAST_TRANSCRIPT_VISIBLE_STORAGE_KEY = 'cuminlang.podcast_transcript_visible';
+const TRANSCRIPT_VIEW_MODE_STORAGE_KEY = 'cuminlang.transcript_view_mode';
 
 const readStorageBoolean = (key: string, fallback: boolean): boolean => {
     if (typeof window === 'undefined') return fallback;

@@ -26,36 +26,16 @@ import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import { Banner } from '@astryxdesign/core/Banner';
 
-import type { AppearanceThemeFamily } from '@/common/contracts/appearance-setting-vo';
-import { DARK_ONLY_THEME_SLUGS, THEME_SLUG_BY_FAMILY } from '@/frontend/app/themeFamilies';
 import { AUTHOR_SUPPORT_CONTACT } from '@/common/constants/author-support';
+import { BrandLogo } from '@/frontend/components/shared/BrandLogo';
 import Md from '@/frontend/components/shared/markdown/Markdown';
 import { writeTextToClipboard } from '@/frontend/lib/clipboard';
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
 import type { UpdateCheckResult } from '@/common/types/update-check';
-import useSetting from '@/frontend/features/settings/settingsStore';
 import SettingsPageShell from '@/frontend/features/settings/components/form/SettingsPageShell';
 import { SettingField, SettingSection } from '@/frontend/features/settings/components/form';
-import wordmark from '../../../../assets/brand/refrain/wordmark.svg';
-import wordmarkReverse from '../../../../assets/brand/refrain/wordmark-reverse.svg';
 import wechatPayQr from '../../../../assets/support/wechat-pay-qr.jpg';
 import douyinQr from '../../../../assets/support/douyin-qr.jpg';
-
-function subscribeRootThemeClass(callback: () => void): () => void {
-    if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
-        return () => {};
-    }
-    const observer = new MutationObserver(callback);
-    observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['class'],
-    });
-    return () => observer.disconnect();
-}
-
-function getRootDarkSnapshot(): boolean {
-    return typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
-}
 
 /**
  * 关于与更新设置面板
@@ -64,13 +44,6 @@ function getRootDarkSnapshot(): boolean {
  */
 const AboutSetting: React.FC = () => {
     const { t } = useI18nTranslation('settings');
-    const theme = useSetting((s) => s.values.get('appearance.theme'));
-    const themeFamily = useSetting((s) => s.values.get('appearance.themeFamily')) || 'neutral';
-    const rootHasDarkClass = React.useSyncExternalStore(
-        subscribeRootThemeClass,
-        getRootDarkSnapshot,
-        () => false,
-    );
 
     const { data: currentVersion = '' } = useSWR<string>(
         'system/app-version',
@@ -132,7 +105,7 @@ const AboutSetting: React.FC = () => {
             const message = error instanceof Error ? error.message : String(error);
             if (message.includes('No handler registered')) {
                 toast.error(t('about.links.openLogsRestartRequired', {
-                    defaultValue: '日志目录服务尚未在主进程生效，请重启 Refrain 应用后再试',
+                    defaultValue: '日志目录服务尚未在主进程生效，请重启 CuminLang 应用后再试',
                 }));
                 return;
             }
@@ -178,12 +151,6 @@ const AboutSetting: React.FC = () => {
         caption: `${channel.title} · ${channel.description}`,
     }));
 
-    const themeSlug = THEME_SLUG_BY_FAMILY[themeFamily as AppearanceThemeFamily] ?? 'dp-neutral';
-    // 深色专用主题（如 Gothic）始终以深色渲染；其余主题在 system/未指定浅色时跟随根节点 .dark 类名
-    const isDark = DARK_ONLY_THEME_SLUGS.has(themeSlug)
-        || theme === 'dark'
-        || (theme !== 'light' && rootHasDarkClass);
-
     return (
         <SettingsPageShell
             title={t('about.title', { defaultValue: '关于与更新' })}
@@ -193,17 +160,16 @@ const AboutSetting: React.FC = () => {
         >
             <SettingSection
                 title={t('about.appInfoTitle', { defaultValue: '产品信息' })}
-                description={t('about.appInfoDescription', { defaultValue: '了解 Refrain 的版本与更新状态' })}
+                description={t('about.appInfoDescription', { defaultValue: '了解 CuminLang 的版本与更新状态' })}
                 icon={Info as unknown as IconType}
             >
                 <Card variant="default" padding={4}>
                     <HStack vAlign="center" justify="between" wrap="wrap" gap={4}>
                         <HStack vAlign="center" gap={3}>
-                            <img
-                                className="h-10 w-auto object-contain shrink-0"
-                                src={isDark ? wordmarkReverse : wordmark}
-                                alt={t('about.appName', { defaultValue: 'Refrain' })}
-                                draggable={false}
+                            <BrandLogo
+                                variant="lockup"
+                                size="lg"
+                                label={t('about.appName', { defaultValue: 'CuminLang' })}
                             />
                             {currentVersion && (
                                 <Token
@@ -229,7 +195,7 @@ const AboutSetting: React.FC = () => {
                                 variant="ghost"
                                 icon={<Icon icon={Tag as unknown as IconType} size="sm" />}
                                 endContent={<Icon icon={ExternalLink as unknown as IconType} size="xsm" />}
-                                onClick={() => openUrl('https://github.com/kylesean/Refrain/releases/latest')}
+                                onClick={() => openUrl('https://github.com/kylesean/CuminLang/releases/latest')}
                             />
                         </HStack>
                     </HStack>
@@ -272,7 +238,7 @@ const AboutSetting: React.FC = () => {
                                 size="sm"
                                 variant="primary"
                                 endContent={<Icon icon={ExternalLink as unknown as IconType} size="xsm" />}
-                                onClick={() => openUrl(updateResult?.releases[0]?.url || 'https://github.com/kylesean/Refrain/releases/latest')}
+                                onClick={() => openUrl(updateResult?.releases[0]?.url || 'https://github.com/kylesean/CuminLang/releases/latest')}
                             />
                         </HStack>
 
@@ -312,7 +278,7 @@ const AboutSetting: React.FC = () => {
                         variant="secondary"
                         size="sm"
                         endContent={<Icon icon={ExternalLink as unknown as IconType} size="xsm" />}
-                        onClick={() => openUrl('https://kylesean.github.io/Refrain/home.html')}
+                        onClick={() => openUrl('https://kylesean.github.io/CuminLang/home.html')}
                     />
                 </SettingField>
 
@@ -327,7 +293,7 @@ const AboutSetting: React.FC = () => {
                         variant="secondary"
                         size="sm"
                         endContent={<Icon icon={ExternalLink as unknown as IconType} size="xsm" />}
-                        onClick={() => openUrl('https://github.com/kylesean/Refrain')}
+                        onClick={() => openUrl('https://github.com/kylesean/CuminLang')}
                     />
                 </SettingField>
 
@@ -342,7 +308,7 @@ const AboutSetting: React.FC = () => {
                         variant="secondary"
                         size="sm"
                         endContent={<Icon icon={ExternalLink as unknown as IconType} size="xsm" />}
-                        onClick={() => openUrl('https://github.com/kylesean/Refrain/blob/main/LICENSE')}
+                        onClick={() => openUrl('https://github.com/kylesean/CuminLang/blob/main/LICENSE')}
                     />
                 </SettingField>
 
@@ -448,7 +414,7 @@ const AboutSetting: React.FC = () => {
 
             <HStack justify="center" paddingBlock={2}>
                 <Text type="supporting" color="secondary" justify="center">
-                    {t('about.footer', { defaultValue: 'Refrain · 沉浸式英语视频学习桌面应用' })} · GNU AGPLv3
+                    {t('about.footer', { defaultValue: 'CuminLang · 沉浸式英语视频学习桌面应用' })} · GNU AGPLv3
                 </Text>
             </HStack>
         </SettingsPageShell>

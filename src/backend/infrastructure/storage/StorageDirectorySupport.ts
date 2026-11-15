@@ -8,7 +8,7 @@ import { resolveStorageDirectory } from '@/backend/services/gateways/storage/Sto
 
 export { resolveStorageDirectory };
 
-const DEFAULT_STORAGE_FOLDER_NAME = 'Refrain';
+const DEFAULT_STORAGE_FOLDER_NAME = 'CuminLang';
 
 /**
  * 路径访问检查类型。

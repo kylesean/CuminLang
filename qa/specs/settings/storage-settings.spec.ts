@@ -14,7 +14,7 @@ test.describe('存储设置', () => {
         const page = session.page;
         await openStorageSetting(page);
 
-        const libraryInput = page.getByPlaceholder('Documents/Refrain');
+        const libraryInput = page.getByPlaceholder('Documents/CuminLang');
         // 用例独占目录里的媒体库路径由 fixture 预置，先确认界面回显的就是它
         const initialPath = path.join(userDataDir, 'library');
         await expect(libraryInput).toHaveValue(initialPath);
@@ -29,7 +29,7 @@ test.describe('存储设置', () => {
 
         // 重进页面：路径来自后端回读，而不是页面里残留的输入
         await reloadSettingsPage(page, page.getByRole('heading', { name: '存储管理' }));
-        await expect(page.getByPlaceholder('Documents/Refrain')).toHaveValue(nextPath);
+        await expect(page.getByPlaceholder('Documents/CuminLang')).toHaveValue(nextPath);
     });
 
     test('[SET-STO-02] 填了没有写权限的目录会显式报错，不落盘也不在页面上假装已保存', async ({ session, userDataDir }) => {
@@ -37,7 +37,7 @@ test.describe('存储设置', () => {
         const page = session.page;
         await openStorageSetting(page);
 
-        const libraryInput = page.getByPlaceholder('Documents/Refrain');
+        const libraryInput = page.getByPlaceholder('Documents/CuminLang');
         const initialPath = path.join(userDataDir, 'library');
         await expect(libraryInput).toHaveValue(initialPath);
 
@@ -56,14 +56,14 @@ test.describe('存储设置', () => {
 
         // 重进页面：界面回显的是真正存下来的旧路径，而不是刚才那段无效输入
         await reloadSettingsPage(page, page.getByRole('heading', { name: '存储管理' }));
-        await expect(page.getByPlaceholder('Documents/Refrain')).toHaveValue(initialPath);
+        await expect(page.getByPlaceholder('Documents/CuminLang')).toHaveValue(initialPath);
     });
 
     test('[SET-STO-05] 改完媒体库路径立刻切到别的栏目，改动仍会落盘并在切回后回显', async ({ session, userDataDir }) => {
         const page = session.page;
         await openStorageSetting(page);
 
-        const libraryInput = page.getByPlaceholder('Documents/Refrain');
+        const libraryInput = page.getByPlaceholder('Documents/CuminLang');
         await expect(libraryInput).toHaveValue(path.join(userDataDir, 'library'));
 
         const nextPath = path.join(userDataDir, 'library-autosave');
@@ -75,6 +75,6 @@ test.describe('存储设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'storage.path')).toBe(nextPath);
 
         await switchSettingsSection(page, 'storage', page.getByRole('heading', { name: '存储管理' }));
-        await expect(page.getByPlaceholder('Documents/Refrain')).toHaveValue(nextPath);
+        await expect(page.getByPlaceholder('Documents/CuminLang')).toHaveValue(nextPath);
     });
 });

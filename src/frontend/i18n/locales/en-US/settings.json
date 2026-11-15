@@ -99,7 +99,7 @@
         "directConnectionWarning": "No effective proxy detected: network requests such as YouTube downloads will go direct and are likely to fail on this network. Switch to Custom and fill in a proxy address if you need one.",
         "sections": {
             "connection": "Connection",
-            "connectionDesc": "How Refrain reaches the network"
+            "connectionDesc": "How CuminLang reaches the network"
         }
     },
     "mobile": {
@@ -276,7 +276,7 @@
     "about": {
         "title": "About & Updates",
         "slogan": "Curated YouTube English, immersive and AI-native",
-        "appName": "Refrain",
+        "appName": "CuminLang",
         "appInfoTitle": "Product Information",
         "appInfoDescription": "Version and update status",
         "resourcesTitle": "Resources",
@@ -308,7 +308,7 @@
             "logs": "Diagnostic Logs",
             "logsDesc": "Open the local logs directory to attach logs when reporting issues",
             "openLogs": "Open Logs Folder",
-            "openLogsRestartRequired": "The logs directory handler isn't active in the running main process yet. Please restart Refrain and try again.",
+            "openLogsRestartRequired": "The logs directory handler isn't active in the running main process yet. Please restart CuminLang and try again.",
             "supportAuthor": "Support Author",
             "supportAuthorDesc": "Free & open-source — click to expand optional follow or tip QR codes",
             "supportWechatTitle": "WeChat Tip",
@@ -320,7 +320,7 @@
             "supportCopied": "Copied DouYin ID: {{value}}",
             "supportCopyFailed": "Copy failed"
         },
-        "footer": "Refrain · Immersive English Video Learning"
+        "footer": "CuminLang · Immersive English Video Learning"
     },
     "storage": {
         "title": "Storage",
@@ -335,7 +335,7 @@
         "resetConfirmOk": "Reset now",
         "openLibraryFolder": "Open Library Folder",
         "libraryPathTitle": "Storage Path (Library Path)",
-        "libraryPathDescription": "Takes effect after restarting Refrain",
+        "libraryPathDescription": "Takes effect after restarting CuminLang",
         "syncWordClipsFailed": "Failed to sync Context Studio clips. Please try again later.",
         "wordClipsTitle": "Context Studio Clips",
         "wordClipsSync": {

@@ -152,7 +152,7 @@ describe('SubtitleLearningHints', () => {
     });
 
     it('同句冷却期间不重复出现', () => {
-        window.localStorage.setItem('refrain:learning-moment:v1', JSON.stringify({
+        window.localStorage.setItem('cuminlang:learning-moment:v1', JSON.stringify({
             at: Date.now(),
             sentenceHash: 'subtitle-1:2',
             sessionKey: 'session-1',
@@ -168,7 +168,7 @@ describe('SubtitleLearningHints', () => {
     });
 
     it('单次会话达到上限后不再出现', () => {
-        window.localStorage.setItem('refrain:learning-moment:v1', JSON.stringify({
+        window.localStorage.setItem('cuminlang:learning-moment:v1', JSON.stringify({
             at: Date.now() - 10 * 60_000,
             sentenceHash: 'another-sentence',
             sessionKey: 'session-1',
@@ -239,7 +239,7 @@ describe('SubtitleLearningHints', () => {
         });
         expect(screen.queryByTestId('learning-moment')).toBeNull();
         const memory = JSON.parse(
-            window.localStorage.getItem('refrain:learning-moment:v1') ?? '{}',
+            window.localStorage.getItem('cuminlang:learning-moment:v1') ?? '{}',
         ) as { sentenceHash?: string; count?: number };
         expect(memory.sentenceHash).toBe('subtitle-1:2');
         expect(memory.count).toBe(1);

@@ -94,7 +94,7 @@ const RouterLinkAdapter = React.forwardRef<HTMLAnchorElement, { href?: string; t
 RouterLinkAdapter.displayName = 'RouterLinkAdapter';
 
 /**
- * Refrain 桌面端根组件，负责启动门槛判定、主题语言同步及全局路由。
+ * CuminLang 桌面端根组件，负责启动门槛判定、主题语言同步及全局路由。
  */
 export const App = () => {
     const { t } = useI18nTranslation('toast');
@@ -155,7 +155,7 @@ export const App = () => {
             // 写入首帧镜像：index.html 的内联脚本在 React 挂载前读它防主题闪白。
             // 键名与 index.html 一致，改动必须两处同步。
             try {
-                localStorage.setItem('refrain.theme', effective);
+                localStorage.setItem('cuminlang.theme', effective);
             } catch {
                 // 隐私模式写入失败可忽略：下次启动退回无镜像的默认浅色。
             }

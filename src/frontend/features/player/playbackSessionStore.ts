@@ -72,7 +72,7 @@ export const usePlaybackSession = create(
             }));
         },
         clear: () => {
-            document.title = 'Refrain';
+            document.title = 'CuminLang';
             set({
                 videoPath: null,
                 subtitlePath: null,

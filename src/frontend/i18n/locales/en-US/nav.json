@@ -14,7 +14,7 @@
     "contextStudioReview": "Today's Review",
     "contextStudioMemory": "Memory Map",
     "settingsCenter": "Settings Center",
-    "productStory": "About Refrain",
+    "productStory": "About CuminLang",
     "backNavRecent": "Recently opened",
     "backNavUp": "Go up one level",
     "backNavRecentHint": "Browse recently opened projects",
@@ -24,7 +24,7 @@
     "expandSidebar": "Expand Navigation",
     "hideSidebar": "Hide Sidebar",
     "home": "Home",
-    "appTitle": "Refrain",
+    "appTitle": "CuminLang",
     "appTagline": "Curated English, on repeat.",
     "sidebarFixedCompact": "Pinned to icon navigation when the window is narrow"
 }

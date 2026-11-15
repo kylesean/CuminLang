@@ -24,7 +24,7 @@ import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { useReviewDockStore } from '@/frontend/features/player/components/learning-toolbar/reviewDockStore';
 
 const logger = getRendererLogger('ContentCompassSection');
-const IMPRESSION_STORAGE_PREFIX = 'refrain:content-compass:shown';
+const IMPRESSION_STORAGE_PREFIX = 'cuminlang:content-compass:shown';
 
 export interface ContentCompassSectionProps {
     excludeVideoIds?: string[];
