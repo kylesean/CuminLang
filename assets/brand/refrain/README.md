@@ -90,7 +90,7 @@ tools/export_app_icons.py  把标识导出到应用各资产槽位（见下）
 # 1. SVG 源文件：build.py 要实例化可变字体，仓库不自带 venv，先建一个
 python3 -m venv .venv && .venv/bin/pip install fonttools uharfbuzz brotli
 .venv/bin/python build.py && .venv/bin/python build_board.py
-# 2. 应用资产：assets/icons/*、iOS AppIcon、install.gif（系统 python3 + Pillow + rsvg-convert）
+# 2. 应用资产：assets/icons/*、install.gif（系统 python3 + Pillow + rsvg-convert）
 python3 export_app_icons.py
 # 3. 手机页图标（从新 icon.svg 派生满幅方图）
 cd ../../../.. && node scripts/build-mobile-icons.mjs && pnpm run build:mobile

@@ -2,7 +2,7 @@
 """Export the Refrain identity into the application's asset slots.
 
 This is the only place that turns the brand SVGs into the many raster formats
-Electron / Squirrel / macOS / iOS expect. Everything is derived from `app-icon.svg`
+Electron / Squirrel / macOS expect. Everything is derived from `app-icon.svg`
 so there is exactly one source of truth for the app icon.
 
 Requires: `rsvg-convert` (SVG rasterising) and Pillow (ICO / ICNS / GIF containers).
@@ -20,8 +20,6 @@ from PIL import Image, ImageDraw
 BRAND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.path.abspath(os.path.join(BRAND, "..", "..", ".."))
 ICONS = os.path.join(ROOT, "assets", "icons")
-IOS_ICON = os.path.join(ROOT, "ios", "DashPlayerMobile", "Assets.xcassets",
-                        "AppIcon.appiconset", "icon-1024.png")
 
 INK = "#16171A"
 PAPER = "#FBFAF7"
@@ -170,12 +168,11 @@ def main():
             shutil.copyfile(png_paths[size], os.path.join(ICONS, f"{size}x{size}.png"))
         shutil.copyfile(png_paths[512], os.path.join(ICONS, "icon.png"))
         shutil.copyfile(png_paths[1024], os.path.join(ICONS, "icon@2x.png"))
-        shutil.copyfile(png_paths[1024], IOS_ICON)
         write_ico(os.path.join(ICONS, "icon.ico"), png_paths)
         write_icns(os.path.join(ICONS, "icon.icns"), png_paths)
 
     write_install_gif(os.path.join(ICONS, "install.gif"), master_svg)
-    print("wrote PNGs, icon.ico, icon.icns, install.gif, iOS AppIcon")
+    print("wrote PNGs, icon.ico, icon.icns, install.gif")
     print("next: node scripts/build-mobile-icons.mjs && pnpm run build:mobile")
 
 

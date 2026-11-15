@@ -111,8 +111,3 @@ playwright-report/
 worktrees/
 .claude/
 
-# iOS 客户端
-ios/build/
-ios/build-sim/
-ios/RefrainMobile.xcodeproj/
-

@@ -24,7 +24,7 @@
 - **Full-Width Podcast Mode & Blind Listening**: Switch into a focused distraction-free podcast view with an auto-collapsed transcript sidebar, per-sentence progress bar, blind-listening veil, and hold-`\` keyboard peek.
 - **Shadowing & Dictation Studio**: Practice pronunciation and dictation sentence by sentence with recording comparison, rhythm/prosody feedback, and spaced-repetition vocabulary consolidation.
 - **AI Sentence Study & Context Studio**: Ask AI to break down grammar and usage within real subtitle context, look up words offline with the built-in ECDICT SQLite dictionary, and curate study notes.
-- **Token-Protected LAN Mobile Access**: Stream your library and subtitles to mobile devices on the same network (plus a frozen companion iOS project in [`ios/`](ios/README.md)).
+- **Token-Protected LAN Mobile Access**: Stream your library and subtitles to mobile devices on the same network (see [`docs/MOBILE_FLUTTER_PLAN.md`](docs/MOBILE_FLUTTER_PLAN.md) for the upcoming cross-platform mobile roadmap).
 - **Curated Theme Families**: Built-in Neutral, Stone, Gothic, Matcha, Y2K, Butter, and Chocolate themes with Light / Dark / Follow System modes.
 
 ---
