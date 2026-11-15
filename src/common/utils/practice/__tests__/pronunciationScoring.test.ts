@@ -83,6 +83,16 @@ describe('alignPracticeTokens 词级对齐评分', () => {
         expect(result.words.map((w) => w.status)).toEqual(['sub', 'sub', 'match', 'sub', 'sub']);
     });
 
+    it('关闭 allowHomophones 时，听写仍兼容标准英美拼写变体与连字符复合词', () => {
+        const result = alignPracticeTokens(
+            'A real-time color center program',
+            'A realtime colour centre programme',
+            { allowHomophones: false },
+        );
+        expect(result.score).toBe(100);
+        expect(result.words.every((w) => w.status === 'match')).toBe(true);
+    });
+
     it('computeContentWeightedScore 赋予实词比功能词更高权重', () => {
         const missedFunctionWord = alignPracticeTokens('to the bright mountain', 'the bright mountain');
         const missedContentWord = alignPracticeTokens('to the bright mountain', 'to the mountain');

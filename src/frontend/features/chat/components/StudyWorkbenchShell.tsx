@@ -5,7 +5,6 @@ import { HStack } from '@astryxdesign/core/Layout';
 import { Text } from '@astryxdesign/core/Text';
 import { Toolbar } from '@astryxdesign/core/Toolbar';
 import {
-    ArrowLeft,
     AudioLines,
     Bookmark,
     BookmarkCheck,
@@ -22,7 +21,6 @@ export interface StudyWorkbenchShellProps {
     canStepPrev: boolean;
     canStepNext: boolean;
     onStepSentence: (delta: -1 | 1) => void;
-    onBackToPlayer: () => void;
     onJumpToPractice: () => void;
     isSentenceSaved: boolean;
     onToggleSaveSentence: () => void;
@@ -30,10 +28,8 @@ export interface StudyWorkbenchShellProps {
     rightCopilot: ReactNode;
 }
 
-const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC');
-
 /**
- * 全窗整句精读工作台外壳（遵循 Astryx Toolbar / ghost chrome 规范，避免边框胶囊堆叠）。
+ * 全窗整句精读工作台外壳（遵循 Astryx Toolbar / ghost chrome 规范，避免边框胶囊堆叠与重复返回按钮）。
  */
 export default function StudyWorkbenchShell({
     sentenceIndex,
@@ -41,7 +37,6 @@ export default function StudyWorkbenchShell({
     canStepPrev,
     canStepNext,
     onStepSentence,
-    onBackToPlayer,
     onJumpToPractice,
     isSentenceSaved,
     onToggleSaveSentence,
@@ -55,7 +50,7 @@ export default function StudyWorkbenchShell({
             data-testid="learning-workbench"
             className="flex h-full w-full flex-col overflow-hidden bg-body text-primary [--text-label-size:var(--text-supporting-size)] [--text-label-leading:var(--text-supporting-leading)]"
         >
-            <div className={cn('shrink-0 bg-surface/65 backdrop-blur-xl drag-region', isMac && 'pl-20')}>
+            <div className="shrink-0 bg-surface/65 backdrop-blur-xl">
                 <Toolbar
                     label={t('learning.title')}
                     size="sm"
@@ -63,35 +58,26 @@ export default function StudyWorkbenchShell({
                     variant="transparent"
                     dividers={['bottom']}
                     startContent={(
-                        <HStack gap={2} vAlign="center" className="no-drag">
-                            <Button
-                                label={t('learning.backShort')}
+                        <HStack gap={0.5} vAlign="center">
+                            <IconButton
+                                label={t('learning.prevSentence')}
+                                icon={<ChevronLeft className="h-3.5 w-3.5" />}
                                 variant="ghost"
-                                icon={<ArrowLeft className="h-3.5 w-3.5" />}
-                                onClick={onBackToPlayer}
+                                isDisabled={!canStepPrev}
+                                onClick={() => onStepSentence(-1)}
                             />
-                            <span className="h-3.5 w-px bg-border/55" aria-hidden />
-                            <HStack gap={0.5} vAlign="center">
-                                <IconButton
-                                    label={t('learning.prevSentence')}
-                                    icon={<ChevronLeft className="h-3.5 w-3.5" />}
-                                    variant="ghost"
-                                    isDisabled={!canStepPrev}
-                                    onClick={() => onStepSentence(-1)}
-                                />
-                                <Text type="supporting" color="secondary" className="px-1 font-mono tabular-nums">
-                                    {sentenceIndex !== null && totalSentences > 0
-                                        ? `${sentenceIndex + 1} / ${totalSentences}`
-                                        : '-- / --'}
-                                </Text>
-                                <IconButton
-                                    label={t('learning.nextSentence')}
-                                    icon={<ChevronRight className="h-3.5 w-3.5" />}
-                                    variant="ghost"
-                                    isDisabled={!canStepNext}
-                                    onClick={() => onStepSentence(1)}
-                                />
-                            </HStack>
+                            <Text type="supporting" color="secondary" className="px-1 font-mono tabular-nums">
+                                {sentenceIndex !== null && totalSentences > 0
+                                    ? `${sentenceIndex + 1} / ${totalSentences}`
+                                    : '-- / --'}
+                            </Text>
+                            <IconButton
+                                label={t('learning.nextSentence')}
+                                icon={<ChevronRight className="h-3.5 w-3.5" />}
+                                variant="ghost"
+                                isDisabled={!canStepNext}
+                                onClick={() => onStepSentence(1)}
+                            />
                         </HStack>
                     )}
                     endContent={(

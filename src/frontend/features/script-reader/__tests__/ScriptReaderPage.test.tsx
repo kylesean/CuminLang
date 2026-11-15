@@ -289,4 +289,34 @@ describe('ScriptReaderPage - Refactored P0-P2 Intensive Reader', () => {
         expect(toggleBtn.getAttribute('aria-pressed')).toBe('true');
         expect(screen.getByText('这是 AI 翻译的中文。')).toBeDefined();
     });
+
+    it('syncs selected document videoId to /reader/:videoId when switching documents', async () => {
+        mockListReaderDocuments.mockResolvedValue([
+            {
+                videoId: 'vid-101',
+                title: 'Stanford Commencement',
+                srtFile: '/videos/stanford.srt',
+                videoPath: '/videos/stanford.mp4',
+                updatedAt: '2026-11-12T00:00:00Z',
+            },
+            {
+                videoId: 'vid-202',
+                title: 'Second Talk',
+                srtFile: '/videos/second.srt',
+                videoPath: '/videos/second.mp4',
+                updatedAt: '2026-11-12T00:00:00Z',
+            },
+        ]);
+
+        render(
+            <MemoryRouter initialEntries={['/reader']}>
+                <ScriptReaderPage />
+            </MemoryRouter>,
+        );
+
+        const secondDoc = await screen.findByText('Second Talk');
+        fireEvent.click(secondDoc);
+
+        expect(mockNavigate).toHaveBeenCalledWith('/reader/vid-202', { replace: true });
+    });
 });

@@ -1,5 +1,6 @@
 import type { SentencePracticeWordResult } from '@/common/contracts/sentence-practice';
 import { isContentLemma } from '@/common/learning/contentWords';
+import { areUsUkSpellingVariants } from '@/common/utils/practice/practicePromptTokens';
 import { cleanWord, isWordToken, splitWords } from '@/common/utils/subtitle/tokenize';
 import { stripNonSpeechAnnotations } from '@/common/utils/practice/practiceTextClean';
 
@@ -154,6 +155,11 @@ const HOMOPHONE_MAP = (() => {
 
 const areTokensEquivalent = (expected: string, actual: string, allowHomophones = true): boolean => {
     if (expected === actual) return true;
+    if (areUsUkSpellingVariants(expected, actual)) return true;
+    // 连字符复合词（real-time vs realtime）在任意一侧带连字符时视为等价
+    if ((expected.includes('-') || actual.includes('-')) && expected.replace(/-/g, '') === actual.replace(/-/g, '')) {
+        return true;
+    }
     if (!allowHomophones) return false;
     const g1 = HOMOPHONE_MAP.get(expected);
     const g2 = HOMOPHONE_MAP.get(actual);

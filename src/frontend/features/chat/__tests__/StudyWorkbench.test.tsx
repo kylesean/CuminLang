@@ -89,7 +89,6 @@ describe('整句学习 AI-Native 工作台组件套件', () => {
                 canStepPrev
                 canStepNext
                 onStepSentence={onStep}
-                onBackToPlayer={noop}
                 onJumpToPractice={onJumpPractice}
                 isSentenceSaved={false}
                 onToggleSaveSentence={onToggleSaveSentence}
@@ -144,6 +143,8 @@ describe('整句学习 AI-Native 工作台组件套件', () => {
         expect(screen.queryByText('盲听')).toBeNull();
         // 严防任何未翻译的 i18n key 裸露到页面
         expect(document.body.textContent).not.toMatch(/learning\.[A-Za-z]+/);
+        // 顶栏已提供全局后退/前进，精读工具栏不再重复渲染「返回」按钮
+        expect(screen.queryByRole('button', { name: '返回' })).toBeNull();
 
         // 点击句中单词「fence」展开本地词典微卡
         fireEvent.click(screen.getByRole('button', { name: 'fence' }));

@@ -54,6 +54,8 @@ type PlayerUiState = {
    * 视频控制条据此让位：两者都是「悬停才现身」的浮层，压在同一块区域会互相抢事件。
    */
   hardsubMaskHovering: boolean;
+  /** 是否开启播客盲听防剧透模式（隐藏文本先听音频，悬停或点击当前句临时查看）。 */
+  podcastBlindMode: boolean;
   /** 仅从双语/中文切到纯英文时暂存“原有内嵌中文字幕偏好”，切回双语/中文时恢复。 */
   restorableSourceZh: boolean;
 };
@@ -68,6 +70,8 @@ type PlayerUiActions = {
   selectTrackPreset: (preset: 'english' | 'chinese' | 'bilingual', sourceZhAvailable: boolean) => void;
   changeShowWordLevel: () => void;
   toggleControlBarPinned: () => void;
+  setPodcastBlindMode: (blind: boolean) => void;
+  togglePodcastBlindMode: () => void;
   toggleHardsubMask: () => void;
   setHardsubMaskRect: (rect: HardsubMaskRect) => void;
   setHardsubMaskHovering: (hovering: boolean) => void;
@@ -103,7 +107,8 @@ type PersistedPreferenceKey =
   | 'showSideTranslation'
   | 'showWordLevel'
   | 'controlBarPinned'
-  | 'hardsubMaskOn';
+  | 'hardsubMaskOn'
+  | 'podcastBlindMode';
 
 /** 需要写入 localStorage 的用户偏好：取值与 store 初始值同源，rehydrate 与迁移都用它。 */
 const PERSISTED_DEFAULTS: Pick<PlayerUiState, PersistedPreferenceKey> = {
@@ -115,6 +120,7 @@ const PERSISTED_DEFAULTS: Pick<PlayerUiState, PersistedPreferenceKey> = {
   showWordLevel: false,
   controlBarPinned: false,
   hardsubMaskOn: false,
+  podcastBlindMode: false,
 };
 
 /**
@@ -194,6 +200,7 @@ function pickPersisted(
     showWordLevel: state.showWordLevel ?? PERSISTED_DEFAULTS.showWordLevel,
     controlBarPinned: state.controlBarPinned ?? PERSISTED_DEFAULTS.controlBarPinned,
     hardsubMaskOn: state.hardsubMaskOn ?? PERSISTED_DEFAULTS.hardsubMaskOn,
+    podcastBlindMode: state.podcastBlindMode ?? PERSISTED_DEFAULTS.podcastBlindMode,
     hardsubMaskRect: normalizeHardsubMaskRect(state.hardsubMaskRect),
   };
 }
@@ -257,6 +264,8 @@ export const usePlayerUi = create(
       }),
       changeShowWordLevel: () => set((s) => ({ showWordLevel: !s.showWordLevel })),
       toggleControlBarPinned: () => set((s) => ({ controlBarPinned: !s.controlBarPinned })),
+      setPodcastBlindMode: (blind) => set(() => ({ podcastBlindMode: blind })),
+      togglePodcastBlindMode: () => set((s) => ({ podcastBlindMode: !s.podcastBlindMode })),
       toggleHardsubMask: () => set((s) => ({ hardsubMaskOn: !s.hardsubMaskOn })),
       setHardsubMaskHovering: (hovering) => set(() => ({ hardsubMaskHovering: hovering })),
       setHardsubMaskPatchTopInset: (inset) => set(() => ({ hardsubMaskPatchTopInset: inset })),

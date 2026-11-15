@@ -403,5 +403,14 @@
         "filteringHint": "只显示 {{shown}} / {{total}} 句",
         "clearFilter": "显示全部",
         "emptyTitle": "这段里没有符合筛选的句子"
+    },
+    "podcast": {
+        "loadingSubtitles": "正在准备字幕内容…",
+        "blindListening": "盲听",
+        "blindListeningHint": "隐藏字幕专注听力，悬停、点击或按住 \\ 即可临时查看当前句",
+        "blindPrompt": "盲听模式 · 先听声音",
+        "blindHint": "悬停、点击或按住 \\ 查看本句",
+        "blindHide": "收起本句",
+        "sentenceCounter": "第 {{current}} 句，共 {{total}} 句"
     }
 }

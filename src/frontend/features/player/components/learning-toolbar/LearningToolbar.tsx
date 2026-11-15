@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { CirclePause, PanelBottomClose, Repeat1 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, CirclePause, PanelBottomClose, Repeat1 } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 
@@ -54,6 +54,30 @@ export default function LearningToolbar({
     const autoPauseShortcut = useSetting((s) => s.setting('shortcut.autoPause'));
 
     const rootRef = useRef<HTMLDivElement>(null);
+    const [{ canScrollLeft, canScrollRight }, setScrollEdges] = useState({
+        canScrollLeft: false,
+        canScrollRight: false,
+    });
+
+    const syncScrollEdges = useCallback(() => {
+        const el = rootRef.current;
+        if (!el) return;
+        const maxScrollLeft = el.scrollWidth - el.clientWidth;
+        setScrollEdges({
+            canScrollLeft: el.scrollLeft > 2,
+            canScrollRight: maxScrollLeft - el.scrollLeft > 2,
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!pinned) return;
+        const el = rootRef.current;
+        if (!el) return;
+        syncScrollEdges();
+        const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncScrollEdges) : null;
+        observer?.observe(el);
+        return () => observer?.disconnect();
+    }, [pinned, syncScrollEdges]);
 
     if (!pinned) {
         return null;
@@ -61,16 +85,36 @@ export default function LearningToolbar({
 
     const style = TOOLBAR_TONE.panel;
 
+    const scrollByStep = (delta: number) => {
+        rootRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
+    };
+
     return (
         <div
-            ref={rootRef}
             className={cn(
-                'flex h-12 shrink-0 items-center gap-1.5 overflow-x-auto border-t border-border/40 px-3 bg-surface/30',
+                'relative flex h-12 shrink-0 items-center border-t border-border/40 bg-surface/30',
                 'text-secondary transition-opacity duration-200',
                 'opacity-90 focus-within:opacity-100 group-hover/subtitles:opacity-100',
-                '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
             )}
         >
+            {canScrollLeft && (
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-surface via-surface/90 to-transparent pr-3 pl-1">
+                    <button
+                        type="button"
+                        data-testid="learning-toolbar-scroll-left"
+                        aria-label={t('controlBar.scrollToolbarLeft', { defaultValue: '向左滚动工具栏' })}
+                        onClick={() => scrollByStep(-160)}
+                        className="pointer-events-auto flex h-7 w-6 items-center justify-center rounded-md text-secondary hover:bg-primary/10 hover:text-primary cursor-pointer"
+                    >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            )}
+            <div
+                ref={rootRef}
+                onScroll={syncScrollEdges}
+                className="flex h-full w-full items-center gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
             <div
                 role="group"
                 aria-label={t('controlBar.groupPlayback', { defaultValue: '播放控制' })}
@@ -157,6 +201,20 @@ export default function LearningToolbar({
                         <PanelBottomClose className="w-4 h-4 stroke-[1.8]" />
                     </button>
                 </Tooltip>
+            )}
+            </div>
+            {canScrollRight && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-surface via-surface/90 to-transparent pl-3 pr-1">
+                    <button
+                        type="button"
+                        data-testid="learning-toolbar-scroll-right"
+                        aria-label={t('controlBar.scrollToolbarRight', { defaultValue: '向右滚动工具栏' })}
+                        onClick={() => scrollByStep(160)}
+                        className="pointer-events-auto flex h-7 w-6 items-center justify-center rounded-md text-secondary hover:bg-primary/10 hover:text-primary cursor-pointer"
+                    >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                </div>
             )}
         </div>
     );

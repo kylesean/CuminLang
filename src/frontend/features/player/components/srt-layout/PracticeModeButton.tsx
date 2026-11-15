@@ -11,7 +11,11 @@ import {
     CAPTION_CARD_IDLE_CLASS,
     captionCardActiveClass,
 } from '@/frontend/features/player/components/captionCardShell';
-import { TOOLBAR_ICON_BUTTON } from '@/frontend/features/player/components/learning-toolbar/toolbarStyles';
+import {
+    TOOLBAR_ICON_BUTTON,
+    TOOLBAR_TONE,
+    type ToolbarTone,
+} from '@/frontend/features/player/components/learning-toolbar/toolbarStyles';
 
 /**
  * 跟读/听写练习开关按钮。
@@ -19,10 +23,17 @@ import { TOOLBAR_ICON_BUTTON } from '@/frontend/features/player/components/learn
  * 打开练习覆盖面板对当前意群做跟读或听写;与整句学习页互斥——打开时先收起学习页,
  * 并暂停播放避免原句声音混进录音。
  *
- * @param variant `capsule`：学习页右下角胶囊里的 24px 正圆；`toolbar`：字幕学习台里的 28px 方形按钮。
+ * @param variant `capsule`：学习页右下角胶囊里的 24px 正圆；`toolbar`：字幕学习台或控制条里的 32px 方形按钮。
+ * @param tone `toolbar` 变体下的视觉底色，`overlay` 用于全屏深色条。
  * @returns 练习开关按钮。
  */
-export default function PracticeModeButton({ variant = 'capsule' }: { variant?: 'capsule' | 'toolbar' } = {}) {
+export default function PracticeModeButton({
+    variant = 'capsule',
+    tone = 'panel',
+}: {
+    variant?: 'capsule' | 'toolbar';
+    tone?: ToolbarTone;
+} = {}) {
     const { t } = useI18nTranslation('practice');
     const visible = usePracticePanel((s) => s.visible);
 
@@ -52,7 +63,9 @@ export default function PracticeModeButton({ variant = 'capsule' }: { variant?: 
                 aria-label={t('panel.title')}
                 className={cn(
                     variant === 'toolbar' ? TOOLBAR_ICON_BUTTON : CAPTION_CARD_BUTTON_CLASS,
-                    visible ? captionCardActiveClass('emerald') : CAPTION_CARD_IDLE_CLASS
+                    tone === 'overlay'
+                        ? (visible ? TOOLBAR_TONE.overlay.accent.emerald : TOOLBAR_TONE.overlay.idle)
+                        : (visible ? captionCardActiveClass('emerald') : CAPTION_CARD_IDLE_CLASS)
                 )}
             >
                 <Mic className="w-4 h-4" />

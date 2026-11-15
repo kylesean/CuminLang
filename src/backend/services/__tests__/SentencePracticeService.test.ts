@@ -336,6 +336,64 @@ describe('句子练习服务', () => {
             expect(convertToWav).toHaveBeenCalledWith(mediaPath, expect.any(String), clipRange);
             expect(vo.prosody).not.toBeNull();
         });
+
+        it('ASR 判为错词或漏词时，丢弃强制对齐产生的音素建议与夸张耗时', async () => {
+            const gopService = {
+                isReady: vi.fn().mockResolvedValue(true),
+                scoreWords: vi.fn().mockResolvedValue([
+                    {
+                        wordIndex: 0,
+                        phonemeScore: 90,
+                        phonemes: [{ ipa: 'ɡ', heardIpa: 'ɡ', score: 90, status: 'ok' }],
+                        startSec: 0.0,
+                        endSec: 0.4,
+                    },
+                    {
+                        wordIndex: 1,
+                        phonemeScore: 25,
+                        phonemes: [{ ipa: 'eɪ', heardIpa: 'iː', score: 25, status: 'error' }],
+                        startSec: 0.4,
+                        endSec: 8.5,
+                    },
+                    {
+                        wordIndex: 2,
+                        phonemeScore: 30,
+                        phonemes: [{ ipa: 'j', heardIpa: 'ə', score: 30, status: 'error' }],
+                    },
+                ]),
+            };
+            const gopPracticeService = new SentencePracticeServiceImpl(
+                new SentencePracticeRecordRepositoryImpl(memoryDb.db),
+                {
+                    convertToWav: vi.fn().mockImplementation(async (_input: string, output: string) => {
+                        await fsGateway.writeBinaryFile(output, buildWav(1.2, 6000));
+                    }),
+                } as unknown as FfmpegService,
+                {
+                    provideDirectory: async (target: StorageDirectoryTarget) => path.join(STORAGE_ROOT, target),
+                    ensurePathAccessPermissionIfExists: async () => undefined,
+                } as unknown as StorageDirectoryProvider,
+                fsGateway,
+                new FakeTranscriptionEngineSelector(speechGateway),
+                { lookup: () => null } as never,
+                gopService as never,
+            );
+
+            speechGateway.transcriptText = 'go see';
+            const vo = await gopPracticeService.scoreShadowing({
+                fileHash: FILE_HASH,
+                sentenceIndex: 8,
+                audio: new Uint8Array([1, 2, 3]),
+                expectedText: 'go say tomorrow',
+            });
+
+            expect(vo.words.map((w) => w.status)).toEqual(['match', 'sub', 'missing']);
+            expect(vo.words[0].phonemeScore).toBe(90);
+            expect(vo.words[1].phonemes).toBeUndefined();
+            expect(vo.words[1].phonemeScore).toBeUndefined();
+            expect(vo.words[2].phonemes).toBeUndefined();
+            expect(vo.words[2].phonemeScore).toBeUndefined();
+        });
     });
 
     describe('练习历史查询', () => {

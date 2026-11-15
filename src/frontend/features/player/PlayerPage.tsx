@@ -47,9 +47,11 @@ const PlayerWithControlsPage = () => {
     const referrer = location.state && location.state.referrer;
     logger.debug('page referrer', {referrer});
 
-    // 进入播放学习界面默认完全收起侧栏，给予视频画面与双语字幕最大的沉浸专注视野
+    // 进入播放学习界面默认完全收起侧栏，并确保窗口处于可拉伸的播放模式
+    // （避免从精读文稿、语境工坊或历史前进进入时沿用首页锁定窗口尺寸）
     useEffect(() => {
         changeSideBar(false);
+        void Promise.resolve(playerApi.changeWindowSize?.('player')).catch(() => undefined);
     }, [changeSideBar]);
 
     const windowButtonsVisibleRef = useRef<boolean | null>(null);

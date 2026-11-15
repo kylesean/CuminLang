@@ -101,7 +101,7 @@ export default function ScriptReaderPage() {
         store.requestTranslation(fileHash, Math.max(0, sentenceIndex));
     }, []);
 
-    // 加载文稿列表
+    // 加载文稿列表（仅挂载时拉取一次，避免切换文档或深链变更重复请求）
     useEffect(() => {
         let cancelled = false;
         void contextStudioApi
@@ -109,7 +109,7 @@ export default function ScriptReaderPage() {
             .then((docs) => {
                 if (cancelled) return;
                 setDocuments(docs);
-                setSelectedVideoId((prev) => routeVideoId || prev || docs[0]?.videoId || '');
+                setSelectedVideoId((prev) => prev || docs[0]?.videoId || '');
             })
             .catch(() => {
                 if (!cancelled) {
@@ -125,11 +125,12 @@ export default function ScriptReaderPage() {
         return () => {
             cancelled = true;
         };
-    }, [routeVideoId]);
+    }, []);
 
+    const effectiveVideoId = routeVideoId || selectedVideoId;
     const activeDoc = useMemo(
-        () => documents.find((d) => d.videoId === selectedVideoId) ?? null,
-        [documents, selectedVideoId],
+        () => documents.find((d) => d.videoId === effectiveVideoId) ?? null,
+        [documents, effectiveVideoId],
     );
 
     const loadingScript = Boolean(activeDoc) && loadedScriptVideoId !== activeDoc?.videoId;
@@ -141,7 +142,10 @@ export default function ScriptReaderPage() {
         setSearchQuery('');
         setOpenNoteKey(null);
         setSceneDividers([]);
-    }, []);
+        if (routeVideoId !== nextVideoId) {
+            navigate(`/reader/${encodeURIComponent(nextVideoId)}`, { replace: true });
+        }
+    }, [navigate, routeVideoId]);
 
     // 加载当前文稿字幕、收藏金句笔记、生词高亮状态与场景章节分割
     useEffect(() => {

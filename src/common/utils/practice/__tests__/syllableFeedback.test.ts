@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
     buildWordSyllableFeedback,
     compareSyllableCount,
+    estimateOrthographicSyllables,
     splitIpaSyllables,
     SYLLABLE_STRESS_MARGIN,
 } from '@/common/utils/practice/syllableFeedback';
@@ -38,6 +39,22 @@ describe('splitIpaSyllables', () => {
 
     it('兼容不带斜杠的音标', () => {
         expect(splitIpaSyllables('ˈhɛloʊ').length).toBe(2);
+    });
+
+    it('识别 ECDict 中的西里尔 schwa (ә) 音节核，不漏算音节', () => {
+        const syllables = splitIpaSyllables("/ә'nælәdʒi/");
+        expect(syllables).toHaveLength(4);
+        expect(syllables.find((syllable) => syllable.stressed)?.index).toBe(1);
+    });
+});
+
+describe('estimateOrthographicSyllables', () => {
+    it.each([
+        ['fearmongering', 4],
+        ['weapons', 2],
+        ['works', 1],
+    ])('对缺失音标的词 %s 估算合理音节数 (%i)', (word, expected) => {
+        expect(estimateOrthographicSyllables(word)).toBe(expected);
     });
 });
 

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SentencePracticeResultVO } from '@/common/contracts/sentence-practice';
@@ -41,5 +41,30 @@ describe('RhythmFeedback', () => {
         expect(screen.getByText('journey').className).toContain('font-semibold');
         expect(screen.getByText('the').className).not.toContain('font-semibold');
         expect(screen.getByText('重音起伏不明显，找一两个关键词说得更重。')).toBeDefined();
+    });
+
+    it('不展示伪估算音节数且超过 10 词的长句默认折叠逐词重读明细', () => {
+        const longWords = Array.from({ length: 12 }, (_, idx) => ({
+            word: `word${idx}`,
+            durationSec: 0.3,
+            emphasis: idx === 2 ? 1 : 0.4,
+            stressed: idx === 2,
+        }));
+        render(
+            <RhythmFeedback
+                feedback={{
+                    ...result.rhythm!,
+                    words: longWords,
+                    syllables: { reference: 26, estimated: 69, verdict: 'more' },
+                    notes: [],
+                }}
+            />,
+        );
+
+        expect(screen.queryByText('69/26')).toBeNull();
+        expect(screen.queryByText('word2')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: '查看逐词重读 ({{count}} 词)' }));
+        expect(screen.getByText('word2').className).toContain('font-semibold');
     });
 });

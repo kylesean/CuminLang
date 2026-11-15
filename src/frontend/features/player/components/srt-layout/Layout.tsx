@@ -58,8 +58,11 @@ const PlaybackLayout = () => {
     const peekingSpoiler = usePracticePanel((s) => s.peekingSpoiler);
     const showTranscript = useLayout((s) => s.showTranscript);
     const setTranscriptVisible = useLayout((s) => s.setTranscriptVisible);
-    // 整句学习打开时自动收起独立右栏全文，释放 100% 窗口宽度给 AI-Native 双栏工作台
-    const effectiveShowTranscript = showTranscript && !(practiceVisible && practiceFocusMode) && !learningVisible;
+    const podcastTranscriptVisible = useLayout((s) => s.podcastTranscriptVisible);
+    // 播客模式默认收起右栏提供全宽沉浸视听，仅在用户显式展开时显示；整句学习或专注练习时同样收敛
+    const effectiveShowTranscript = (podcastMode ? podcastTranscriptVisible : showTranscript)
+        && !(practiceVisible && practiceFocusMode)
+        && !learningVisible;
     const transcriptSpoilerVeil = practiceVisible
         && !practiceFocusMode
         && practiceMode === 'dictation'
@@ -278,13 +281,33 @@ const PlaybackLayout = () => {
                             setSizeIa(e);
                         }}
                     >
-                        <div className="w-full h-full" style={stageFloatingStyle}>
+                        <div className="group/stage relative w-full h-full" style={stageFloatingStyle}>
                             <PlaybackStage
                                 className="w-full h-full"
                                 compact={learningVisible}
                                 onReady={handlePlayerReady}
                                 onEnded={handleStageEnded}
                             />
+                            {/* 字幕文稿收起时默认隐藏，仅鼠标移入主视频区（或键盘聚焦）时显露恢复把手，与底部沉浸模式保持一致 */}
+                            {!podcastMode && !showTranscript && !fullScreen && !learningVisible && !practiceVisible && (
+                                <div className="absolute top-3 right-3 z-30 opacity-0 pointer-events-none group-hover/stage:opacity-100 group-hover/stage:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity duration-200">
+                                    <Tooltip content={t('controlButton.openTranscript', { defaultValue: '展开字幕文稿' })} placement="below">
+                                        <button
+                                            type="button"
+                                            onClick={() => setTranscriptVisible(true)}
+                                            className={cn(
+                                                'flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-sm font-medium cursor-pointer select-none',
+                                                'bg-surface/85 hover:bg-surface text-secondary hover:text-primary border border-border/70 shadow-xs backdrop-blur-md transition-all duration-150',
+                                                'hover:scale-105 active:scale-95'
+                                            )}
+                                            aria-label={t('controlButton.openTranscript', { defaultValue: '展开字幕文稿' })}
+                                        >
+                                            <BookOpen className="w-3.5 h-3.5 text-accent" />
+                                            <span>{t('subtitleScript', { defaultValue: '字幕文稿' })}</span>
+                                        </button>
+                                    </Tooltip>
+                                </div>
+                            )}
                         </div>
                     </SplitPane>
                     {(!fullScreen || practiceVisible) && !podcastMode && (
@@ -355,27 +378,6 @@ const PlaybackLayout = () => {
                 {learningMounted && (
                     <div className={cn('absolute inset-0 z-20', !learningVisible && 'invisible pointer-events-none')}>
                         <LearningPage/>
-                    </div>
-                )}
-
-                {/* 字幕文稿收起时，在画面右上角提供优雅直观的恢复把手，杜绝“收起后找不到还原入口” */}
-                {!showTranscript && !fullScreen && !learningVisible && !practiceVisible && (
-                    <div className="absolute top-3 right-3 z-30 pointer-events-auto">
-                        <Tooltip content={t('controlButton.openTranscript', { defaultValue: '展开字幕文稿' })} placement="below">
-                            <button
-                                type="button"
-                                onClick={() => setTranscriptVisible(true)}
-                                className={cn(
-                                    'flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-sm font-medium cursor-pointer select-none',
-                                    'bg-surface/85 hover:bg-surface text-secondary hover:text-primary border border-border/70 shadow-xs backdrop-blur-md transition-all duration-150',
-                                    'hover:scale-105 active:scale-95'
-                                )}
-                                aria-label={t('controlButton.openTranscript', { defaultValue: '展开字幕文稿' })}
-                            >
-                                <BookOpen className="w-3.5 h-3.5 text-accent" />
-                                <span>{t('subtitleScript', { defaultValue: '字幕文稿' })}</span>
-                            </button>
-                        </Tooltip>
                     </div>
                 )}
             </div>

@@ -30,6 +30,8 @@ export type UseLayoutState = {
     showTranscript: boolean;
     /** 播放页字幕文稿流显示模式：'sentence'（单句精析）或 'article'（连贯讲稿）。 */
     transcriptViewMode: 'sentence' | 'article';
+    /** 播客模式下是否显式展开字幕文稿侧栏（默认收起，保持纯音频全宽沉浸视图）。 */
+    podcastTranscriptVisible: boolean;
 };
 
 /** 全局布局状态修改动作。 */
@@ -40,6 +42,10 @@ export type UseLayoutActions = {
     setTranscriptVisible: (visible: boolean) => void;
     /** 反转字幕文稿流显示状态。 */
     toggleTranscript: () => void;
+    /** 设置播客模式下字幕文稿侧栏的显示状态。 */
+    setPodcastTranscriptVisible: (visible: boolean) => void;
+    /** 切换播客模式下字幕文稿侧栏的显示状态。 */
+    togglePodcastTranscript: () => void;
     /** 设置字幕文稿流显示模式。 */
     setTranscriptViewMode: (mode: 'sentence' | 'article') => void;
     /** 切换字幕文稿流显示模式。 */
@@ -60,32 +66,28 @@ export type UseLayoutActions = {
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'refrain.sidebar_collapsed';
 const TRANSCRIPT_VISIBLE_STORAGE_KEY = 'refrain.transcript_visible';
+const PODCAST_TRANSCRIPT_VISIBLE_STORAGE_KEY = 'refrain.podcast_transcript_visible';
 const TRANSCRIPT_VIEW_MODE_STORAGE_KEY = 'refrain.transcript_view_mode';
 
-const readInitialSidebarCollapsed = (): boolean => {
-    if (typeof window === 'undefined') return false;
+const readStorageBoolean = (key: string, fallback: boolean): boolean => {
+    if (typeof window === 'undefined') return fallback;
     try {
-        const stored = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+        const stored = localStorage.getItem(key);
         if (stored !== null) {
             return stored === 'true';
         }
     } catch {
         // 忽略存储访问异常
     }
-    return false;
+    return fallback;
 };
 
-const readInitialTranscriptVisible = (): boolean => {
-    if (typeof window === 'undefined') return true;
+const writeStorageValue = (key: string, value: string): void => {
     try {
-        const stored = localStorage.getItem(TRANSCRIPT_VISIBLE_STORAGE_KEY);
-        if (stored !== null) {
-            return stored === 'true';
-        }
+        localStorage.setItem(key, value);
     } catch {
         // 忽略存储访问异常
     }
-    return true;
 };
 
 const readInitialTranscriptViewMode = (): 'sentence' | 'article' => {
@@ -107,8 +109,9 @@ const readInitialTranscriptViewMode = (): 'sentence' | 'article' => {
 const useLayout = create<UseLayoutState & UseLayoutActions>()(
     subscribeWithSelector((set) => ({
         showSideBar: true,
-        sidebarCollapsed: readInitialSidebarCollapsed(),
-        showTranscript: readInitialTranscriptVisible(),
+        sidebarCollapsed: readStorageBoolean(SIDEBAR_COLLAPSED_STORAGE_KEY, false),
+        showTranscript: readStorageBoolean(TRANSCRIPT_VISIBLE_STORAGE_KEY, true),
+        podcastTranscriptVisible: readStorageBoolean(PODCAST_TRANSCRIPT_VISIBLE_STORAGE_KEY, false),
         transcriptViewMode: readInitialTranscriptViewMode(),
         chatting: false,
         width: '2xl',
@@ -118,59 +121,46 @@ const useLayout = create<UseLayoutState & UseLayoutActions>()(
             set({ showSideBar: show });
         },
         setTranscriptVisible: (visible: boolean) => {
-            try {
-                localStorage.setItem(TRANSCRIPT_VISIBLE_STORAGE_KEY, String(visible));
-            } catch {
-                // 忽略存储访问异常
-            }
+            writeStorageValue(TRANSCRIPT_VISIBLE_STORAGE_KEY, String(visible));
             set({ showTranscript: visible });
         },
         toggleTranscript: () => {
             set((state) => {
                 const next = !state.showTranscript;
-                try {
-                    localStorage.setItem(TRANSCRIPT_VISIBLE_STORAGE_KEY, String(next));
-                } catch {
-                    // 忽略存储访问异常
-                }
+                writeStorageValue(TRANSCRIPT_VISIBLE_STORAGE_KEY, String(next));
                 return { showTranscript: next };
             });
         },
+        setPodcastTranscriptVisible: (visible: boolean) => {
+            writeStorageValue(PODCAST_TRANSCRIPT_VISIBLE_STORAGE_KEY, String(visible));
+            set({ podcastTranscriptVisible: visible });
+        },
+        togglePodcastTranscript: () => {
+            set((state) => {
+                const next = !state.podcastTranscriptVisible;
+                writeStorageValue(PODCAST_TRANSCRIPT_VISIBLE_STORAGE_KEY, String(next));
+                return { podcastTranscriptVisible: next };
+            });
+        },
         setTranscriptViewMode: (mode: 'sentence' | 'article') => {
-            try {
-                localStorage.setItem(TRANSCRIPT_VIEW_MODE_STORAGE_KEY, mode);
-            } catch {
-                // 忽略存储访问异常
-            }
+            writeStorageValue(TRANSCRIPT_VIEW_MODE_STORAGE_KEY, mode);
             set({ transcriptViewMode: mode });
         },
         toggleTranscriptViewMode: () => {
             set((state) => {
                 const next = state.transcriptViewMode === 'sentence' ? 'article' : 'sentence';
-                try {
-                    localStorage.setItem(TRANSCRIPT_VIEW_MODE_STORAGE_KEY, next);
-                } catch {
-                    // 忽略存储访问异常
-                }
+                writeStorageValue(TRANSCRIPT_VIEW_MODE_STORAGE_KEY, next);
                 return { transcriptViewMode: next };
             });
         },
         setSidebarCollapsed: (collapsed: boolean) => {
-            try {
-                localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
-            } catch {
-                // 忽略存储访问异常
-            }
+            writeStorageValue(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
             set({ sidebarCollapsed: collapsed });
         },
         toggleSidebarCollapsed: () => {
             set((state) => {
                 const next = !state.sidebarCollapsed;
-                try {
-                    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
-                } catch {
-                    // 忽略存储访问异常
-                }
+                writeStorageValue(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
                 return { sidebarCollapsed: next };
             });
         },

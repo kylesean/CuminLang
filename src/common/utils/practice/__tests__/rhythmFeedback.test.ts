@@ -249,4 +249,25 @@ describe('buildRhythmFeedback', () => {
         expect(withPause?.notes).not.toContain('syllables-more');
         expect(fastClean?.notes).not.toContain('syllables-fewer');
     });
+
+    it('慢速朗读且仅含替换词时，不因时长更久而误报多余音节提示', () => {
+        const samples: number[] = [];
+        fill(samples, 4.0, 6000);
+        const pcm = decodePcm16Wav(buildWav(samples));
+
+        const feedback = buildRhythmFeedback({
+            expectedText: 'go and say yes',
+            transcript: 'go and see yes',
+            tokens: tokensFor([
+                { word: 'go', start: 0, end: 0.9 },
+                { word: 'and', start: 0.9, end: 1.8 },
+                { word: 'see', start: 1.8, end: 2.8 },
+                { word: 'yes', start: 2.8, end: 3.8 },
+            ]),
+            pcm: pcm!,
+            referenceDurationSec: 1.8,
+        });
+
+        expect(feedback?.notes).not.toContain('syllables-more');
+    });
 });

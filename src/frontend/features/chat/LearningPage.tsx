@@ -374,11 +374,6 @@ export default function LearningPage() {
         }
     }, [chat, cloudAvailable, sessionReady]);
 
-    const handleBackToPlayer = useCallback(() => {
-        stopLoopPlayback();
-        useChatPanel.getState().hideLearning();
-    }, [stopLoopPlayback]);
-
     const handleJumpToPractice = useCallback(() => {
         stopLoopPlayback();
         if (topicLine) {
@@ -401,7 +396,6 @@ export default function LearningPage() {
                 canStepPrev={anchorPosition > 0}
                 canStepNext={anchorPosition >= 0 && anchorPosition < sentences.length - 1}
                 onStepSentence={handleStepSentence}
-                onBackToPlayer={handleBackToPlayer}
                 onJumpToPractice={handleJumpToPractice}
                 isSentenceSaved={isSentenceSaved}
                 onToggleSaveSentence={handleToggleSaveSentence}

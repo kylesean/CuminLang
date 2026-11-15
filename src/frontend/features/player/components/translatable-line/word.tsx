@@ -170,14 +170,15 @@ function WordBase({
             data-sentence-index={sentenceIndex !== undefined ? String(sentenceIndex) : undefined}
             data-sentence-hash={sentenceHash}
             data-sentence-text={sentenceText}
+            data-vocab-annotation={annotationKind ?? undefined}
             data-testid={annotationKind ? VOCAB_ANNOTATION_TESTIDS[annotationKind] : undefined}
             className={cn(
                 'rounded cursor-pointer inline',
                 hoverBg,
                 classNames?.word,
                 isOpen && referenceBg,
-                annotationKind === 'learning' && vocabStyle,
-                annotationKind === 'familiar' && vocabFamiliarStyle,
+                show && annotationKind === 'learning' && vocabStyle,
+                show && annotationKind === 'familiar' && vocabFamiliarStyle,
             )}
             role="button"
             tabIndex={0}

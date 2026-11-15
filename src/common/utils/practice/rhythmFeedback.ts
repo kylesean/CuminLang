@@ -11,6 +11,7 @@ import {
 import {
     buildWordSyllableFeedback,
     compareSyllableCount,
+    estimateOrthographicSyllables,
     splitIpaSyllables,
 } from '@/common/utils/practice/syllableFeedback';
 
@@ -329,20 +330,24 @@ export const buildRhythmFeedback = (input: {
     const lastEnd = Math.max(...measured.map((entry) => entry.end));
     const speechDurationSec = Math.max(0, Number((lastEnd - firstStart).toFixed(2)));
 
-    // 音节数对比：参考侧来自词典 IPA，用户侧由实际发声词时长之和估算（剔除句间停顿静音），
-    // 并结合词级对齐情况仅在存在漏/多/错词时给提示，避免把干净朗读的停顿或快速连读误报成漏音。
+    // 音节数对比：词典无音标时用正字法元音簇保底；用户侧对发声时长按语速倍率折算，
+    // 且仅在 ASR 确有漏词（missing）或多词（extra）时给出音节增减提示，避免慢读/替换词触发伪音节诊断。
     const referenceSyllableCount = words.reduce(
-        (sum, word) => sum + (word.syllables?.length ?? 0),
+        (sum, word) => sum + ((word.syllables?.length ?? 0) || estimateOrthographicSyllables(word.word)),
         0,
     );
     const voicedDurationSec = Number(durations.reduce((sum, value) => sum + value, 0).toFixed(2));
-    const hasMissingOrSub = alignment.words.some((entry) => entry.status === 'missing' || entry.status === 'sub');
-    const hasExtraOrSub = alignment.words.some((entry) => entry.status === 'extra' || entry.status === 'sub');
+    const paceNormalization = paceRatio !== null && paceRatio > 0
+        ? Math.max(0.75, Math.min(1.8, paceRatio))
+        : 1;
+    const normalizedDurationSec = Number((voicedDurationSec / paceNormalization).toFixed(2));
+    const hasMissing = alignment.words.some((entry) => entry.status === 'missing');
+    const hasExtra = alignment.words.some((entry) => entry.status === 'extra');
     const syllables = referenceSyllableCount > 0
-        ? compareSyllableCount(referenceSyllableCount, voicedDurationSec)
+        ? compareSyllableCount(referenceSyllableCount, normalizedDurationSec)
         : undefined;
-    if (syllables?.verdict === 'fewer' && hasMissingOrSub) notes.push('syllables-fewer');
-    if (syllables?.verdict === 'more' && hasExtraOrSub) notes.push('syllables-more');
+    if (syllables?.verdict === 'fewer' && hasMissing) notes.push('syllables-fewer');
+    if (syllables?.verdict === 'more' && hasExtra) notes.push('syllables-more');
 
     // 重音位置：只统计「参考重音已知且用户重音可测」的词，
     // 且错位词数要达到多数才提示，单个词的波动不足以说明整体问题。

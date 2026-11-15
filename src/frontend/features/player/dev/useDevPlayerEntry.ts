@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import { resolveDevMode } from '@/frontend/lib/devMode';
 import { applyLanguageSetting } from '@/frontend/i18n';
+import { swrApiMutate } from '@/frontend/lib/swr-util';
 import StrUtil from '@/common/utils/str-util';
 
 /** dev 入口的解析状态。 */
@@ -99,6 +100,10 @@ export function useDevPlayerEntry(searchParams: URLSearchParams): DevPlayerEntry
             const ids = await playerApi.createWatchHistoryEntries([file]);
             if (cancelled) {
                 return;
+            }
+            if (ids.length > 0) {
+                void swrApiMutate('watch-history/list/basic');
+                void swrApiMutate('watch-history/list');
             }
             setState({ status: ids.length > 0 ? 'ready' : 'failed', videoId: ids[0] ?? null });
         })().catch(() => {

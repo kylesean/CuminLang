@@ -106,6 +106,7 @@ export default function ContextStudioPage() {
     const { t } = useTranslation('pages');
     const [searchParams, setSearchParams] = useSearchParams();
     const deepLinkWord = searchParams.get('word')?.trim() ?? '';
+    const deepLinkSentenceKey = searchParams.get('sentenceKey')?.trim() ?? '';
 
     const [words, setWords] = useState<WordItem[]>([]);
     const [sentences, setSentences] = useState<SavedSentenceVO[]>([]);
@@ -147,7 +148,10 @@ export default function ContextStudioPage() {
         const filterParam = searchParams.get('filter') as AssetFilter | null;
         return filterParam && VALID_FILTERS.has(filterParam) ? filterParam : 'all';
     });
-    const [activeSentenceTag, setActiveSentenceTag] = useState<SavedSentenceTag | 'all'>('all');
+    const [activeSentenceTag, setActiveSentenceTag] = useState<SavedSentenceTag | 'all'>(() => {
+        const tagParam = searchParams.get('tag') as SavedSentenceTag | null;
+        return tagParam && (SAVED_SENTENCE_TAGS as readonly string[]).includes(tagParam) ? tagParam : 'all';
+    });
     const [searchTerm, setSearchTerm] = useState('');
     const [explicitSelection, setExplicitSelection] = useState<StudioSelection>(null);
     const [editingWord, setEditingWord] = useState<WordItem | null>(null);
@@ -329,6 +333,12 @@ export default function ContextStudioPage() {
                 },
             };
         }
+        if (deepLinkSentenceKey && (activeFilter === 'all' || activeFilter === 'sentences')) {
+            const matchedSentence = sentences.find((s) => s.sentenceKey === deepLinkSentenceKey);
+            if (matchedSentence) {
+                return { kind: 'sentence', sentence: matchedSentence };
+            }
+        }
         if (activeFilter === 'sentences') {
             const firstSentence = filteredItems.find((item) => item.kind === 'sentence');
             if (firstSentence) {
@@ -353,7 +363,7 @@ export default function ContextStudioPage() {
             return { kind: 'sentence', sentence: sentences[0] };
         }
         return null;
-    }, [activeFilter, deepLinkWord, explicitSelection, filteredItems, words, sentences]);
+    }, [activeFilter, deepLinkSentenceKey, deepLinkWord, explicitSelection, filteredItems, words, sentences]);
 
     const segmentValue: SegmentFilter =
         activeFilter === 'sentences'
@@ -370,8 +380,67 @@ export default function ContextStudioPage() {
             }
             setExplicitSelection(null);
             setActiveFilter(nextFilter);
+            setSearchParams(
+                (prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (nextFilter === 'all') {
+                        next.delete('filter');
+                    } else {
+                        next.set('filter', nextFilter);
+                    }
+                    if (nextFilter !== 'sentences') {
+                        next.delete('tag');
+                    }
+                    next.delete('word');
+                    next.delete('sentenceKey');
+                    return next;
+                },
+                { replace: true },
+            );
         },
-        [stopSentencePlaylist],
+        [setSearchParams, stopSentencePlaylist],
+    );
+
+    const handleSelectSentenceTag = useCallback(
+        (nextTag: SavedSentenceTag | 'all') => {
+            setExplicitSelection(null);
+            setActiveSentenceTag(nextTag);
+            setSearchParams(
+                (prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (nextTag === 'all') {
+                        next.delete('tag');
+                    } else {
+                        next.set('tag', nextTag);
+                    }
+                    next.delete('sentenceKey');
+                    return next;
+                },
+                { replace: true },
+            );
+        },
+        [setSearchParams],
+    );
+
+    const handleSelectAsset = useCallback(
+        (entry: Exclude<StudioSelection, null>) => {
+            setExplicitSelection(entry);
+            setSearchParams(
+                (prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (entry.kind === 'word') {
+                        next.set('word', entry.word.word);
+                        next.delete('sentenceKey');
+                    } else {
+                        next.set('sentenceKey', entry.sentence.sentenceKey);
+                        next.delete('word');
+                    }
+                    return next;
+                },
+                { replace: true },
+            );
+        },
+        [setSearchParams],
     );
 
     const handleSegmentChange = (val: string) => {
@@ -521,7 +590,7 @@ export default function ContextStudioPage() {
                 <button
                     key={`sent-${entry.sentence.sentenceKey}`}
                     type="button"
-                    onClick={() => setExplicitSelection({ kind: 'sentence', sentence: entry.sentence })}
+                    onClick={() => handleSelectAsset({ kind: 'sentence', sentence: entry.sentence })}
                     className={cn(
                         'w-full text-left rounded-lg border p-2.5 transition-colors cursor-pointer flex flex-col gap-1',
                         isSelected
@@ -564,7 +633,7 @@ export default function ContextStudioPage() {
             <button
                 key={`word-${entry.word.id}-${entry.word.word}`}
                 type="button"
-                onClick={() => setExplicitSelection({ kind: 'word', word: entry.word })}
+                onClick={() => handleSelectAsset({ kind: 'word', word: entry.word })}
                 className={cn(
                     'w-full text-left rounded-lg border p-2.5 transition-colors cursor-pointer flex flex-col gap-1',
                     isSelected
@@ -778,7 +847,7 @@ export default function ContextStudioPage() {
                                     <button
                                         type="button"
                                         className={navButtonClass(activeSentenceTag === 'all')}
-                                        onClick={() => setActiveSentenceTag('all')}
+                                        onClick={() => handleSelectSentenceTag('all')}
                                     >
                                         <span className="truncate">
                                             {t('contextStudio.tagAll', { defaultValue: '全部金句' })}
@@ -790,7 +859,7 @@ export default function ContextStudioPage() {
                                             key={tagKey}
                                             type="button"
                                             className={navButtonClass(activeSentenceTag === tagKey)}
-                                            onClick={() => setActiveSentenceTag(tagKey)}
+                                            onClick={() => handleSelectSentenceTag(tagKey)}
                                         >
                                             <span className="truncate">
                                                 {t(`contextStudio.tag.${tagKey}`, {

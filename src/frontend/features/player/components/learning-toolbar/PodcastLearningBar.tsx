@@ -7,6 +7,8 @@ import { usePlayer } from '@/frontend/features/player/playerStore';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { formatShortcut } from '@/frontend/features/player/components/formatShortcut';
 import PracticeModeButton from '@/frontend/features/player/components/srt-layout/PracticeModeButton';
+import PlayerSettingsPopover from './PlayerSettingsPopover';
+import { CONTROL_POPOVER_OFFSET_STACKED_BAR } from '@/frontend/features/player/components/ControlPopover';
 import SubtitleTrackSegmented from './SubtitleTrackSegmented';
 import {
     TOOLBAR_DIVIDER,
@@ -15,16 +17,10 @@ import {
 } from './toolbarStyles';
 
 /**
- * 播客模式下的精简学习条。
+ * 播客模式下的精简学习控制组（内嵌于底部播客控制条，不悬浮遮挡字幕流）。
  *
- * 播客视图会盖住主字幕面板与完整学习台，这里只保留听读时最常用的三件事：
- * 轨道切换、单句循环、句末暂停。退出播客由底部控制条上常显的按钮负责，
- * 这里不再重复一个入口。
- *
- * 浮在播客控制条上方而不是并进控制条：控制条负责“播放”，这条负责“学”，
- * 和窗口内“视频条 / 学习台”的分层保持一致。
- *
- * @param className 定位由调用方给（绝对定位在视图右下角）。
+ * 保留听读时最常用的四类能力：轨道切换、单句循环、句末暂停、跟读与设置；
+ * 与主字幕区学习台共用同一个组件原语与状态。
  */
 export default function PodcastLearningBar({ className }: { className?: string }) {
     const { t } = useI18nTranslation('player');
@@ -37,10 +33,9 @@ export default function PodcastLearningBar({ className }: { className?: string }
 
     return (
         <div
-            className={cn(
-                'inline-flex items-center gap-1 rounded-full border border-border/60 bg-body/85 px-1.5 py-1 shadow-sm backdrop-blur-sm',
-                className
-            )}
+            role="group"
+            aria-label={t('controlBar.groupLearning', { defaultValue: '学习动作' })}
+            className={cn('inline-flex items-center gap-1', className)}
         >
             <SubtitleTrackSegmented tone="panel" />
 
@@ -60,7 +55,7 @@ export default function PodcastLearningBar({ className }: { className?: string }
                         singleRepeat ? style.accent.amber : style.idle
                     )}
                 >
-                    <Repeat1 className="w-3.5 h-3.5 stroke-[2.2]" />
+                    <Repeat1 className="w-4 h-4 stroke-[2]" />
                 </button>
             </Tooltip>
 
@@ -78,13 +73,14 @@ export default function PodcastLearningBar({ className }: { className?: string }
                         autoPause ? style.accent.emerald : style.idle
                     )}
                 >
-                    <CirclePause className="w-3.5 h-3.5 stroke-[2.2]" />
+                    <CirclePause className="w-4 h-4 stroke-[2]" />
                 </button>
             </Tooltip>
 
             <span className={cn(TOOLBAR_DIVIDER, style.divider)} />
 
             <PracticeModeButton variant="toolbar" />
+            <PlayerSettingsPopover tone="panel" popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR} />
         </div>
     );
 }

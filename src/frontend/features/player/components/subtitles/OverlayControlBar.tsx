@@ -22,6 +22,8 @@ import PodcastModeButton from '@/frontend/features/player/components/PodcastMode
 import TrainingMenuButton from '@/frontend/features/player/components/learning-toolbar/TrainingMenuButton';
 import SubtitleTrackSegmented from '@/frontend/features/player/components/learning-toolbar/SubtitleTrackSegmented';
 import PlayerSettingsPopover from '@/frontend/features/player/components/learning-toolbar/PlayerSettingsPopover';
+import PracticeModeButton from '@/frontend/features/player/components/srt-layout/PracticeModeButton';
+import LearningModeButton from '@/frontend/features/player/components/srt-layout/LearningModeButton';
 import { CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR } from '@/frontend/features/player/components/ControlPopover';
 import {
     FULLSCREEN_CONTROL_BAR_PANEL_HEIGHT_PX,
@@ -69,10 +71,11 @@ export default function OverlayControlBar({
     // 控制条外层的待命区是 pointer-events-none，只靠 onMouseEnter 永远叫不出来，
     // 全屏下又没有别的入口，会把用户困在没法退出的画面里
     const [activated, setActivated] = useState<boolean>(false);
-    // 训练菜单 / 设置弹层展开期间钉住控制条：鼠标移向菜单会先离开本条区域
+    // 训练菜单 / 设置弹层 / 倍速弹层展开期间钉住控制条：鼠标移向菜单会先离开本条区域
     const [trainingMenuOpen, setTrainingMenuOpen] = useState<boolean>(false);
     const [settingsMenuOpen, setSettingsMenuOpen] = useState<boolean>(false);
-    const menuOpen = trainingMenuOpen || settingsMenuOpen;
+    const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
+    const menuOpen = trainingMenuOpen || settingsMenuOpen || speedMenuOpen;
 
     const fullScreen = useLayout((s) => s.fullScreen);
     const changeFullScreen = useLayout((s) => s.changeFullScreen);
@@ -155,13 +158,15 @@ export default function OverlayControlBar({
                 )}
                 trailing={(
                     <>
-                        {/* 学习工具成组：训练 / 字幕轨道 / 设置 */}
+                        {/* 学习工具成组：训练 / 跟读 / 整句学习 / 字幕轨道 / 设置 */}
                         <div className={MEDIA_BAR_GROUP}>
                             <TrainingMenuButton
                                 tone="overlay"
                                 popoverOffset={CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR}
                                 onMenuOpenChange={setTrainingMenuOpen}
                             />
+                            <PracticeModeButton variant="toolbar" tone="overlay" />
+                            <LearningModeButton variant="toolbar" tone="overlay" />
                             <SubtitleTrackSegmented tone="overlay" />
                             <PlayerSettingsPopover
                                 tone="overlay"
@@ -183,6 +188,7 @@ export default function OverlayControlBar({
                                 popoverOffset={CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
                                 onSpeedChange={(speed) => usePlayer.getState().setPlaybackRate(speed)}
+                                onMenuOpenChange={setSpeedMenuOpen}
                                 onSelectFinish={() => {
                                     setMouseOver(false);
                                 }}

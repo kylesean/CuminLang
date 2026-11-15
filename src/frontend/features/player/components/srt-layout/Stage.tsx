@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import { AudioLines } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePlayer } from '@/frontend/features/player/playerStore';
@@ -34,6 +34,8 @@ export default function PlaybackStage({ className = '', compact = false, onReady
 
     // 视频元素本身（不只是 ref）也要交给遮挡带：它要读 videoWidth / videoHeight 对齐真实画面
     const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+    const [stagePointerActive, setStagePointerActive] = useState<boolean>(false);
+    const stageHideTimerRef = useRef<number | null>(null);
 
     const fullScreen = useLayout((s) => s.fullScreen);
     const podcastMode = useLayout((s) => s.podcastMode);
@@ -44,6 +46,31 @@ export default function PlaybackStage({ className = '', compact = false, onReady
         || isAudioOnly
     );
     const stageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => () => {
+        if (stageHideTimerRef.current !== null) {
+            window.clearTimeout(stageHideTimerRef.current);
+        }
+    }, []);
+
+    const handleStageMouseMove = useCallback(() => {
+        setStagePointerActive(true);
+        if (stageHideTimerRef.current !== null) {
+            window.clearTimeout(stageHideTimerRef.current);
+        }
+        stageHideTimerRef.current = window.setTimeout(() => {
+            stageHideTimerRef.current = null;
+            setStagePointerActive(false);
+        }, 2200);
+    }, []);
+
+    const handleStageMouseLeave = useCallback(() => {
+        if (stageHideTimerRef.current !== null) {
+            window.clearTimeout(stageHideTimerRef.current);
+            stageHideTimerRef.current = null;
+        }
+        setStagePointerActive(false);
+    }, []);
 
     const handleProvideVideoElement = useCallback((video: HTMLVideoElement | null) => {
         setVideoElement(video);
@@ -64,6 +91,8 @@ export default function PlaybackStage({ className = '', compact = false, onReady
     return (
         <div
             ref={stageRef}
+            onMouseMove={handleStageMouseMove}
+            onMouseLeave={handleStageMouseLeave}
             className={cn(
                 'relative h-full w-full overflow-hidden transition-colors duration-300',
                 MEDIA_MATTE_CLASS,
@@ -102,11 +131,12 @@ export default function PlaybackStage({ className = '', compact = false, onReady
 
                 {!compact && (!fullScreen || practiceVisible) && !podcastMode && (
                     <PlaybackControlBar
+                        stageActive={stagePointerActive}
                         onTimeChange={(time) => usePlayer.getState().seekTo({ time })}
                         className="absolute left-0"
                     />
                 )}
-                {!compact && fullScreen && <FullscreenSubtitleOverlay />}
+                {!compact && fullScreen && !podcastMode && <FullscreenSubtitleOverlay />}
             </div>
         </div>
     );

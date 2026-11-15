@@ -39,6 +39,8 @@ const logger = getRendererLogger('PlaybackControlBar');
 export interface PlaybackControlBarProps {
     className?: string;
     onTimeChange?: (time: number) => void;
+    /** 视频舞台区存在近期指针活动时唤醒控制条（不局限于底部窄条热区）。 */
+    stageActive?: boolean;
 }
 
 /**
@@ -47,7 +49,8 @@ export interface PlaybackControlBarProps {
  */
 export default function PlaybackControlBar({
     className = '',
-    onTimeChange
+    onTimeChange,
+    stageActive = false,
 }: PlaybackControlBarProps) {
     const {
         volume,
@@ -62,6 +65,7 @@ export default function PlaybackControlBar({
     );
 
     const [previewTime, setPreviewTime] = useState<number | null>(null);
+    const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
     const fullScreen = useLayout((s) => s.fullScreen);
     const changeFullScreen = useLayout((s) => s.changeFullScreen);
     // 用户钉住后控制条常显，不再受鼠标超时隐藏影响
@@ -83,8 +87,8 @@ export default function PlaybackControlBar({
             }
         }
     }, []);
-    // 本条是否该显形：钉住/鼠标在条上才算「想显示」，且鼠标压到贴片上时要让位
-    const barVisible = (mouseOverOut || pinned) && !maskAdjust.hiddenByMask;
+    // 本条是否该显形：鼠标在舞台活跃 / 停在条上 / 倍速弹层开启 / 用户钉住，且未压在贴片上
+    const barVisible = (mouseOverOut || stageActive || speedMenuOpen || pinned) && !maskAdjust.hiddenByMask;
 
     const onMouseLeave = () => {
         while (mouseOverTimeout.current.length > 0) {
@@ -176,6 +180,7 @@ export default function PlaybackControlBar({
                                 popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
                                 onSpeedChange={(speed) => usePlayer.getState().setPlaybackRate(speed)}
+                                onMenuOpenChange={setSpeedMenuOpen}
                             />
                             <VolumeSlider
                                 tone="media"

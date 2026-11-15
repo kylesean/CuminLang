@@ -30,9 +30,9 @@ export interface ReferenceSyllable {
  */
 const IPA_VOWELS = new Set([
     'a', 'i', 'u', 'y',
-    'ɑ', 'æ', 'ɐ', 'ɒ', 'ɔ', 'ə', 'ɘ', 'ɛ', 'ɜ', 'ɞ', 'ɪ', 'ɨ', 'ʊ', 'ʉ', 'ʌ', 'ɯ',
-    'ɤ', 'ɵ', 'ø', 'œ', 'ɶ', 'ɤ', 'ɚ', 'ɝ', 'ɹ',
-    'ᵻ', 'ᵿ', 'ɐ', 'ɪ̈', 'ʊ̈',
+    'ɑ', 'æ', 'ɐ', 'ɒ', 'ɔ', 'ə', 'ә', 'ǝ', 'ɘ', 'ɛ', 'ɜ', 'ɞ', 'ɪ', 'ɨ', 'ʊ', 'ʉ', 'ʌ', 'ɯ',
+    'ɤ', 'ɵ', 'ø', 'œ', 'ɶ', 'ɚ', 'ɝ', 'ɹ',
+    'ᵻ', 'ᵿ', 'ɪ̈', 'ʊ̈',
 ]);
 
 /**
@@ -88,12 +88,13 @@ export const splitIpaSyllables = (phonetic: string): ReferenceSyllable[] => {
     };
 
     for (const char of ipa) {
-        if (char === PRIMARY_STRESS || char === SECONDARY_STRESS) {
+        if (char === PRIMARY_STRESS || char === "'" || char === SECONDARY_STRESS) {
             // 重音标记出现在音节开头；若当前音节已经有元音核，说明它属于下一个音节。
+            // 兼顾 ECDict 常用 ASCII 撇号 ' 标注主重音的习惯。
             if (hasNucleus) {
                 flush();
             }
-            stressed = char === PRIMARY_STRESS;
+            stressed = char === PRIMARY_STRESS || char === "'";
             buffer += char;
             continue;
         }
@@ -116,6 +117,22 @@ export const splitIpaSyllables = (phonetic: string): ReferenceSyllable[] => {
     }
     flush();
     return syllables;
+};
+
+/**
+ * 对词典缺失音标的英文词按正字法元音簇做保底音节数估算。
+ * 仅用于参考音节总量统计，不推断重音位置。
+ */
+export const estimateOrthographicSyllables = (word: string): number => {
+    const cleaned = word.toLowerCase().replace(/[^a-z]/gu, '');
+    if (!cleaned) return 0;
+    const clusters = cleaned.match(/[aeiouy]+/gu);
+    if (!clusters) return 1;
+    let count = clusters.length;
+    if (cleaned.length > 3 && cleaned.endsWith('e') && !cleaned.endsWith('le')) {
+        count -= 1;
+    }
+    return Math.max(1, count);
 };
 
 /**

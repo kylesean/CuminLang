@@ -1,47 +1,127 @@
 import type { SentencePracticePhonemeResult } from '@/common/contracts/sentence-practice';
+import type { PcmAudio } from '@/common/utils/practice/rhythmFeedback';
 
 /**
- * 将 ECDict / 常见英式美式音标拆分为对齐 wav2vec2-espeak vocab.json 的 IPA 音素序列。
+ * 裁剪 16kHz PCM 首尾长时间静音，避免停顿拖偏 Wav2Vec2 归一化与 CTC 强制对齐窗口。
+ */
+export function trimSilentPcmEdges(pcm: PcmAudio): { pcm: PcmAudio; offsetSec: number } {
+    const { samples, sampleRate } = pcm;
+    const windowSize = Math.max(1, Math.round(sampleRate * 0.02));
+    if (samples.length <= windowSize * 10 || sampleRate <= 0) {
+        return { pcm, offsetSec: 0 };
+    }
+
+    const numWindows = Math.floor(samples.length / windowSize);
+    const rmsList = new Float32Array(numWindows);
+    let maxRms = 0;
+    for (let w = 0; w < numWindows; w += 1) {
+        const base = w * windowSize;
+        let sumSq = 0;
+        for (let i = 0; i < windowSize; i += 1) {
+            const norm = samples[base + i] / 32768;
+            sumSq += norm * norm;
+        }
+        const rms = Math.sqrt(sumSq / windowSize);
+        rmsList[w] = rms;
+        if (rms > maxRms) maxRms = rms;
+    }
+
+    const threshold = Math.max(0.008, maxRms * 0.06);
+    let firstActive = -1;
+    let lastActive = -1;
+    for (let w = 0; w < numWindows; w += 1) {
+        if (rmsList[w] >= threshold) {
+            if (firstActive === -1) firstActive = w;
+            lastActive = w;
+        }
+    }
+    if (firstActive === -1) {
+        return { pcm, offsetSec: 0 };
+    }
+
+    const padWindows = 5; // 首尾各保留 100ms 缓冲，避免切伤轻辅音起音/收尾
+    const startWindow = Math.max(0, firstActive - padWindows);
+    const endWindow = Math.min(numWindows, lastActive + 1 + padWindows);
+    const startSample = startWindow * windowSize;
+    const endSample = Math.min(samples.length, endWindow * windowSize);
+    if (endSample - startSample < Math.round(sampleRate * 0.1)) {
+        return { pcm, offsetSec: 0 };
+    }
+    if (startSample === 0 && endSample === samples.length) {
+        return { pcm, offsetSec: 0 };
+    }
+
+    return {
+        pcm: { samples: samples.subarray(startSample, endSample), sampleRate },
+        offsetSec: Number((startSample / sampleRate).toFixed(3)),
+    };
+}
+
+/**
+ * 将 ECDict / 常见英式美式音标规范化并拆分为对齐 wav2vec2-espeak vocab.json 的 IPA 音素序列。
  */
 export function ipaToPhonemeTokens(
     ipaRaw: string,
     vocab: Readonly<Record<string, number>>,
 ): string[] {
     if (!ipaRaw) return [];
-    const cleaned = ipaRaw
+    let cleaned = ipaRaw
         .trim()
         .replace(/^[/[]+|[/\]]+$/g, '')
+        // 修复 ECDict 中常见的西里尔/拉丁 schwa 与 ASCII 冒号、非标准合字写法
+        .replace(/\u04d9|\u01dd/g, 'ə')
+        .replace(/:/g, 'ː')
+        .replace(/tjj/g, 'tʃ')
+        .replace(/t∫/g, 'tʃ')
         .replace(/\u0329|\u0361/g, '')
         .replace(/[ˈˌ'.,\s]/g, '')
         .replace(/g/g, 'ɡ')
-        .replace(/r/g, 'ɹ');
+        .replace(/r/g, 'ɹ')
+        // ECDict 保守标音 hwen → wen / wɛn
+        .replace(/^hw/u, 'w')
+        // ECDict 常见 ASCII 双元音写法还原为标准 IPA
+        .replace(/ei/g, 'eɪ')
+        .replace(/ai/g, 'aɪ')
+        .replace(/au/g, 'aʊ')
+        .replace(/ɔi/g, 'ɔɪ')
+        .replace(/[əo]u/g, 'oʊ')
+        .replace(/iə/g, 'ɪə')
+        .replace(/uə/g, 'ʊə');
 
-    // 按长度降序匹配多字符音素（如 dʒ、tʃ、eɪ、aɪ、aʊ、oʊ、ɔɪ、iː、uː、ɑː、ɔː）
+    // ECDict 宽式短元音 e（非双元音 eɪ/eə 或长音 eː 的一部分）在 espeak 词表中对应 /ɛ/
+    if (vocab['ɛ'] !== undefined) {
+        cleaned = cleaned.replace(/e(?![ɪəː])/g, 'ɛ');
+    }
+
+    // 按长度降序匹配多字符音素（如 dʒ、tʃ、eɪ、aɪ、aʊ、oʊ、ɔɪ、iː、uː、ɑː、ɔː）；排除孤立长音符号 ː
     const keys = Object.keys(vocab)
-        .filter((k) => !k.startsWith('<'))
+        .filter((k) => !k.startsWith('<') && k !== 'ː')
         .sort((a, b) => b.length - a.length);
 
-    const aliasMap: Record<string, string> = {
-        'ɜː': 'ɜ',
-        'ɜr': 'ɚ',
-        'ər': 'ɚ',
-        'ɔː': 'ɔ',
-        'eə': 'ɛ',
-        'ɪə': 'ɪ',
-        'ʊə': 'ʊ',
-        'əʊ': 'oʊ',
-        't∫': 'tʃ',
-        'dʒ': 'dʒ',
-    };
+    // 仅在原串对应 token 不在 vocab 中时，按长度降序查兼容别名映射
+    const aliasEntries: ReadonlyArray<readonly [string, string]> = [
+        ['ɜː', 'ɜ'],
+        ['ɜɹ', 'ɚ'],
+        ['əɹ', 'ɚ'],
+        ['ɔː', 'ɔ'],
+        ['ɑː', 'ɑ'],
+        ['iː', 'i'],
+        ['uː', 'u'],
+        ['eə', 'ɛ'],
+        ['ɪə', 'ɪ'],
+        ['ʊə', 'ʊ'],
+        ['əʊ', 'oʊ'],
+        ['dʒ', 'dʒ'],
+    ];
 
     const result: string[] = [];
     let idx = 0;
     while (idx < cleaned.length) {
         let matched: string | null = null;
-        for (const [from, to] of Object.entries(aliasMap)) {
-            if (cleaned.startsWith(from, idx) && vocab[to] !== undefined) {
-                matched = to;
-                idx += from.length;
+        for (const key of keys) {
+            if (cleaned.startsWith(key, idx)) {
+                matched = key;
+                idx += key.length;
                 break;
             }
         }
@@ -49,10 +129,10 @@ export function ipaToPhonemeTokens(
             result.push(matched);
             continue;
         }
-        for (const key of keys) {
-            if (cleaned.startsWith(key, idx)) {
-                matched = key;
-                idx += key.length;
+        for (const [from, to] of aliasEntries) {
+            if (cleaned.startsWith(from, idx) && vocab[to] !== undefined) {
+                matched = to;
+                idx += from.length;
                 break;
             }
         }
@@ -227,8 +307,10 @@ export function scoreWordsWithCtcGop(
         const prevRange = frameRangesByWord.get(item.wordIndex);
         const minF = frames[0];
         const maxF = frames[frames.length - 1];
+        // 单个音素若跨过长时间静音停顿（超过 25 帧 ≈ 0.5s），只取末帧附近有效发声窗口
+        const boundedMinF = maxF - minF > 25 ? Math.max(minF, maxF - 25) : minF;
         frameRangesByWord.set(item.wordIndex, {
-            minFrame: prevRange ? Math.min(prevRange.minFrame, minF) : minF,
+            minFrame: prevRange ? Math.min(prevRange.minFrame, boundedMinF) : boundedMinF,
             maxFrame: prevRange ? Math.max(prevRange.maxFrame, maxF) : maxF,
         });
 

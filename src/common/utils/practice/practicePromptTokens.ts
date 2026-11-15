@@ -96,15 +96,69 @@ export function extractPracticeWordSlots(text: string): PracticeWordSlot[] {
     );
 }
 
+/** 常见英美拼写变体分组（同一子数组内视为拼写等价，不按错别字扣分）。 */
+const US_UK_SPELLING_GROUPS: readonly (readonly [string, string])[] = [
+    ['color', 'colour'],
+    ['favor', 'favour'],
+    ['flavor', 'flavour'],
+    ['honor', 'honour'],
+    ['humor', 'humour'],
+    ['labor', 'labour'],
+    ['neighbor', 'neighbour'],
+    ['behavior', 'behaviour'],
+    ['center', 'centre'],
+    ['theater', 'theatre'],
+    ['meter', 'metre'],
+    ['liter', 'litre'],
+    ['fiber', 'fibre'],
+    ['realize', 'realise'],
+    ['organize', 'organise'],
+    ['recognize', 'recognise'],
+    ['analyze', 'analyse'],
+    ['apologize', 'apologise'],
+    ['criticize', 'criticise'],
+    ['emphasize', 'emphasise'],
+    ['defense', 'defence'],
+    ['offense', 'offence'],
+    ['canceled', 'cancelled'],
+    ['canceling', 'cancelling'],
+    ['traveled', 'travelled'],
+    ['traveling', 'travelling'],
+    ['gray', 'grey'],
+    ['program', 'programme'],
+    ['dialog', 'dialogue'],
+    ['catalog', 'catalogue'],
+    ['judgment', 'judgement'],
+    ['check', 'cheque'],
+    ['tire', 'tyre'],
+];
+
+const US_UK_SPELLING_MAP = (() => {
+    const map = new Map<string, string>();
+    for (const [us, uk] of US_UK_SPELLING_GROUPS) {
+        map.set(us, us);
+        map.set(uk, us);
+    }
+    return map;
+})();
+
+/** 判断两词是否为标准英美拼写变体（小写无标点形式）。 */
+export function areUsUkSpellingVariants(a: string, b: string): boolean {
+    if (a === b) return true;
+    const ca = US_UK_SPELLING_MAP.get(a);
+    return ca !== undefined && ca === US_UK_SPELLING_MAP.get(b);
+}
+
 /**
  * 判断用户输入是否匹配目标词槽。
  *
- * 目标词含缩约撇号或连字符时，同时兼容省略撇号/连字符的敲法（例如 dont → don't）。
+ * 兼容英美拼写变体（color ↔ colour）；目标词含缩约撇号或连字符时，同时兼容省略撇号/连字符的敲法（例如 dont → don't）。
  */
 export function isSlotWordMatch(typed: string, slot: PracticeWordSlot): boolean {
     const strictTyped = normalizeSlotText(typed, false);
     if (!strictTyped) return false;
     if (strictTyped === slot.normalized) return true;
+    if (areUsUkSpellingVariants(strictTyped, slot.normalized)) return true;
     const hasJoiner = slot.text.includes("'") || slot.text.includes('’') || slot.text.includes('-');
     if (!hasJoiner) return false;
     return normalizeSlotText(typed, true) === slot.compactNormalized;

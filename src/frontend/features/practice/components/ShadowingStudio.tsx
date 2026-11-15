@@ -594,9 +594,7 @@ function RecordShadowingView({
     ]);
 
     const originalDurationMs = Math.max(200, Math.round((unit.range.end - unit.range.start) * 1000));
-    const speedRatio = localRecording && localRecording.durationMs > 200
-        ? originalDurationMs / localRecording.durationMs
-        : null;
+    const showDurationCompare = Boolean(localRecording && localRecording.durationMs > 200);
 
     return (
         <div
@@ -683,12 +681,11 @@ function RecordShadowingView({
                                         : '…'}
                             </span>
                         )}
-                        {speedRatio !== null && (
+                        {showDurationCompare && localRecording && (
                             <span className="rounded-full bg-body/80 border border-border/50 px-2 py-0.5 font-mono tabular-nums text-secondary">
-                                {t('shadowing.speedCompare', {
-                                    defaultValue: '语速 {{ratio}}× ({{mine}}s/{{orig}}s)',
-                                    ratio: speedRatio.toFixed(2),
-                                    mine: (localRecording!.durationMs / 1000).toFixed(1),
+                                {t('shadowing.durationCompare', {
+                                    defaultValue: '录音 {{mine}}s · 原声 {{orig}}s',
+                                    mine: (localRecording.durationMs / 1000).toFixed(1),
                                     orig: (originalDurationMs / 1000).toFixed(1),
                                 })}
                             </span>
@@ -766,8 +763,9 @@ function RecordShadowingView({
             )}
 
             {result && (() => {
+                // 只针对 ASR 已匹配到的目标词给出明显偏音（error）提示，避免把错词/漏词的强制对齐噪音展示成音素纠错
                 const weakWords = result.words.filter(
-                    (w) => w.phonemes && w.phonemes.some((p) => p.status !== 'ok'),
+                    (w) => w.status === 'match' && w.phonemes && w.phonemes.some((p) => p.status === 'error'),
                 );
                 if (weakWords.length === 0) return null;
                 return (
@@ -779,8 +777,8 @@ function RecordShadowingView({
                             {t('shadowing.phonemeIssuesTitle', { defaultValue: '音素定位建议' })}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                            {weakWords.slice(0, 6).map((w, idx) => {
-                                const issues = (w.phonemes ?? []).filter((p) => p.status !== 'ok');
+                            {weakWords.slice(0, 4).map((w, idx) => {
+                                const issues = (w.phonemes ?? []).filter((p) => p.status === 'error');
                                 return (
                                     <span
                                         key={`${w.expected}-${idx}`}
@@ -945,6 +943,9 @@ export function RhythmFeedback({
     trend?: RhythmTrendVO | null;
 }) {
     const { t } = useTranslation('practice');
+    const [wordsExpanded, setWordsExpanded] = useState(false);
+    const hasLongWordList = feedback.words.length > 10;
+    const showWords = !hasLongWordList || wordsExpanded;
     const paceLabel = feedback.pace === 'fast'
         ? t('rhythm.paceFast', { defaultValue: '偏快' })
         : feedback.pace === 'slow'
@@ -991,53 +992,64 @@ export function RhythmFeedback({
                     </span>
                 )}
                 {feedback.paceRatio !== null && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-metadata tabular-nums">
+                    <span
+                        className="rounded-full bg-muted px-2 py-0.5 font-mono text-metadata tabular-nums"
+                        title={t('rhythm.paceRatioHint', {
+                            defaultValue: '词均时长相对原声倍率（1.00× 为原速，>1.20× 偏慢，<0.85× 偏快）',
+                        })}
+                    >
                         {feedback.paceRatio.toFixed(2)}×
                     </span>
                 )}
-                {feedback.syllables && feedback.syllables.verdict !== 'unknown' && (
-                    <span
-                        className="rounded-full bg-muted px-2 py-0.5 font-mono text-metadata tabular-nums"
-                        title={t('rhythm.syllablesHint', {
-                            defaultValue: '参考 {{reference}} 个音节，按语速估算你说了约 {{estimated}} 个',
-                            reference: feedback.syllables.reference,
-                            estimated: feedback.syllables.estimated,
-                        })}
-                    >
-                        {feedback.syllables.estimated}/{feedback.syllables.reference}
-                    </span>
-                )}
             </div>
-            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-sm leading-relaxed">
-                {feedback.words.map((word, index) => (
-                    <span
-                        key={`${word.word}-${index}`}
-                        title={word.durationSec === null
-                            ? t('rhythm.missingWord', { defaultValue: '这句没有说完整' })
-                            : word.phonetic
-                                ? `${word.phonetic}${word.stressAligned === false ? ` · ${t('rhythm.stressShiftedWord', { defaultValue: '重音位置与词典不同' })}` : ''}`
-                                : undefined}
-                        className={cn(
-                            'transition-colors',
-                            word.stressAligned === false
-                                ? 'font-semibold text-warning-text underline decoration-warning/50 decoration-2 underline-offset-4'
-                                : word.stressed
-                                ? 'font-semibold text-accent underline decoration-accent/50 decoration-2 underline-offset-4'
-                                : word.durationSec === null
-                                    ? 'text-secondary/50 line-through'
-                                    : 'text-primary/80',
-                        )}
-                    >
-                        {word.word}
-                    </span>
-                ))}
-            </div>
+            {showWords && (
+                <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-metadata leading-relaxed">
+                    {feedback.words.map((word, index) => (
+                        <span
+                            key={`${word.word}-${index}`}
+                            title={word.durationSec === null
+                                ? t('rhythm.missingWord', { defaultValue: '这句没有说完整' })
+                                : word.phonetic
+                                    ? `${word.phonetic}${word.stressAligned === false ? ` · ${t('rhythm.stressShiftedWord', { defaultValue: '重音位置与词典不同' })}` : ''}`
+                                    : undefined}
+                            className={cn(
+                                'transition-colors',
+                                word.stressAligned === false
+                                    ? 'font-semibold text-warning-text underline decoration-warning/50 decoration-2 underline-offset-4'
+                                    : word.stressed
+                                    ? 'font-semibold text-accent underline decoration-accent/50 decoration-2 underline-offset-4'
+                                    : word.durationSec === null
+                                        ? 'text-secondary/50 line-through'
+                                        : 'text-secondary',
+                            )}
+                        >
+                            {word.word}
+                        </span>
+                    ))}
+                </div>
+            )}
             {feedback.notes.length > 0 && (
                 <ul className="flex flex-col gap-0.5 text-sm leading-relaxed text-secondary">
                     {feedback.notes.map((note) => (
                         <li key={note}>{noteText(note)}</li>
                     ))}
                 </ul>
+            )}
+            {hasLongWordList && (
+                <div>
+                    <button
+                        type="button"
+                        onClick={() => setWordsExpanded((prev) => !prev)}
+                        className="text-metadata text-secondary hover:text-primary transition-colors cursor-pointer"
+                    >
+                        {wordsExpanded
+                            ? t('rhythm.wordStressHide', { defaultValue: '收起逐词重读' })
+                            : t('rhythm.wordStressShow', {
+                                defaultValue: '查看逐词重读 ({{count}} 词)',
+                                count: feedback.words.length,
+                            })}
+                    </button>
+                </div>
             )}
             {trend && trend.verdict !== 'insufficient' && trend.points.length > 0 && (
                 <div

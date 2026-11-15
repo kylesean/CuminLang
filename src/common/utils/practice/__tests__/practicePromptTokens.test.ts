@@ -51,4 +51,11 @@ describe('practicePromptTokens 练习词槽解析与校验', () => {
         );
         expect(sentence).toBe("It's todai");
     });
+
+    it('兼容常见英美拼写变体（colour ↔ color, realise ↔ realize）', () => {
+        const slots = extractPracticeWordSlots('His favourite colour is grey.');
+        expect(isSlotWordMatch('color', slots[2])).toBe(true);
+        expect(isSlotWordMatch('gray', slots[4])).toBe(true);
+        expect(isSlotWordMatch('favour', slots[2])).toBe(false);
+    });
 });

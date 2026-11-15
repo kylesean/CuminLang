@@ -172,15 +172,19 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
                 for (const wordResult of alignment.words) {
                     if (wordResult.status === 'extra') continue;
                     const gop = byWordIdx.get(expIdx);
-                    if (gop?.startSec !== undefined && gop?.endSec !== undefined) {
-                        ctcWordTimings.set(expIdx, { start: gop.startSec, end: gop.endSec });
-                    }
                     expIdx += 1;
-                    if (gop) {
+                    // 只对 ASR 判定确实读出目标词（match）的结果采纳 CTC-GOP 与词时间窗：
+                    // 错读成别的词（sub）或漏读（missing）时强制对齐目标音素必然串位产生假错音与夸张耗时。
+                    if (gop && wordResult.status === 'match') {
                         wordResult.phonemeScore = gop.phonemeScore;
                         wordResult.phonemes = gop.phonemes;
-                        if (wordResult.status !== 'missing') {
-                            wordScores.push(gop.phonemeScore);
+                        wordScores.push(gop.phonemeScore);
+                        if (
+                            gop.startSec !== undefined
+                            && gop.endSec !== undefined
+                            && gop.endSec - gop.startSec <= 2.0
+                        ) {
+                            ctcWordTimings.set(expIdx - 1, { start: gop.startSec, end: gop.endSec });
                         }
                     }
                 }

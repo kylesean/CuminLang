@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Slider } from '@astryxdesign/core/Slider';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
+import { cn } from '@/frontend/lib/utils';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { MEDIA_SLIDER_STYLE } from '@/frontend/features/player/components/mediaSurface';
 import TimeUtil from '@/common/utils/TimeUtil';
@@ -79,7 +80,7 @@ export const PlaybackProgressSlider = memo(function PlaybackProgressSlider({
     onScrubValueChange,
     onScrubCommit,
     disableWhenEmpty = true,
-    className = 'w-full',
+    className = '',
     tone = 'theme',
     step = 0.1,
 }: PlaybackProgressSliderProps) {
@@ -102,7 +103,7 @@ export const PlaybackProgressSlider = memo(function PlaybackProgressSlider({
         : rawValue;
 
     return (
-        <div className={className} style={tone === 'media' ? MEDIA_SLIDER_STYLE : undefined}>
+        <div className={cn('w-full min-w-0', className)} style={tone === 'media' ? MEDIA_SLIDER_STYLE : undefined}>
             <Slider
                 label={t('controlBar.progressLabel')}
                 isLabelHidden

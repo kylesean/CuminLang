@@ -403,5 +403,14 @@
         "filteringHint": "Showing {{shown}} of {{total}} sentences",
         "clearFilter": "Show all",
         "emptyTitle": "No sentences match this filter"
+    },
+    "podcast": {
+        "loadingSubtitles": "Preparing subtitles…",
+        "blindListening": "Blind",
+        "blindListeningHint": "Hide subtitles while listening; hover, click, or hold \\ to peek",
+        "blindPrompt": "Listening without text",
+        "blindHint": "Hover, click, or hold \\ to peek",
+        "blindHide": "Hide text",
+        "sentenceCounter": "Sentence {{current}} of {{total}}"
     }
 }

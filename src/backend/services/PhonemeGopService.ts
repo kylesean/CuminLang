@@ -16,6 +16,7 @@ import {
     ipaToPhonemeTokens,
     logSoftmaxFrames,
     scoreWordsWithCtcGop,
+    trimSilentPcmEdges,
     type WordPhonemeGopOutput,
     type WordPhonemeTarget,
 } from '@/common/utils/practice/phonemeGop';
@@ -83,8 +84,12 @@ export class PhonemeGopServiceImpl implements PhonemeGopService {
                 return null;
             }
 
-            // Wav2Vec2 标准输入归一化：零均值、单位方差 Float32
-            const floatSamples = this.normalizePcmForWav2Vec2(params.pcm.samples);
+            // 先裁剪首尾长静音再做 Wav2Vec2 归一化，防止思考停顿拖偏特征均值与 CTC 对齐
+            const { pcm: activePcm, offsetSec } = trimSilentPcmEdges(params.pcm);
+            if (activePcm.samples.length < 1600) {
+                return null;
+            }
+            const floatSamples = this.normalizePcmForWav2Vec2(activePcm.samples);
             const ortModule = await import('onnxruntime-node');
             const inputName = session.inputNames[0] ?? 'input_values';
             const inputTensor = new ortModule.Tensor('float32', floatSamples, [1, floatSamples.length]);
@@ -98,7 +103,15 @@ export class PhonemeGopServiceImpl implements PhonemeGopService {
             const vocabSize = Number(logitsTensor.dims[2]);
             const rawLogits = logitsTensor.data as Float32Array;
             const logProbs = logSoftmaxFrames(rawLogits, numFrames, vocabSize);
-            return scoreWordsWithCtcGop(logProbs, numFrames, vocabSize, vocab, targets);
+            const gopOutputs = scoreWordsWithCtcGop(logProbs, numFrames, vocabSize, vocab, targets);
+            if (offsetSec === 0) {
+                return gopOutputs;
+            }
+            return gopOutputs.map((out) => ({
+                ...out,
+                ...(out.startSec !== undefined ? { startSec: Number((out.startSec + offsetSec).toFixed(3)) } : {}),
+                ...(out.endSec !== undefined ? { endSec: Number((out.endSec + offsetSec).toFixed(3)) } : {}),
+            }));
         } catch (error) {
             this.logger.warn('离线音素 GOP 推理失败，自动回退到 ASR 评分', {
                 error: error instanceof Error ? error.message : String(error),

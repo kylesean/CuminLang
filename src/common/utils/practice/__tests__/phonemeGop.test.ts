@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ipaToPhonemeTokens, logSoftmaxFrames, scoreWordsWithCtcGop } from '@/common/utils/practice/phonemeGop';
+import {
+    ipaToPhonemeTokens,
+    logSoftmaxFrames,
+    scoreWordsWithCtcGop,
+    trimSilentPcmEdges,
+} from '@/common/utils/practice/phonemeGop';
 
 const VOCAB: Record<string, number> = {
     '<pad>': 0,
@@ -45,5 +50,35 @@ describe('phonemeGop', () => {
         expect(wordOut.phonemes[1].status).toBe('ok');
         expect(wordOut.phonemes[2].status).toBe('ok');
         expect(wordOut.phonemes[3].status).toBe('ok');
+    });
+
+    it.each([
+        ["hwen", ['w', 'ɛ', 'n']],
+        ["gou", ['ɡ', 'oʊ']],
+        ["sei", ['s', 'eɪ']],
+        ["ә'nælәdʒi", ['ə', 'n', 'æ', 'l', 'ə', 'dʒ', 'i']],
+        ["ʌn'fɔ:tjjnәtli", ['ʌ', 'n', 'f', 'ɔː', 'tʃ', 'n', 'ə', 't', 'l', 'i']],
+        ["ju:", ['ju']],
+    ])('规范化 ECDict 音标 %s 为合法 espeak 音素序列', (rawIpa, expected) => {
+        const espeakVocab: Record<string, number> = {
+            '<pad>': 0,
+            'w': 1, 'ɛ': 2, 'n': 3, 'ɡ': 4, 'oʊ': 5, 's': 6, 'eɪ': 7,
+            'ə': 8, 'æ': 9, 'l': 10, 'dʒ': 11, 'i': 12, 'ʌ': 13, 'f': 14,
+            'ɔː': 15, 'tʃ': 16, 't': 17, 'ju': 18, 'ː': 19, 'e': 20, 'o': 21, 'u': 22,
+        };
+        expect(ipaToPhonemeTokens(rawIpa, espeakVocab)).toEqual(expected);
+    });
+
+    it('trimSilentPcmEdges 裁剪首尾静音并准确记录时间偏移', () => {
+        const sampleRate = 16000;
+        const samples = new Int16Array(sampleRate * 3);
+        // 第 1s~2s 为有效发音，首尾各有 1s 静音
+        for (let i = sampleRate; i < sampleRate * 2; i += 1) {
+            samples[i] = i % 2 === 0 ? 6000 : -6000;
+        }
+        const trimmed = trimSilentPcmEdges({ samples, sampleRate });
+        expect(trimmed.offsetSec).toBeGreaterThan(0.8);
+        expect(trimmed.offsetSec).toBeLessThan(1.0);
+        expect(trimmed.pcm.samples.length).toBeLessThan(sampleRate * 1.5);
     });
 });

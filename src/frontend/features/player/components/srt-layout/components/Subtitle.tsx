@@ -4,18 +4,12 @@ import { useSWRConfig } from 'swr';
 import { useShallow } from 'zustand/react/shallow';
 import { twJoin } from 'tailwind-merge';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
-import { Badge } from '@astryxdesign/core/Badge';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
-import {
-    DropdownMenu,
-    DropdownMenuGroup,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
-} from '@astryxdesign/core/DropdownMenu';
-import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
-import { ArrowUpToLine, ChevronDown, ChevronUp, Filter, Languages, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Play, Repeat, Search, X } from 'lucide-react';
+import { ArrowUpToLine, Play } from 'lucide-react';
 import SideSentence from '../SideSentence';
 import ArticleBlock from './ArticleBlock';
+import { TranscriptToolbar } from './TranscriptToolbar';
+import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { groupSentencesIntoBlocks, type SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
 import { selectSceneDividers, type SceneBoundary } from '@/common/learning/sceneSegmentation';
 import { useSceneBoundaries } from '@/frontend/features/player/hooks/useSceneBoundaries';
@@ -28,7 +22,6 @@ import { useSideTranslationHold } from '@/frontend/features/player/hooks/useSide
 import {
     PLAYER_SIDEBAR_SCROLLER_TESTID,
     SENTENCE_CARD_TESTID,
-    SIDE_TRANSLATION_TOGGLE_TESTID,
 } from '@/common/constants/player-scroll-protocol';
 import useBoundary from '@/frontend/features/player/hooks/useBoundary';
 import useChatPanel from '@/frontend/features/chat/chatStore';
@@ -58,6 +51,8 @@ export default function Subtitle() {
     const showSideBar = useLayout((state) => state.showSideBar);
     const showTranscript = useLayout((state) => state.showTranscript);
     const setTranscriptVisible = useLayout((state) => state.setTranscriptVisible);
+    const podcastMode = useLayout((state) => state.podcastMode);
+    const setPodcastTranscriptVisible = useLayout((state) => state.setPodcastTranscriptVisible);
     const transcriptViewMode = useLayout((state) => state.transcriptViewMode);
     const setTranscriptViewMode = useLayout((state) => state.setTranscriptViewMode);
     const { mutate: mutateSwr } = useSWRConfig();
@@ -802,267 +797,45 @@ export default function Subtitle() {
 
     return (
         <div className="w-full h-full flex flex-col relative select-none" ref={setBoundaryRef}>
-            {/* 字幕文稿流状态栏 */}
-            <div className="shrink-0 px-3.5 py-2 flex items-center justify-between border-b border-border/40 bg-surface/50 backdrop-blur-md z-10 text-sm">
-                <div className="flex items-center gap-2 min-w-0 shrink-0">
-                    <div className="shrink-0">
-                        <SegmentedControl
-                            value={transcriptViewMode}
-                            onChange={(val) => setTranscriptViewMode(val as 'sentence' | 'article')}
-                            size="sm"
-                            label={t('transcriptViewModeLabel', { defaultValue: '文稿视图模式' })}
-                        >
-                            <SegmentedControlItem
-                                value="sentence"
-                                label={t('transcriptViewSentence', { defaultValue: '逐句' })}
-                            />
-                            <SegmentedControlItem
-                                value="article"
-                                label={t('transcriptViewArticle', { defaultValue: '讲稿' })}
-                            />
-                        </SegmentedControl>
-                    </div>
-                    {virtualGroup.active && virtualGroup.sentences.length > 1 && (
-                        <div className="flex items-center gap-1 shrink-0">
-                            <Badge
-                                variant="teal"
-                                icon={<Repeat className="w-2.5 h-2.5" />}
-                                label={t('nSentencesLoop', { count: virtualGroup.sentences.length, defaultValue: `${virtualGroup.sentences.length} 句循环` })}
-                            />
-                            <Tooltip content={t('cancelLoop')} placement="below">
-                                <button
-                                    type="button"
-                                    onClick={() => usePlayer.getState().clearVirtualGroup()}
-                                    className="p-0.5 rounded-full text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
-                                    aria-label={t('cancelLoop')}
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
-                            </Tooltip>
-                        </div>
-                    )}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                    {/* 搜索开关 */}
-                    <Tooltip content={t('searchTranscript', { defaultValue: '搜索文稿 (Cmd/Ctrl+F)' })} placement="below">
-                        <button
-                            type="button"
-                            onClick={toggleSearch}
-                            className={cn(
-                                'p-1 rounded-md transition-colors cursor-pointer',
-                                isSearchOpen
-                                    ? 'text-accent bg-accent-muted/20'
-                                    : 'text-secondary hover:text-primary hover:bg-muted/80',
-                            )}
-                            aria-label={t('searchTranscript', { defaultValue: '搜索文稿 (Cmd/Ctrl+F)' })}
-                        >
-                            <Search className="w-3.5 h-3.5" />
-                        </button>
-                    </Tooltip>
+            <TranscriptToolbar
+                transcriptViewMode={transcriptViewMode}
+                onChangeViewMode={setTranscriptViewMode}
+                loopSentenceCount={virtualGroup.active ? virtualGroup.sentences.length : 0}
+                onCancelLoop={() => usePlayer.getState().clearVirtualGroup()}
+                isSearchOpen={isSearchOpen}
+                onToggleSearch={toggleSearch}
+                vocabularyFilter={vocabularyFilter}
+                onChangeVocabularyFilter={setVocabularyFilter}
+                filterCounts={filterCounts}
+                showSideTranslation={showSideTranslation}
+                onToggleSideTranslation={changeShowSideTranslation}
+                transcriptPosition={transcriptPosition}
+                onToggleTranscriptPosition={() => {
+                    const next = transcriptPosition === 'right' ? 'left' : 'right';
+                    void useSetting.getState().setSetting('appearance.transcriptPosition', next).then(() => {
+                        void mutateSwr('settings/appearance/detail');
+                    });
+                }}
+                onCloseTranscript={() => {
+                    if (podcastMode) {
+                        setPodcastTranscriptVisible(false);
+                    } else {
+                        setTranscriptVisible(false);
+                    }
+                }}
+            />
 
-                    {/*
-                      词汇筛选：只在文稿提供。主字幕是观看层，多一个筛选器就多一层噪音；
-                      文稿是阅读层，用户需要「只看我还在学的词出现在哪些句子」。
-                    */}
-                    {/*
-                      互斥筛选用 compound 模式的 DropdownMenuRadioGroup：它给的是
-                      role="menuitemradio"，读屏会播报「三选一」，方向键也能在选项间移动。
-                      用 action item 加一个勾选图标只能表达「看起来选中了」，语义是假的。
-                    */}
-                    <DropdownMenu
-                        button={{
-                            label: t('transcriptVocabulary.filterLabel', { defaultValue: '筛选' }),
-                            icon: (
-                                <span className="relative inline-flex items-center justify-center">
-                                    <Filter className="w-3.5 h-3.5" />
-                                    {vocabularyFilter !== 'all' && (
-                                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-accent-bg ring-1 ring-body" />
-                                    )}
-                                </span>
-                            ),
-                            size: 'sm',
-                            variant: 'ghost',
-                            isIconOnly: true,
-                            tooltip: t('transcriptVocabulary.filterTooltip', { defaultValue: '按词汇状态筛选文稿' }),
-                        }}
-                        hasChevron={false}
-                        placement="below"
-                        alignment="end"
-                    >
-                        <DropdownMenuGroup title={t('transcriptVocabulary.filterTitle', { defaultValue: '只看' })}>
-                            <DropdownMenuRadioGroup
-                                value={vocabularyFilter}
-                                onChange={(next) => setVocabularyFilter(next as TranscriptVocabularyFilter)}
-                                label={t('transcriptVocabulary.filterTitle', { defaultValue: '只看' })}
-                            >
-                                <DropdownMenuRadioItem
-                                    value="all"
-                                    label={t('transcriptVocabulary.filterAll', { defaultValue: '全部句子' })}
-                                    endContent={filterCounts.all}
-                                />
-                                <DropdownMenuRadioItem
-                                    value="learning"
-                                    label={t('transcriptVocabulary.filterLearning', { defaultValue: '含待学词' })}
-                                    endContent={filterCounts.learning}
-                                />
-                                <DropdownMenuRadioItem
-                                    value="familiar"
-                                    label={t('transcriptVocabulary.filterFamiliar', { defaultValue: '含有印象的词' })}
-                                    endContent={filterCounts.familiar}
-                                />
-                            </DropdownMenuRadioGroup>
-                        </DropdownMenuGroup>
-                    </DropdownMenu>
-
-                    {/* 侧栏译文开关 */}
-                    <Tooltip content={t('controlBox.sideTranslationHint')} placement="below">
-                        <button
-                            type="button"
-                            data-testid={SIDE_TRANSLATION_TOGGLE_TESTID}
-                            aria-pressed={showSideTranslation}
-                            aria-label={t('controlBox.showSideTranslation')}
-                            onClick={() => changeShowSideTranslation()}
-                            className={cn(
-                                'p-1 rounded-md transition-colors cursor-pointer',
-                                showSideTranslation
-                                    ? 'text-accent hover:bg-accent-muted/20'
-                                    : 'text-secondary hover:text-primary hover:bg-muted/80',
-                            )}
-                        >
-                            <Languages className="w-3.5 h-3.5" />
-                        </button>
-                    </Tooltip>
-
-                    {/* 语义分割线：区隔内容操作与窗口容器操作 */}
-                    <div className="h-3.5 w-px bg-border/40 mx-0.5 shrink-0" aria-hidden="true" />
-
-                    {/* 切换文稿停靠方位（左 / 右） */}
-                    <Tooltip
-                        content={transcriptPosition === 'right' ? t('dockToLeft') : t('dockToRight')}
-                        placement="below"
-                    >
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const next = transcriptPosition === 'right' ? 'left' : 'right';
-                                void useSetting.getState().setSetting('appearance.transcriptPosition', next).then(() => {
-                                    void mutateSwr('settings/appearance/detail');
-                                });
-                            }}
-                            className="p-1 rounded-md text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
-                            aria-label={transcriptPosition === 'right' ? t('dockToLeft') : t('dockToRight')}
-                        >
-                            {transcriptPosition === 'right' ? (
-                                <PanelLeft className="w-3.5 h-3.5" />
-                            ) : (
-                                <PanelRight className="w-3.5 h-3.5" />
-                            )}
-                        </button>
-                    </Tooltip>
-
-                    {/* 收起字幕文稿 */}
-                    <Tooltip content={t('controlButton.closeTranscript', { defaultValue: '收起字幕文稿' })} placement="below">
-                        <button
-                            type="button"
-                            onClick={() => setTranscriptVisible(false)}
-                            className="p-1 rounded-md text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
-                            aria-label={t('controlButton.closeTranscript', { defaultValue: '收起字幕文稿' })}
-                        >
-                            {transcriptPosition === 'right' ? (
-                                <PanelRightClose className="w-3.5 h-3.5" />
-                            ) : (
-                                <PanelLeftClose className="w-3.5 h-3.5" />
-                            )}
-                        </button>
-                    </Tooltip>
-                </div>
-            </div>
-
-            {/* 即时搜索栏 */}
             {isSearchOpen && (
-                <div className="shrink-0 px-3 py-1.5 border-b border-border/40 bg-surface/80 backdrop-blur-md flex items-center gap-2 text-sm z-20">
-                    <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
-                    <input
-                        ref={searchInputRef}
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                if (e.shiftKey) {
-                                    handlePrevMatch();
-                                } else {
-                                    handleNextMatch();
-                                }
-                            } else if (e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                handlePrevMatch();
-                            } else if (e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                handleNextMatch();
-                            } else if (e.key === 'Escape') {
-                                e.preventDefault();
-                                handleCloseSearch();
-                            }
-                        }}
-                        placeholder={t('searchPlaceholder', { defaultValue: '在文稿中搜索中英文...' })}
-                        className="flex-1 bg-transparent border-none outline-none text-primary placeholder:text-secondary/60 text-sm min-w-0"
-                    />
-                    {searchQuery.trim() && (
-                        <span className="text-metadata font-mono text-secondary shrink-0 select-none">
-                            {matchedSentenceIndices.length > 0 && safeMatchIndex >= 0 ? (
-                                `${safeMatchIndex + 1}/${matchedSentenceIndices.length}`
-                            ) : (
-                                <span className="text-secondary/60">{t('noSearchResults', { defaultValue: '无匹配' })}</span>
-                            )}
-                        </span>
-                    )}
-                    <div className="flex items-center gap-0.5 shrink-0">
-                        <Tooltip content={t('prevMatch', { defaultValue: '上一个匹配 (Shift+Enter)' })} placement="below">
-                            {/* 用 aria-disabled 而不是原生 disabled：原生 disabled 会吞掉 hover 与焦点，
-                                提示恰好在这一刻不可达。点击里自行拦截，行为保持一致。 */}
-                            <button
-                                type="button"
-                                aria-disabled={matchedSentenceIndices.length === 0}
-                                onClick={() => {
-                                    if (matchedSentenceIndices.length === 0) return;
-                                    handlePrevMatch();
-                                }}
-                                className="p-1 rounded text-secondary hover:text-primary hover:bg-muted/80 aria-disabled:opacity-30 aria-disabled:cursor-not-allowed transition-colors cursor-pointer"
-                                aria-label={t('prevMatch', { defaultValue: '上一个匹配 (Shift+Enter)' })}
-                            >
-                                <ChevronUp className="w-3.5 h-3.5" />
-                            </button>
-                        </Tooltip>
-                        <Tooltip content={t('nextMatch', { defaultValue: '下一个匹配 (Enter)' })} placement="below">
-                            {/* 用 aria-disabled 而不是原生 disabled：原生 disabled 会吞掉 hover 与焦点，
-                                提示恰好在这一刻不可达。点击里自行拦截，行为保持一致。 */}
-                            <button
-                                type="button"
-                                aria-disabled={matchedSentenceIndices.length === 0}
-                                onClick={() => {
-                                    if (matchedSentenceIndices.length === 0) return;
-                                    handleNextMatch();
-                                }}
-                                className="p-1 rounded text-secondary hover:text-primary hover:bg-muted/80 aria-disabled:opacity-30 aria-disabled:cursor-not-allowed transition-colors cursor-pointer"
-                                aria-label={t('nextMatch', { defaultValue: '下一个匹配 (Enter)' })}
-                            >
-                                <ChevronDown className="w-3.5 h-3.5" />
-                            </button>
-                        </Tooltip>
-                        <Tooltip content={t('closeSearch', { defaultValue: '关闭搜索 (Esc)' })} placement="below">
-                            <button
-                                type="button"
-                                onClick={handleCloseSearch}
-                                className="p-1 rounded text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
-                                aria-label={t('closeSearch', { defaultValue: '关闭搜索 (Esc)' })}
-                            >
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        </Tooltip>
-                    </div>
-                </div>
+                <TranscriptSearchBar
+                    inputRef={searchInputRef}
+                    query={searchQuery}
+                    matchCount={matchedSentenceIndices.length}
+                    activeMatchIndex={safeMatchIndex}
+                    onQueryChange={handleSearchChange}
+                    onPrevMatch={handlePrevMatch}
+                    onNextMatch={handleNextMatch}
+                    onClose={handleCloseSearch}
+                />
             )}
 
             {/*

@@ -18,6 +18,8 @@ export interface SpeedSliderProps {
     speed: number;
     onSpeedChange: (speed: number) => void;
     onSelectFinish?: () => void;
+    /** 弹层开关状态变化回调，供宿主悬浮控制条保持常显避免指针移入弹层时条面淡出。 */
+    onMenuOpenChange?: (open: boolean) => void;
     /**
      * 触发按钮在宿主控制条上的外观。
      * 默认跟随应用主题的 hover 是给亮色宿主（播客控制条）用的；恒为深色的视频控制条要传
@@ -32,7 +34,7 @@ export interface SpeedSliderProps {
 
 const SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
-const SpeedSlider = ({ speed, onSpeedChange, onSelectFinish, triggerClassName, popoverOffset }: SpeedSliderProps) => {
+const SpeedSlider = ({ speed, onSpeedChange, onSelectFinish, onMenuOpenChange, triggerClassName, popoverOffset }: SpeedSliderProps) => {
     const { t } = useI18nTranslation('player');
     const logger = getRendererLogger('SpeedSlider');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -42,6 +44,10 @@ const SpeedSlider = ({ speed, onSpeedChange, onSelectFinish, triggerClassName, p
         isModal: false,
         dialogLabel: t('speedSlider.title', { defaultValue: '播放速度' }),
     });
+
+    useEffect(() => {
+        onMenuOpenChange?.(popover.isOpen);
+    }, [popover.isOpen, onMenuOpenChange]);
 
     useEffect(() => {
         if (popover.isOpen) {

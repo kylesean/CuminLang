@@ -29,35 +29,47 @@ export const MEDIA_BAR_GROUP = 'flex shrink-0 items-center gap-1 xl:gap-2';
 export const MEDIA_BAR_DIVIDER = 'mx-0.5 h-5 w-px shrink-0 bg-media-fg/15';
 
 /**
- * 图标按钮在深色控制条上的统一样式。
+ * 图标按钮在不同宿主控制条上的样式。
  */
-const ICON_BUTTON_CLASS = cn(
-    'w-7 h-7 flex items-center justify-center rounded-lg text-media-fg/80 transition-colors shrink-0',
-    DARK_BAR_BUTTON_HOVER
-);
+const NAV_ICON_TONE = {
+    media: cn(
+        'w-7 h-7 flex items-center justify-center rounded-lg text-media-fg/80 transition-colors shrink-0 cursor-pointer',
+        DARK_BAR_BUTTON_HOVER
+    ),
+    theme: 'w-7 h-7 flex items-center justify-center rounded-lg text-secondary hover:bg-muted hover:text-primary transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+} as const;
+
+const PLAY_BUTTON_TONE = {
+    media: 'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-media-fg/10 hover:bg-media-fg/20 text-media-fg/95 active:scale-95 transition-all cursor-pointer',
+    theme: 'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 hover:bg-primary/15 text-primary active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+} as const;
 
 /**
  * 播放导航控件：上一句 / 播放暂停 / 下一句。
  *
- * 普通视图与全屏视图的控制条共用；播放状态与指令直接读播放器 store，
- * 不自带文案，因此两条控制条的落点与宽度都一致。
- * 这里只做“播放”，训练/字幕/设置等学习动作在字幕学习台里。
+ * 普通视图、全屏视图与播客控制条共用；播放状态与指令直接读播放器 store，
+ * 不自带文案，因此各控制条的落点与宽度一致。
  *
+ * @param tone `media` 用于视频深色银幕控制条；`theme` 用于跟随应用主题的播客控制条。
  * @returns 播放导航控件。
  */
-export function PlaybackNavControls() {
+export function PlaybackNavControls({ tone = 'media' }: { tone?: 'media' | 'theme' } = {}) {
     const { t } = useI18nTranslation('player');
     const playing = usePlayer((s) => s.playing);
     const prevShortcut = useSetting((s) => s.setting('shortcut.previousSentence'));
     const nextShortcut = useSetting((s) => s.setting('shortcut.nextSentence'));
     const playPauseShortcut = useSetting((s) => s.setting('shortcut.playPause'));
+    const iconButtonClass = NAV_ICON_TONE[tone];
+    const playButtonClass = PLAY_BUTTON_TONE[tone];
 
     return (
         <div className="flex items-center gap-1 shrink-0">
             <Tooltip content={`${t('controlBar.prevSentence')}${formatShortcut(prevShortcut)}`} placement="above">
                 <button
+                    type="button"
                     onClick={() => { void usePlayer.getState().prevSentence(); }}
-                    className={ICON_BUTTON_CLASS}
+                    aria-label={t('controlBar.prevSentence')}
+                    className={iconButtonClass}
                 >
                     <SkipBack className="w-3.5 h-3.5" />
                 </button>
@@ -65,8 +77,10 @@ export function PlaybackNavControls() {
 
             <Tooltip content={`${playing ? t('controlBar.pause') : t('controlBar.play')}${formatShortcut(playPauseShortcut)}`} placement="above">
                 <button
+                    type="button"
                     onClick={() => usePlayer.getState().togglePlay()}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-media-fg/10 hover:bg-media-fg/20 text-media-fg/95 active:scale-95 transition-all"
+                    aria-label={playing ? t('controlBar.pause') : t('controlBar.play')}
+                    className={playButtonClass}
                 >
                     {playing ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
                 </button>
@@ -74,8 +88,10 @@ export function PlaybackNavControls() {
 
             <Tooltip content={`${t('controlBar.nextSentence')}${formatShortcut(nextShortcut)}`} placement="above">
                 <button
+                    type="button"
                     onClick={() => { void usePlayer.getState().nextSentence(); }}
-                    className={ICON_BUTTON_CLASS}
+                    aria-label={t('controlBar.nextSentence')}
+                    className={iconButtonClass}
                 >
                     <SkipForward className="w-3.5 h-3.5" />
                 </button>

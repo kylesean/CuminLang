@@ -4,11 +4,12 @@ import VolumeSlider from '../VolumeSlider';
 import { cn } from '@/frontend/lib/utils';
 import SpeedSlider from '../SpeedSlider';
 import { CONTROL_POPOVER_OFFSET_STACKED_BAR } from '@/frontend/features/player/components/ControlPopover';
-import { MonitorPlay, Pause, Play } from 'lucide-react';
+import { MonitorPlay } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
-import { IconButton } from '@astryxdesign/core/IconButton';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { usePlayer } from '@/frontend/features/player/playerStore';
+import { PlaybackNavControls } from '@/frontend/features/player/components/PlaybackGlobalControls';
+import PodcastLearningBar from '@/frontend/features/player/components/learning-toolbar/PodcastLearningBar';
 import {
     PlaybackProgressSlider,
     PlaybackTimeReadout,
@@ -26,19 +27,18 @@ export interface PodcastControlBarProps {
 }
 
 /**
- * 播客沉浸视图底部的控制条。
+ * 播客沉浸视图底部的统一停靠控制条。
  * 进度条与播放时间订阅已被完全隔离在叶子组件中，避免 22Hz 刷新导致整条按钮频繁重渲染。
  */
 export default function PodcastControlBar({
     className = '',
     onTimeChange,
 }: PodcastControlBarProps) {
-    const { volume, playbackRate, muted, playing } = usePlayer(
+    const { volume, playbackRate, muted } = usePlayer(
         useShallow((s) => ({
             volume: s.volume,
             playbackRate: s.playbackRate,
             muted: s.muted,
-            playing: s.playing,
         })),
     );
 
@@ -54,9 +54,15 @@ export default function PodcastControlBar({
     }, [onTimeChange]);
 
     return (
-        <div className={cn('w-full pointer-events-auto transition-colors duration-300 pb-5 pt-2 px-8', className)}>
-            <div className="w-full flex flex-col gap-3">
-                {/* 细致平滑的进度条 */}
+        <div
+            data-testid="podcast-control-bar"
+            className={cn(
+                'w-full pointer-events-auto border-t border-border/40 bg-body/90 backdrop-blur-md transition-colors duration-300 pb-3.5 pt-2 px-6',
+                className
+            )}
+        >
+            <div className="w-full flex flex-col gap-2">
+                {/* 铺满宽度的进度条 */}
                 <div className="w-full flex items-center">
                     <PlaybackProgressSlider
                         previewTime={previewTime}
@@ -71,22 +77,10 @@ export default function PodcastControlBar({
                     />
                 </div>
 
-                {/* 底部控制项与时间展示 */}
-                <div className="w-full flex justify-between items-center text-secondary">
-                    <div className="flex gap-3.5 items-center">
-                        <IconButton
-                            label={playing ? t('controlBar.pause') : t('controlBar.play')}
-                            variant="ghost"
-                            size="sm"
-                            icon={playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                            onClick={() => {
-                                if (playing) {
-                                    usePlayer.getState().pause();
-                                } else {
-                                    usePlayer.getState().play();
-                                }
-                            }}
-                        />
+                {/* 底部控制项与时间展示：播客播放导航 + 内嵌学习控件 + 倍速/音量/退出 */}
+                <div className="w-full flex flex-wrap justify-between items-center gap-x-4 gap-y-2 text-secondary">
+                    <div className="flex gap-3 items-center shrink-0">
+                        <PlaybackNavControls tone="theme" />
                         <PlaybackTimeReadout
                             previewTime={previewTime}
                             className="flex items-center font-mono text-sm tabular-nums text-secondary"
@@ -97,7 +91,9 @@ export default function PodcastControlBar({
                         />
                     </div>
 
-                    <div className="flex justify-center items-center gap-4 text-secondary">
+                    <PodcastLearningBar className="shrink-0" />
+
+                    <div className="flex items-center gap-2.5 text-secondary shrink-0">
                         <SpeedSlider
                             speed={playbackRate}
                             popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
@@ -109,7 +105,7 @@ export default function PodcastControlBar({
                             volume={volume}
                             onVolumeChange={(nextVolume) => usePlayer.getState().setVolume(nextVolume)}
                         />
-                        <span aria-hidden="true" className="h-4 w-px bg-border" />
+                        <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border/70" />
                         {/* 播客模式会盖住视频条与学习台，这里必须留一个常显的出口，
                             否则用户只能在自动切换的 5 秒 toast 里点“恢复” */}
                         <button
@@ -117,10 +113,10 @@ export default function PodcastControlBar({
                             onClick={() => setPodcastModeForCurrentVideo(false)}
                             title={t('controlBar.exitPodcastHint')}
                             aria-label={t('controlBar.exitPodcast')}
-                            className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-secondary transition-colors hover:bg-muted hover:text-primary"
+                            className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-secondary transition-colors hover:bg-muted hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                         >
                             <MonitorPlay className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">{t('controlBar.exitPodcast')}</span>
+                            <span className="hidden sm:inline whitespace-nowrap">{t('controlBar.exitPodcast')}</span>
                         </button>
                     </div>
                 </div>

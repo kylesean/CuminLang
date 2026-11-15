@@ -11,7 +11,11 @@ import {
     CAPTION_CARD_IDLE_CLASS,
     captionCardActiveClass,
 } from '@/frontend/features/player/components/captionCardShell';
-import { TOOLBAR_ICON_BUTTON } from '@/frontend/features/player/components/learning-toolbar/toolbarStyles';
+import {
+    TOOLBAR_ICON_BUTTON,
+    TOOLBAR_TONE,
+    type ToolbarTone,
+} from '@/frontend/features/player/components/learning-toolbar/toolbarStyles';
 
 /**
  * 整句学习开关按钮。
@@ -19,10 +23,17 @@ import { TOOLBAR_ICON_BUTTON } from '@/frontend/features/player/components/learn
  * 与「进入学习页」的快捷键是同一个动作：未打开时按当前字幕句进入学习页，
  * 已打开时只隐藏学习页、保留会话，后台生成不中断。
  *
- * @param variant `capsule`：学习界面右下角胶囊里的 24px 正圆；`toolbar`：字幕学习台里的 28px 方形按钮。
+ * @param variant `capsule`：学习界面右下角胶囊里的 24px 正圆；`toolbar`：字幕学习台或控制条里的 32px 方形按钮。
+ * @param tone `toolbar` 变体下的视觉底色，`overlay` 用于全屏深色条。
  * @returns 整句学习开关按钮。
  */
-export default function LearningModeButton({ variant = 'capsule' }: { variant?: 'capsule' | 'toolbar' } = {}) {
+export default function LearningModeButton({
+    variant = 'capsule',
+    tone = 'panel',
+}: {
+    variant?: 'capsule' | 'toolbar';
+    tone?: ToolbarTone;
+} = {}) {
     const { t } = useI18nTranslation('common');
     // 只订阅自身字段：视图互斥由统一写入点保证，因此 learningVisible 为真
     // 就等价于「学习页是实际可见视图」，不需要在 selector 里跨 store 推导
@@ -59,7 +70,9 @@ export default function LearningModeButton({ variant = 'capsule' }: { variant?: 
                 aria-label={label}
                 className={cn(
                     variant === 'toolbar' ? TOOLBAR_ICON_BUTTON : CAPTION_CARD_BUTTON_CLASS,
-                    active ? captionCardActiveClass('emerald') : CAPTION_CARD_IDLE_CLASS
+                    tone === 'overlay'
+                        ? (active ? TOOLBAR_TONE.overlay.accent.emerald : TOOLBAR_TONE.overlay.idle)
+                        : (active ? captionCardActiveClass('emerald') : CAPTION_CARD_IDLE_CLASS)
                 )}
             >
                 <GraduationCap className="w-4 h-4" />

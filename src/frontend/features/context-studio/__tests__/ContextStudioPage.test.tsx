@@ -272,4 +272,43 @@ describe('ContextStudioPage - Three-column workspace (Words & Sentences)', () =>
             expect(screen.getByTestId('mock-memory-map')).toBeDefined();
         });
     });
+
+    it('syncs selected sentence and filter to search params and restores selection on return', async () => {
+        function LocationProbe() {
+            const loc = useLocation();
+            return <div data-testid="location-probe">{`${loc.pathname}${loc.search}`}</div>;
+        }
+
+        const firstRender = render(
+            <MemoryRouter initialEntries={['/context-studio']}>
+                <LocationProbe />
+                <ContextStudioPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Connecting the dots looking backwards.')).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: /收藏金句/i }));
+        fireEvent.click(screen.getByText('Connecting the dots looking backwards.'));
+
+        const syncedUrl = screen.getByTestId('location-probe').textContent ?? '';
+        expect(syncedUrl).toContain('filter=sentences');
+        expect(syncedUrl).toContain('sentenceKey=hash-1%3A20');
+
+        firstRender.unmount();
+
+        render(
+            <MemoryRouter initialEntries={[syncedUrl]}>
+                <ContextStudioPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            const canvas = screen.getByLabelText('语境学习画布');
+            expect(within(canvas).getByText('回顾往昔，串联点滴。')).toBeDefined();
+            expect(within(canvas).getByText('Steve Jobs Stanford')).toBeDefined();
+        });
+    });
 });
