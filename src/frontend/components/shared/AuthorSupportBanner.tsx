@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, LifeBuoy, Mail, MessageCircle } from 'lucide-react';
+import { Copy, LifeBuoy, Mail, Music2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
@@ -9,6 +9,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 
 import { AUTHOR_SUPPORT_CONTACT } from '@/common/constants/author-support';
+import { writeTextToClipboard } from '@/frontend/lib/clipboard';
 
 interface AuthorSupportBannerProps {
     /** 紧凑模式（用于引导页内嵌）。 */
@@ -32,7 +33,7 @@ export const AuthorSupportBanner: React.FC<AuthorSupportBannerProps> = ({
 
     const copyValue = async (value: string, label: string) => {
         try {
-            await navigator.clipboard.writeText(value);
+            await writeTextToClipboard(value);
             toast.success(t('authorSupport.copied', { label, value, defaultValue: `已复制 ${label}：${value}` }));
         } catch {
             toast.error(t('authorSupport.copyFailed', { defaultValue: '复制失败' }));
@@ -64,13 +65,13 @@ export const AuthorSupportBanner: React.FC<AuthorSupportBannerProps> = ({
                 <Button
                     size="sm"
                     variant="secondary"
-                    label={t('authorSupport.wechatLabel', {
-                        wechat: AUTHOR_SUPPORT_CONTACT.wechat,
-                        defaultValue: `WeChat：${AUTHOR_SUPPORT_CONTACT.wechat}`,
+                    label={t('authorSupport.douyinLabel', {
+                        douyin: AUTHOR_SUPPORT_CONTACT.douyin,
+                        defaultValue: `DouYin：${AUTHOR_SUPPORT_CONTACT.douyin}`,
                     })}
-                    icon={<MessageCircle className="h-3.5 w-3.5" />}
+                    icon={<Music2 className="h-3.5 w-3.5" />}
                     endContent={<Copy className="h-3 w-3 opacity-70" />}
-                    onClick={() => { void copyValue(AUTHOR_SUPPORT_CONTACT.wechat, 'WeChat'); }}
+                    onClick={() => { void copyValue(AUTHOR_SUPPORT_CONTACT.douyin, 'DouYin'); }}
                 />
                 <Button
                     size="sm"

@@ -307,7 +307,18 @@
             "licenseDesc": "Free & open source under AGPLv3",
             "logs": "Diagnostic Logs",
             "logsDesc": "Open the local logs directory to attach logs when reporting issues",
-            "openLogs": "Open Logs Folder"
+            "openLogs": "Open Logs Folder",
+            "openLogsRestartRequired": "The logs directory handler isn't active in the running main process yet. Please restart Refrain and try again.",
+            "supportAuthor": "Support Author",
+            "supportAuthorDesc": "Free & open-source — click to expand optional follow or tip QR codes",
+            "supportWechatTitle": "WeChat Tip",
+            "supportWechatDesc": "Completely optional — thank you for your support",
+            "supportDouyinTitle": "Follow on DouYin",
+            "supportDouyinDesc": "@孜然语言 · ID: {{id}}",
+            "supportZoomHint": "Click QR code to enlarge",
+            "supportCopyDouyin": "Copy DouYin ID",
+            "supportCopied": "Copied DouYin ID: {{value}}",
+            "supportCopyFailed": "Copy failed"
         },
         "footer": "Refrain · Immersive English Video Learning"
     },

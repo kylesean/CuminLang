@@ -281,7 +281,7 @@
         "suitableDescription": "如果不知道如何部署，欢迎联系作者协助配置与指导，本软件开源免费使用。",
         "title": "需要本地 AI 部署协助？可联系作者",
         "description": "本软件开源免费使用；如不确定如何选择或部署本地 AI 服务，欢迎联系作者获取协助。",
-        "wechatLabel": "WeChat：{{wechat}}",
+        "douyinLabel": "DouYin：{{douyin}}",
         "emailLabel": "Email：{{email}}",
         "copied": "已复制 {{label}}：{{value}}",
         "copyFailed": "复制失败"

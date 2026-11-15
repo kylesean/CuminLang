@@ -5,24 +5,30 @@ import { codeBlock } from 'common-tags';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import {
     BookOpen,
+    Copy,
     ExternalLink,
     FolderOpen,
     Info,
     RefreshCw,
     Tag,
+    ZoomIn,
 } from 'lucide-react';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
+import { Collapsible } from '@astryxdesign/core/Collapsible';
 import { Divider } from '@astryxdesign/core/Divider';
 import { HStack } from '@astryxdesign/core/HStack';
 import { Icon, type IconType } from '@astryxdesign/core/Icon';
+import { Lightbox, type LightboxMedia } from '@astryxdesign/core/Lightbox';
 import { ScrollableArea } from '@astryxdesign/core/ScrollableArea';
 import { Text } from '@astryxdesign/core/Text';
 import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 import { Banner } from '@astryxdesign/core/Banner';
 
+import { AUTHOR_SUPPORT_CONTACT } from '@/common/constants/author-support';
 import Md from '@/frontend/components/shared/markdown/Markdown';
+import { writeTextToClipboard } from '@/frontend/lib/clipboard';
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
 import type { UpdateCheckResult } from '@/common/types/update-check';
 import useSetting from '@/frontend/features/settings/settingsStore';
@@ -30,6 +36,8 @@ import SettingsPageShell from '@/frontend/features/settings/components/form/Sett
 import { SettingField, SettingSection } from '@/frontend/features/settings/components/form';
 import wordmark from '../../../../assets/brand/refrain/wordmark.svg';
 import wordmarkReverse from '../../../../assets/brand/refrain/wordmark-reverse.svg';
+import wechatPayQr from '../../../../assets/support/wechat-pay-qr.jpg';
+import douyinQr from '../../../../assets/support/douyin-qr.jpg';
 
 /**
  * 关于与更新设置面板
@@ -83,6 +91,8 @@ const AboutSetting: React.FC = () => {
             })
             : t('about.update.failedDescription', { defaultValue: t('checkUpdate.failedDescription') });
 
+    const [supportLightboxIndex, setSupportLightboxIndex] = React.useState<number | null>(null);
+
     const openUrl = async (url: string) => {
         try {
             await settingsApi.openUrl(url);
@@ -95,9 +105,54 @@ const AboutSetting: React.FC = () => {
         try {
             await settingsApi.openLogsFolder();
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : String(error));
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('No handler registered')) {
+                toast.error(t('about.links.openLogsRestartRequired', {
+                    defaultValue: '日志目录服务尚未在主进程生效，请重启 Refrain 应用后再试',
+                }));
+                return;
+            }
+            toast.error(message);
         }
     };
+
+    const copyDouyinId = async () => {
+        try {
+            await writeTextToClipboard(AUTHOR_SUPPORT_CONTACT.douyin);
+            toast.success(t('about.links.supportCopied', {
+                value: AUTHOR_SUPPORT_CONTACT.douyin,
+                defaultValue: `已复制抖音号：${AUTHOR_SUPPORT_CONTACT.douyin}`,
+            }));
+        } catch {
+            toast.error(t('about.links.supportCopyFailed', { defaultValue: '复制失败' }));
+        }
+    };
+
+    const supportChannels = [
+        {
+            key: 'wechat',
+            title: t('about.links.supportWechatTitle', { defaultValue: '微信赞赏' }),
+            description: t('about.links.supportWechatDesc', { defaultValue: '感谢鼓励，完全自愿赞赏' }),
+            src: wechatPayQr,
+            copyable: false,
+        },
+        {
+            key: 'douyin',
+            title: t('about.links.supportDouyinTitle', { defaultValue: '关注抖音' }),
+            description: t('about.links.supportDouyinDesc', {
+                id: AUTHOR_SUPPORT_CONTACT.douyin,
+                defaultValue: `@孜然语言 · 抖音号：${AUTHOR_SUPPORT_CONTACT.douyin}`,
+            }),
+            src: douyinQr,
+            copyable: true,
+        },
+    ] as const;
+
+    const supportMedia: LightboxMedia[] = supportChannels.map((channel) => ({
+        src: channel.src,
+        alt: channel.title,
+        caption: `${channel.title} · ${channel.description}`,
+    }));
 
     // 依主题模式配置选择图标，不调用 matchMedia，遵从 Electron IPC 注入的主题类名
     const isDark = theme === 'dark' || (theme !== 'light' && typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
@@ -278,7 +333,91 @@ const AboutSetting: React.FC = () => {
                         onClick={openLogsFolder}
                     />
                 </SettingField>
+
+                <Divider variant="subtle" />
+
+                <Collapsible
+                    defaultIsOpen={false}
+                    trigger={(
+                        <VStack gap={0.5} className="min-w-0">
+                            <Text type="body" weight="medium">
+                                {t('about.links.supportAuthor', { defaultValue: '支持作者' })}
+                            </Text>
+                            <Text type="supporting" color="secondary" className="break-words">
+                                {t('about.links.supportAuthorDesc', {
+                                    defaultValue: '开源免费使用，点击展开关注或自愿赞赏方式',
+                                })}
+                            </Text>
+                        </VStack>
+                    )}
+                >
+                    <VStack gap={3} width="100%" className="pt-3">
+                        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+                            {supportChannels.map((channel, index) => (
+                                <Card key={channel.key} variant="muted" padding={3}>
+                                    <VStack gap={2} width="100%" className="h-full justify-between">
+                                        <VStack gap={0.5} width="100%">
+                                            <Text type="body" weight="semibold">
+                                                {channel.title}
+                                            </Text>
+                                            <Text type="supporting" color="secondary">
+                                                {channel.description}
+                                            </Text>
+                                        </VStack>
+
+                                        <button
+                                            type="button"
+                                            aria-label={`${channel.title} - ${t('about.links.supportZoomHint', { defaultValue: '点击二维码可放大查看' })}`}
+                                            onClick={() => setSupportLightboxIndex(index)}
+                                            className="mx-auto block w-fit cursor-pointer overflow-hidden rounded-lg border border-border transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        >
+                                            <img
+                                                src={channel.src}
+                                                alt={channel.title}
+                                                loading="lazy"
+                                                draggable={false}
+                                                className="block h-56 w-auto max-w-full object-contain"
+                                            />
+                                        </button>
+
+                                        <HStack justify="between" vAlign="center" width="100%" gap={2} className="min-h-[var(--size-element-sm)]">
+                                            <HStack gap={1} vAlign="center">
+                                                <Icon icon={ZoomIn as unknown as IconType} size="xsm" color="secondary" />
+                                                <Text type="supporting" color="secondary">
+                                                    {t('about.links.supportZoomHint', { defaultValue: '点击二维码可放大查看' })}
+                                                </Text>
+                                            </HStack>
+                                            {channel.copyable && (
+                                                <Button
+                                                    label={t('about.links.supportCopyDouyin', { defaultValue: '复制抖音号' })}
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    icon={<Icon icon={Copy as unknown as IconType} size="xsm" />}
+                                                    onClick={() => { void copyDouyinId(); }}
+                                                />
+                                            )}
+                                        </HStack>
+                                    </VStack>
+                                </Card>
+                            ))}
+                        </div>
+                    </VStack>
+                </Collapsible>
             </SettingSection>
+
+            {supportLightboxIndex !== null && (
+                <Lightbox
+                    isOpen
+                    onOpenChange={(isOpen) => {
+                        if (!isOpen) {
+                            setSupportLightboxIndex(null);
+                        }
+                    }}
+                    index={supportLightboxIndex}
+                    onIndexChange={setSupportLightboxIndex}
+                    media={supportMedia}
+                />
+            )}
 
             <HStack justify="center" paddingBlock={2}>
                 <Text type="supporting" color="secondary" justify="center">

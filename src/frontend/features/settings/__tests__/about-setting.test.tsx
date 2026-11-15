@@ -1,8 +1,10 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
+import { toast } from 'react-hot-toast';
 import '@/frontend/i18n';
+import { AUTHOR_SUPPORT_CONTACT } from '@/common/constants/author-support';
 import AboutSetting from '../AboutSetting';
 import { settingsApi } from '../settingsApi';
 
@@ -18,6 +20,14 @@ vi.mock('../settingsApi', () => ({
         checkUpdate: vi.fn(),
         openUrl: vi.fn(),
         openLogsFolder: vi.fn(),
+        copyText: vi.fn(),
+    },
+}));
+
+vi.mock('react-hot-toast', () => ({
+    toast: {
+        success: vi.fn(),
+        error: vi.fn(),
     },
 }));
 
@@ -30,6 +40,10 @@ const renderWithFreshSWR = (ui: React.ReactElement) => {
 };
 
 describe('AboutSetting', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it('renders app title and checks for updates in up-to-date state', async () => {
         vi.mocked(settingsApi.getAppVersion).mockResolvedValue('0.15.2');
         vi.mocked(settingsApi.checkUpdate).mockResolvedValue({
@@ -77,5 +91,52 @@ describe('AboutSetting', () => {
         fireEvent.click(openLogsBtn);
 
         expect(settingsApi.openLogsFolder).toHaveBeenCalledTimes(1);
+    });
+
+    it('prompts restart cleanly when logs handler is not registered in stale main process', async () => {
+        vi.mocked(settingsApi.getAppVersion).mockResolvedValue('0.1.0');
+        vi.mocked(settingsApi.checkUpdate).mockResolvedValue({
+            status: 'ok',
+            releases: [],
+        });
+        vi.mocked(settingsApi.openLogsFolder).mockRejectedValue(
+            new Error("Error invoking remote method 'system/open-folder/logs': Error: No handler registered for 'system/open-folder/logs'"),
+        );
+
+        renderWithFreshSWR(<AboutSetting />);
+
+        const openLogsBtn = await screen.findByRole('button', { name: /Open Logs Folder|打开日志目录/ });
+        fireEvent.click(openLogsBtn);
+
+        await waitFor(() => {
+            expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/restart Refrain|重启 Refrain/i));
+        });
+    });
+
+    it('keeps support author section collapsed by default and expands QR codes on click', async () => {
+        vi.mocked(settingsApi.getAppVersion).mockResolvedValue('0.1.0');
+        vi.mocked(settingsApi.checkUpdate).mockResolvedValue({
+            status: 'ok',
+            releases: [],
+        });
+        vi.mocked(settingsApi.copyText).mockResolvedValue(undefined);
+
+        renderWithFreshSWR(<AboutSetting />);
+
+        const supportToggle = await screen.findByRole('button', { name: /Support Author|支持作者/ });
+        expect(supportToggle.getAttribute('aria-expanded')).toBe('false');
+
+        fireEvent.click(supportToggle);
+
+        expect(supportToggle.getAttribute('aria-expanded')).toBe('true');
+        expect(screen.getByAltText(/WeChat Tip|微信赞赏/)).toBeDefined();
+        expect(screen.getByAltText(/Follow on DouYin|关注抖音/)).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: /Copy DouYin ID|复制抖音号/ }));
+
+        await waitFor(() => {
+            expect(settingsApi.copyText).toHaveBeenCalledWith(AUTHOR_SUPPORT_CONTACT.douyin);
+            expect(toast.success).toHaveBeenCalledTimes(1);
+        });
     });
 });
