@@ -1,13 +1,9 @@
 name: Release Please
 
-# 监听 main 分支：合并功能 PR 后，由 Release Please 根据提交信息攒"发版 PR"
-# （内含版本号 bump 与 CHANGELOG 更新）；合并发版 PR 后自动打 tag 并创建 GitHub Release。
-# 注意：Release Please 用 GITHUB_TOKEN 打 tag，GitHub 规定此类事件不会触发其他 workflow，
-# 所以四平台构建通过下方 build job 以 workflow_call 方式在同一运行内直接链式调用，
-# 而不是依赖 release.yml 的 tag 触发器。
+# 仅保留手动触发（workflow_dispatch）：日常推送 main 不自动创建发版 PR 或跑 Actions；
+# 正式发布可直接推送 v* tag 触发 release.yml，或需要时在 Actions 页面手动触发本工作流。
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write

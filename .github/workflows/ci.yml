@@ -7,17 +7,16 @@
 # 而且 tsconfig.json 没有被任何构建脚本引用（vite/esbuild 只转译、不做类型检查），
 # 类型错误只有 IDE 和手工 tsc 能发现，所以这一步必须显式跑。
 #
-# E2E 分层：PR 只跑 @smoke 子集（真实 Electron + xvfb），main 推送跑全量；
-# nightly 另跑全量与真实打包产物冒烟，见 e2e-nightly.yml。
+# E2E 分层：只在正式发布 tag（v*）或手动触发时运行全量质量门禁与全量 E2E；
+# 真实打包产物冒烟见 e2e-nightly.yml（手动触发）。
 name: CI
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
 
-# 同一分支的新推送取消旧的运行：门禁要的是最新一次的结果，不是排队等历史提交
+# 同一 tag / 手动触发的新提交取消旧的运行：门禁要的是最新一次的结果
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -73,62 +72,14 @@ jobs:
         # 带 --coverage 运行以执行 vitest.config 里的覆盖率阈值门禁（基线见该文件注释）。
         run: pnpm run test:coverage
       - name: Patch coverage
-        # 补丁覆盖率门禁：本次变更触碰的控制器文件必须达到分层覆盖率底线，
-        # 新增控制器不接入 routeContract 契约测试会在这里直接报红。
-        # PR 以目标分支为基线；push 以上一个 main 提交为基线（首次推送时脚本自行跳过）。
+        # Patch 覆盖率检查：tag 推送时 github.event.before 为全零或缺失基线，脚本会自动跳过并放行；
+        # 手动触发或有有效基线时仍按规则检查。
         env:
-          PATCH_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          PATCH_BASE: ${{ github.event.before }}
         run: pnpm run qa:patch-coverage --base "$PATCH_BASE"
 
-  e2e-smoke:
-    # PR 门禁：只跑少量跨进程冒烟，避免每次推送都等待全量 7 分钟
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Github checkout
-        uses: actions/checkout@v5
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Use Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - name: Cache Electron binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/electron
-          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-
-      - name: Install dependencies
-        env:
-          SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
-        run: pnpm install --frozen-lockfile
-      - name: Install display and media tools
-        run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
-          mkdir -p lib
-          ln -sf "$(command -v ffmpeg)" lib/ffmpeg
-          ln -sf "$(command -v ffprobe)" lib/ffprobe
-      - name: E2E smoke
-        env:
-          QA_ELECTRON_NO_SANDBOX: '1'
-        run: xvfb-run -a pnpm run test:e2e:smoke
-      - name: Upload e2e evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-smoke-${{ github.run_id }}
-          path: |
-            qa/test-results/
-            qa/playwright-report/
-          if-no-files-found: ignore
-
   e2e-full:
-    # main 推送跑全量：PR 已通过 smoke，合入后用完整矩阵兜住跨页面/滚动链路
-    if: github.event_name == 'push'
+    # 全量 E2E：正式 tag 或手动触发时执行
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

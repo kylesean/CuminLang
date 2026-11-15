@@ -1,14 +1,10 @@
-# 低频但高保真：全量源构建 e2e + 真实打包产物冒烟。
+# 高保真 E2E 验证（全量源构建 e2e + 真实打包产物冒烟）。
 #
-# 源构建 e2e 已经在 ci.yml 的 main 推送里跑；nightly 仍再跑一次，是为了在无人值守时
-# 捕获「当天依赖/环境变化导致的偶发失败」，并额外覆盖 ASAR、fuses、extraResource、
-# 原生模块 unpack 与 process.resourcesPath——这些只有真实打包产物才存在。
+# 仅保留手动触发（workflow_dispatch），避免每日定时空跑消耗 Actions 配额；
+# 需要验证 ASAR、fuses、extraResource、原生模块 unpack 与 process.resourcesPath 时可手动触发。
 name: E2E Nightly
 
 on:
-  schedule:
-    # 02:00 Asia/Shanghai（UTC 18:00）
-    - cron: '0 18 * * *'
   workflow_dispatch:
 
 concurrency:
