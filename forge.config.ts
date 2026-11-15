@@ -243,7 +243,7 @@ const config: ForgeConfig = {
         }),
         new MakerWix({
             name: 'Refrain',
-            description: 'Curated YouTube English, immersive and AI-native',
+            description: 'Immersive media player and AI-native language learning desktop app',
             manufacturer: 'kylesean',
             version: packageJson.version,
             icon: './assets/icons/icon.ico',

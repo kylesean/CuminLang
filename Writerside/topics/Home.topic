@@ -15,15 +15,15 @@
             Only the spotlight section is limited to two topics.
             For other groups, try to keep the number between 2 and 6, but you can add more if necessary.-->
     <section-starting-page>
-        <title>Dash Player</title>
+        <title>Refrain</title>
         <description>
-            Refrain 是一款专为英语学习打造的视频播放器.
+            Refrain 是一款现代视频播放与沉浸式语言学习桌面应用。
         </description>
 
         <!--    Add up to 2 topics that you want to promote. Use the "type" attribute to select an icon.    -->
         <spotlight>
             <a href="Theory.md" type="idea"  summary="了解 Refrain 背后的学习理论">理论依据</a>
-            <a href="https://github.com/kylesean/DashPlayer" type="presentation" summary="去 GitHub 仓库查看项目主页与发版记录">项目主页</a>
+            <a href="https://github.com/kylesean/Refrain" type="presentation" summary="去 GitHub 仓库查看项目主页与发版记录">项目主页</a>
         </spotlight>
 
         <!--    Add several topics that are most important for this section.    -->
