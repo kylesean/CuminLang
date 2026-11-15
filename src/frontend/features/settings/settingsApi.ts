@@ -412,6 +412,13 @@ export const settingsApi = {
     openCacheFolder: () => backendClient.call('system/open-folder/cache'),
 
     /**
+     * 打开运行日志目录，便于用户排查问题与附带 Bug 反馈日志。
+     *
+     * @returns 打开完成后结束。
+     */
+    openLogsFolder: () => backendClient.call('system/open-folder/logs'),
+
+    /**
      * 选择存储目录。
      *
      * @param options 文件夹选择选项。

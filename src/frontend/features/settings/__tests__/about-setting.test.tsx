@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import '@/frontend/i18n';
 import AboutSetting from '../AboutSetting';
@@ -17,6 +17,7 @@ vi.mock('../settingsApi', () => ({
         getAppVersion: vi.fn(),
         checkUpdate: vi.fn(),
         openUrl: vi.fn(),
+        openLogsFolder: vi.fn(),
     },
 }));
 
@@ -60,5 +61,21 @@ describe('AboutSetting', () => {
 
         expect(await screen.findByText('Download New Release')).toBeDefined();
         expect(screen.getAllByText(/v0.16.0/).length).toBeGreaterThan(0);
+    });
+
+    it('triggers opening local diagnostic logs directory when clicked', async () => {
+        vi.mocked(settingsApi.getAppVersion).mockResolvedValue('0.1.0');
+        vi.mocked(settingsApi.checkUpdate).mockResolvedValue({
+            status: 'ok',
+            releases: [],
+        });
+        vi.mocked(settingsApi.openLogsFolder).mockResolvedValue(undefined);
+
+        renderWithFreshSWR(<AboutSetting />);
+
+        const openLogsBtn = await screen.findByRole('button', { name: /Open Logs Folder|打开日志目录/ });
+        fireEvent.click(openLogsBtn);
+
+        expect(settingsApi.openLogsFolder).toHaveBeenCalledTimes(1);
     });
 });

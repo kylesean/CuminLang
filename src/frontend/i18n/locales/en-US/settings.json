@@ -24,6 +24,11 @@
         "delete": "Delete",
         "cancel": "Cancel"
     },
+    "sectionGroups": {
+        "general": "Preferences",
+        "capabilities": "Services & Network",
+        "system": "Data & System"
+    },
     "sections": {
         "shortcut": "Shortcuts",
         "appearance": "Appearance",
@@ -299,7 +304,10 @@
             "githubDesc": "Submit issues, suggest features, or star the project",
             "releases": "Release Notes",
             "license": "Open Source License",
-            "licenseDesc": "Free & open source under AGPLv3"
+            "licenseDesc": "Free & open source under AGPLv3",
+            "logs": "Diagnostic Logs",
+            "logsDesc": "Open the local logs directory to attach logs when reporting issues",
+            "openLogs": "Open Logs Folder"
         },
         "footer": "Refrain · Immersive English Video Learning"
     },

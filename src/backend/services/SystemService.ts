@@ -2,6 +2,7 @@ import path from 'path';
 import { inject, injectable } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import { clearDB } from '@/backend/infrastructure/db/db';
+import { AppStateDirectoryType, getAppStatePath } from '@/backend/infrastructure/system/AppStatePath';
 import { UPDATE_TOAST_LAST_SHOWN_AT_KEY } from '@/common/constants/systemConfigKeys';
 import type { UpdateCheckResult } from '@/common/types/update-check';
 import { checkUpdate } from '@/backend/services/CheckUpdate';
@@ -40,6 +41,13 @@ export default interface SystemService {
      * @returns 可访问的媒体库根目录路径。
      */
     resolveCacheDirectory(): Promise<string>;
+
+    /**
+     * 解析并确保运行日志目录存在，供设置页一键打开定位故障日志。
+     *
+     * @returns 日志目录绝对路径。
+     */
+    resolveLogsDirectory(): Promise<string>;
 
     /**
      * 检查应用更新，并在弹窗模式下执行提醒冷却控制。
@@ -117,6 +125,17 @@ export class SystemServiceImpl implements SystemService {
      */
     public async resolveCacheDirectory(): Promise<string> {
         return await this.storageDirectoryProvider.provideDirectory(StorageDirectoryTarget.LIBRARY_ROOT);
+    }
+
+    /**
+     * 解析并确保运行日志目录存在。
+     *
+     * @returns 日志目录绝对路径。
+     */
+    public async resolveLogsDirectory(): Promise<string> {
+        const logsDirectory = getAppStatePath(AppStateDirectoryType.LOGS);
+        await this.fileSystemGateway.ensureDirectory(logsDirectory);
+        return logsDirectory;
     }
 
     /**

@@ -17,20 +17,20 @@ import {
     LayoutContent,
     LayoutPanel,
 } from '@astryxdesign/core/Layout';
-import { SideNav, SideNavHeading, SideNavItem } from '@astryxdesign/core/SideNav';
+import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from '@astryxdesign/core/SideNav';
 import { Icon, type IconType } from '@astryxdesign/core/Icon';
 import { VStack } from '@astryxdesign/core/VStack';
 import { SETTINGS_NAV_TESTIDS, SETTINGS_SIDEBAR_TESTID } from '@/common/constants/qa-testids';
 
 /** 设置页面各分区键名联合类型。 */
 export type SettingType =
-    | 'resources'
-    | 'shortcut'
-    | 'storage'
     | 'appearance'
-    | 'proxy'
-    | 'mobile'
+    | 'shortcut'
+    | 'resources'
     | 'import'
+    | 'proxy'
+    | 'storage'
+    | 'mobile'
     | 'about';
 
 /** 侧边栏导航条目定义。 */
@@ -40,17 +40,53 @@ interface SettingNavDef {
     labelKey: string;
 }
 
-/** 设置菜单导航项列表。 */
-const SETTING_ITEMS: SettingNavDef[] = [
-    { key: 'shortcut', icon: Command, labelKey: 'sections.shortcut' },
-    { key: 'appearance', icon: Palette, labelKey: 'sections.appearance' },
-    { key: 'resources', icon: Boxes, labelKey: 'sections.resources' },
-    { key: 'storage', icon: HardDrive, labelKey: 'sections.storage' },
-    { key: 'proxy', icon: Globe, labelKey: 'sections.proxy' },
-    { key: 'mobile', icon: Smartphone, labelKey: 'sections.mobile' },
-    { key: 'import', icon: SquarePlay, labelKey: 'sections.import' },
-    { key: 'about', icon: Info, labelKey: 'sections.about' },
+/** 侧边栏语义分组定义。 */
+interface SettingNavGroup {
+    id: string;
+    titleKey: string;
+    defaultTitle: string;
+    items: SettingNavDef[];
+}
+
+/**
+ * 设置菜单语义分组：
+ * 1. 常用偏好：外观置于首项，与 `/settings` 默认落地页保持一致；
+ * 2. 能力与连接：将服务资源、YouTube 导入与网络代理相邻编排，缩短排查链路；
+ * 3. 数据与系统：存储备份、局域网访问与关于更新收尾。
+ */
+const SETTING_GROUPS: SettingNavGroup[] = [
+    {
+        id: 'general',
+        titleKey: 'sectionGroups.general',
+        defaultTitle: '常用偏好',
+        items: [
+            { key: 'appearance', icon: Palette, labelKey: 'sections.appearance' },
+            { key: 'shortcut', icon: Command, labelKey: 'sections.shortcut' },
+        ],
+    },
+    {
+        id: 'capabilities',
+        titleKey: 'sectionGroups.capabilities',
+        defaultTitle: '能力与连接',
+        items: [
+            { key: 'resources', icon: Boxes, labelKey: 'sections.resources' },
+            { key: 'import', icon: SquarePlay, labelKey: 'sections.import' },
+            { key: 'proxy', icon: Globe, labelKey: 'sections.proxy' },
+        ],
+    },
+    {
+        id: 'system',
+        titleKey: 'sectionGroups.system',
+        defaultTitle: '数据与系统',
+        items: [
+            { key: 'storage', icon: HardDrive, labelKey: 'sections.storage' },
+            { key: 'mobile', icon: Smartphone, labelKey: 'sections.mobile' },
+            { key: 'about', icon: Info, labelKey: 'sections.about' },
+        ],
+    },
 ];
+
+const SETTING_ITEMS: SettingNavDef[] = SETTING_GROUPS.flatMap((group) => group.items);
 
 /**
  * 设置中心主从布局：左侧分区导航，右侧内容。
@@ -90,22 +126,31 @@ const SettingLayout: React.FC = () => {
                                     />
                                 }
                             >
-                                {SETTING_ITEMS.map((item) => (
-                                    <SideNavItem
-                                        key={item.key}
-                                        data-testid={SETTINGS_NAV_TESTIDS[item.key]}
-                                        label={t(item.labelKey)}
-                                        icon={
-                                            <Icon
-                                                icon={item.icon as unknown as IconType}
-                                                size="sm"
-                                                color={currentKey === item.key ? 'primary' : 'secondary'}
-                                            />
-                                        }
-                                        isSelected={currentKey === item.key}
-                                        href={`/settings/${item.key}`}
-                                    />
-                                ))}
+                                <VStack gap={3} width="100%">
+                                    {SETTING_GROUPS.map((group) => (
+                                        <SideNavSection
+                                            key={group.id}
+                                            title={t(group.titleKey, { defaultValue: group.defaultTitle })}
+                                        >
+                                            {group.items.map((item) => (
+                                                <SideNavItem
+                                                    key={item.key}
+                                                    data-testid={SETTINGS_NAV_TESTIDS[item.key]}
+                                                    label={t(item.labelKey)}
+                                                    icon={
+                                                        <Icon
+                                                            icon={item.icon as unknown as IconType}
+                                                            size="sm"
+                                                            color={currentKey === item.key ? 'primary' : 'secondary'}
+                                                        />
+                                                    }
+                                                    isSelected={currentKey === item.key}
+                                                    href={`/settings/${item.key}`}
+                                                />
+                                            ))}
+                                        </SideNavSection>
+                                    ))}
+                                </VStack>
                             </SideNav>
                         </div>
                     </aside>
@@ -113,7 +158,7 @@ const SettingLayout: React.FC = () => {
             }
             content={
                 <LayoutContent padding={6} isScrollable>
-                    <VStack width="100%" maxWidth={960} gap={6} paddingBlockEnd={8} className="mx-auto">
+                    <VStack width="100%" maxWidth={780} gap={6} paddingBlockEnd={8} className="mx-auto">
                         <Outlet />
                     </VStack>
                 </LayoutContent>

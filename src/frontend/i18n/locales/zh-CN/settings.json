@@ -24,6 +24,11 @@
         "delete": "删除",
         "cancel": "取消"
     },
+    "sectionGroups": {
+        "general": "常用偏好",
+        "capabilities": "能力与连接",
+        "system": "数据与系统"
+    },
     "sections": {
         "shortcut": "快捷键",
         "appearance": "外观",
@@ -299,7 +304,10 @@
             "githubDesc": "欢迎提交 Issue、功能建议或 Star",
             "releases": "版本更新日志",
             "license": "开源协议",
-            "licenseDesc": "基于 AGPLv3 自由开源"
+            "licenseDesc": "基于 AGPLv3 自由开源",
+            "logs": "运行日志",
+            "logsDesc": "打开本地日志目录，提交 Bug 反馈时可附带最新日志文件",
+            "openLogs": "打开日志目录"
         },
         "footer": "Refrain · 沉浸式英语视频学习桌面应用"
     },

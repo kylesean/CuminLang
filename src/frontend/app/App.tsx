@@ -9,6 +9,7 @@ import { Toaster as HotToaster } from 'react-hot-toast';
 import { showNotification } from '@/frontend/components/shared/toasts/notification';
 
 import GlobalShortCut from '@/frontend/components/shared/shortcuts/GlobalShortCut';
+import { NavigationHistoryTracker } from '@/frontend/app/hooks/useAppHistoryNavigation';
 import { WordPopoverHost } from '@/frontend/features/player/components/translatable-line/WordPopoverHost';
 import Eb from '@/frontend/components/shared/common/Eb';
 import { getOnboardingCompletedVersion } from '@/frontend/features/onboarding/onboardingApi';
@@ -227,6 +228,7 @@ export const App = () => {
                 )}
                 {gate?.kind === 'main' && (
                     <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                        <NavigationHistoryTracker />
                         <LinkProvider component={RouterLinkAdapter}>
                             <Suspense fallback={<StartupLoading />}>
                                 <Routes>

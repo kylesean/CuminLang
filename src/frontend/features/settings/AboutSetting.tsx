@@ -6,6 +6,7 @@ import { useTranslation as useI18nTranslation } from 'react-i18next';
 import {
     BookOpen,
     ExternalLink,
+    FolderOpen,
     Info,
     RefreshCw,
     Tag,
@@ -85,6 +86,14 @@ const AboutSetting: React.FC = () => {
     const openUrl = async (url: string) => {
         try {
             await settingsApi.openUrl(url);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error));
+        }
+    };
+
+    const openLogsFolder = async () => {
+        try {
+            await settingsApi.openLogsFolder();
         } catch (error) {
             toast.error(error instanceof Error ? error.message : String(error));
         }
@@ -252,6 +261,21 @@ const AboutSetting: React.FC = () => {
                         size="sm"
                         endContent={<Icon icon={ExternalLink as unknown as IconType} size="xsm" />}
                         onClick={() => openUrl('https://github.com/kylesean/Refrain/blob/main/LICENSE')}
+                    />
+                </SettingField>
+
+                <Divider variant="subtle" />
+
+                <SettingField
+                    title={t('about.links.logs', { defaultValue: '运行日志' })}
+                    description={t('about.links.logsDesc', { defaultValue: '打开本地日志目录，提交 Bug 反馈时可附带最新日志文件' })}
+                >
+                    <Button
+                        label={t('about.links.openLogs', { defaultValue: '打开日志目录' })}
+                        variant="secondary"
+                        size="sm"
+                        endContent={<Icon icon={FolderOpen as unknown as IconType} size="xsm" />}
+                        onClick={openLogsFolder}
                     />
                 </SettingField>
             </SettingSection>

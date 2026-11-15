@@ -249,6 +249,17 @@ export default class SystemController implements Controller {
     }
 
     /**
+     * 打开应用运行日志目录，便于用户排查问题与附带 Bug 反馈日志。
+     */
+    public async openLogsDir() {
+        const logsDir = await this.systemService.resolveLogsDirectory();
+        const error = await shell.openPath(logsDir);
+        if (error) {
+            throw new Error(`打开日志目录失败：${error}`);
+        }
+    }
+
+    /**
      * 注册系统与窗口相关 IPC 路由。
      */
     public registerRoutes(): void {
@@ -273,6 +284,7 @@ export default class SystemController implements Controller {
             }),
         });
         registerRoute('system/open-folder/cache', () => this.openCacheDir());
+        registerRoute('system/open-folder/logs', () => this.openLogsDir());
         registerRoute('system/window-size/change', (p) => this.changeWindowSize(p), {
             schema: windowStateSchema,
         });

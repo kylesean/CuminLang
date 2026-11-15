@@ -230,6 +230,7 @@ interface SystemDef {
     'system/reset-db': { params: void, return: void };
     'system/open-folder': { params: { path: string; createDirectory?: boolean }, return: void };
     'system/open-folder/cache': { params: void, return: void };
+    'system/open-folder/logs': { params: void, return: void };
     'system/window-size/change': { params: WindowState, return: void };
     'system/window-size': { params: void, return: WindowState };
     'system/window-buttons/visibility': { params: boolean, return: void };
@@ -923,6 +924,7 @@ export const API_ROUTE_KEYS = [
     'system/info',
     'system/open-folder',
     'system/open-folder/cache',
+    'system/open-folder/logs',
     'system/open-url',
     'system/path-info',
     'system/reset-db',
