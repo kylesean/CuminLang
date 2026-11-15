@@ -78,7 +78,7 @@ jobs:
         # PR 以目标分支为基线；push 以上一个 main 提交为基线（首次推送时脚本自行跳过）。
         env:
           PATCH_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
-        run: pnpm run qa:patch-coverage -- --base "$PATCH_BASE"
+        run: pnpm run qa:patch-coverage --base "$PATCH_BASE"
 
   e2e-smoke:
     # PR 门禁：只跑少量跨进程冒烟，避免每次推送都等待全量 7 分钟
@@ -107,7 +107,11 @@ jobs:
           SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
         run: pnpm install --frozen-lockfile
       - name: Install display and media tools
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+          mkdir -p lib
+          ln -sf "$(command -v ffmpeg)" lib/ffmpeg
+          ln -sf "$(command -v ffprobe)" lib/ffprobe
       - name: E2E smoke
         env:
           QA_ELECTRON_NO_SANDBOX: '1'
@@ -149,7 +153,11 @@ jobs:
           SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
         run: pnpm install --frozen-lockfile
       - name: Install display and media tools
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+          mkdir -p lib
+          ln -sf "$(command -v ffmpeg)" lib/ffmpeg
+          ln -sf "$(command -v ffprobe)" lib/ffprobe
       - name: E2E full
         env:
           QA_ELECTRON_NO_SANDBOX: '1'

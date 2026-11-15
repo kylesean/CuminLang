@@ -39,7 +39,11 @@ jobs:
       - name: QA locator rules
         run: pnpm run qa:check-locators
       - name: Install display and media tools
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+          mkdir -p lib
+          ln -sf "$(command -v ffmpeg)" lib/ffmpeg
+          ln -sf "$(command -v ffprobe)" lib/ffprobe
       - name: E2E full
         env:
           QA_ELECTRON_NO_SANDBOX: '1'

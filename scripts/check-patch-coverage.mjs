@@ -29,7 +29,8 @@ const PATCH_RULES = [
 function parseArgs(argv) {
     const args = { base: 'origin/main', coverage: 'coverage/coverage-final.json' };
     for (let i = 0; i < argv.length; i += 1) {
-        if (argv[i] === '--base') args.base = argv[++i];
+        if (argv[i] === '--') continue;
+        else if (argv[i] === '--base') args.base = argv[++i];
         else if (argv[i] === '--coverage') args.coverage = argv[++i];
         else {
             console.error(`未知参数：${argv[i]}`);

@@ -120,9 +120,11 @@ const config: ForgeConfig = {
             // 打进安装包只会白白多 ~35MB（main + renderer 的 sourcesContent 全量）。
             if (file.endsWith('.map')) return true;
 
-            // 仅保留 Vite externalized 的原生依赖与运行时网络代理传递依赖，其余由 Vite 打入 /.vite
+            // 仅保留 Vite externalized 的原生依赖、构建期按需保留的头文件及运行时网络代理传递依赖；
+            // node-addon-api 在 @electron/rebuild 编译阶段需要参与 include 探测，随后在 packageAfterPrune 中一并裁除
             const keptNodeModulePrefixes = [
                 '/node_modules/better-sqlite3',
+                '/node_modules/node-addon-api',
                 '/node_modules/onnxruntime-node',
                 '/node_modules/onnxruntime-common',
                 '/node_modules/undici',
@@ -292,8 +294,9 @@ const config: ForgeConfig = {
         },
     ],
     hooks: {
-        // 在 asar 打包前：裁掉异平台/异架构原生库（同时避免 Linux RPM 的 brp-strip 失败）
-        packageAfterCopy: async (_forgeConfig, buildPath, _electronVersion, platform, arch) => {
+        // 在 @electron/rebuild 完成原生重建之后、写入 asar 之前：裁掉异平台/异架构原生库与编译期源码
+        // （若放在 packageAfterCopy 会早于 rebuild 执行，导致 node-gyp 因缺 deps/common.gypi 失败）
+        packageAfterPrune: async (_forgeConfig, buildPath, _electronVersion, platform, arch) => {
             await pruneForeignNativeVariants(buildPath, platform, arch);
         },
         // 把 mac 产物重签为有效 ad-hoc 签名（否则 TCC 麦克风授权静默失败，见函数注释）
