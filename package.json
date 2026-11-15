@@ -183,7 +183,9 @@
       "@bitdisaster/exe-icon-extractor",
       "better-sqlite3",
       "electron-winstaller",
-      "esbuild"
+      "esbuild",
+      "fs-xattr",
+      "macos-alias"
     ],
     "overrides": {
       "@electron/asar": "^4.3.1",

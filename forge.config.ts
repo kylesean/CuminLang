@@ -1,7 +1,7 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerDeb } from '@electron-forge/maker-deb';
-import { MakerRpm } from '@electron-forge/maker-rpm';
+import { MakerRpm, type MakerRpmConfig } from '@electron-forge/maker-rpm';
 import { MakerWix } from '@electron-forge/maker-wix';
 // Forge 官方没有 AppImage maker，使用社区维护的 ReForged 实现（覆盖 Arch/NixOS 等无 deb/rpm 的发行版）
 import { MakerAppImage } from '@reforged/maker-appimage';
@@ -213,7 +213,10 @@ const config: ForgeConfig = {
                 bin: 'refrain',
                 productName: 'Refrain',
                 icon: './assets/icons/icon.png',
-            },
+                // RPM 4.20+（ubuntu-latest 新版）的 %mkbuilddir 会把 %install 工作目录切到 BUILD/<pkg>-build，
+                // 导致 electron-installer-redhat 默认模板里的 `cp -r usr/*` 找不到 %{_topdir}/BUILD/usr
+                specTemplate: path.resolve(__dirname, 'assets/rpm/spec.ejs'),
+            } as MakerRpmConfig['options'] & { specTemplate: string },
         }),
         new MakerDeb({
             options: {
