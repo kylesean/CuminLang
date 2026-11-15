@@ -133,7 +133,7 @@ struct APIClient {
         request.httpMethod = method
         request.timeoutInterval = 20
         if let token, !token.isEmpty {
-            request.setValue(token, forHTTPHeaderField: "X-DashPlayer-Token")
+            request.setValue(token, forHTTPHeaderField: "X-Refrain-Token")
         }
         if let body {
             request.httpBody = body

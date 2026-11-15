@@ -114,5 +114,5 @@ worktrees/
 # iOS 客户端
 ios/build/
 ios/build-sim/
-ios/DashPlayerMobile.xcodeproj/
+ios/RefrainMobile.xcodeproj/
 

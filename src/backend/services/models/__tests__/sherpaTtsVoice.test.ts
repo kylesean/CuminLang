@@ -46,13 +46,11 @@ describe('TTS 音色清单', () => {
         ]);
     });
 
-    it('Piper 音色优先走国内镜像，Kokoro 音色指向官方 release', () => {
+    it('Piper 与 Kokoro 音色均直接指向 k2-fsa/sherpa-onnx 官方 release', () => {
         const piperUrls = sherpaTtsDownloadUrls(SHERPA_TTS_VOICES[0]);
-        expect(piperUrls).toHaveLength(2);
-        expect(piperUrls[0]).toContain('modelscope.cn');
-        expect(piperUrls[1]).toContain('github.com');
+        expect(piperUrls).toHaveLength(1);
+        expect(piperUrls[0]).toContain('github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/');
         expect(piperUrls[0].endsWith(SHERPA_TTS_VOICES[0].archiveName)).toBe(true);
-        expect(piperUrls[1].endsWith(SHERPA_TTS_VOICES[0].archiveName)).toBe(true);
 
         const kokoro = resolveSherpaTtsVoice('kokoro-en-US-bella');
         const kokoroUrls = sherpaTtsDownloadUrls(kokoro);

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 应用入口。
 @main
-struct DashPlayerMobileApp: App {
+struct RefrainMobileApp: App {
     @StateObject private var server = ServerStore()
 
     var body: some Scene {

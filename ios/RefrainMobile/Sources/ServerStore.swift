@@ -15,8 +15,8 @@ final class ServerStore: ObservableObject {
     /// 默认端口与桌面端 `mobileAccess.port` 的默认值保持一致。
     nonisolated static let defaultPort = 27182
 
-    private static let storageKey = "dashplayer.server.baseURL"
-    private static let tokenStorageKey = "dashplayer.server.token"
+    private static let storageKey = "refrain.server.baseURL"
+    private static let tokenStorageKey = "refrain.server.token"
     private let defaults: UserDefaults
 
     /// 供展示或回显给用户的完整地址（包含访问令牌）。

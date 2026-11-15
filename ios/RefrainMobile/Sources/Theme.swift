@@ -7,7 +7,7 @@ enum ThemePreference: String, CaseIterable, Identifiable {
     case dark
 
     /// UserDefaults 键，全 App 共用。
-    static let storageKey = "dashplayer.appearance"
+    static let storageKey = "refrain.appearance"
 
     var id: String { rawValue }
 

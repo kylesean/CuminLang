@@ -115,11 +115,11 @@ final class WatchModel: ObservableObject {
 
     /// 偏好存储键。
     private enum Keys {
-        static let showEnglish = "dashplayer.showEnglish"
-        static let showTranslation = "dashplayer.showTranslation"
-        static let repeatLine = "dashplayer.repeatLine"
-        static let autoPause = "dashplayer.autoPause"
-        static let speed = "dashplayer.speed"
+        static let showEnglish = "refrain.showEnglish"
+        static let showTranslation = "refrain.showTranslation"
+        static let repeatLine = "refrain.repeatLine"
+        static let autoPause = "refrain.autoPause"
+        static let speed = "refrain.speed"
     }
 
     /// 创建播放模型。

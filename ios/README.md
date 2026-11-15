@@ -22,30 +22,30 @@
 - Xcode 27（iOS 17 及以上）
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)：`brew install xcodegen`
 
-工程文件由 `project.yml` 生成，不提交 `DashPlayerMobile.xcodeproj`。
+工程文件由 `project.yml` 生成，不提交 `RefrainMobile.xcodeproj`。
 
 ## 生成工程并编译
 
 ```bash
 cd ios
 xcodegen generate
-open DashPlayerMobile.xcodeproj   # 想用 Xcode 跑就用这个
+open RefrainMobile.xcodeproj   # 想用 Xcode 跑就用这个
 ```
 
 命令行出 IPA（不签名，交给侧载工具重签）：
 
 ```bash
-xcodebuild -project DashPlayerMobile.xcodeproj \
-  -scheme DashPlayerMobile \
+xcodebuild -project RefrainMobile.xcodeproj \
+  -scheme RefrainMobile \
   -configuration Release -sdk iphoneos \
   -derivedDataPath build CODE_SIGNING_ALLOWED=NO
 
 mkdir -p build/ipa/Payload
 cp -R build/Build/Products/Release-iphoneos/Refrain.app build/ipa/Payload/
-cd build/ipa && zip -qry ../DashPlayerMobile.ipa Payload
+cd build/ipa && zip -qry ../RefrainMobile.ipa Payload
 ```
 
-产物在 `ios/build/DashPlayerMobile.ipa`。
+产物在 `ios/build/RefrainMobile.ipa`。
 
 ## 安装到手机
 
@@ -64,9 +64,9 @@ cd build/ipa && zip -qry ../DashPlayerMobile.ipa Payload
 ## 结构
 
 ```
-DashPlayerMobile/
+RefrainMobile/
   Sources/
-    DashPlayerApp.swift    入口、根视图切换、音频会话
+    RefrainMobileApp.swift 入口、根视图切换、音频会话
     ServerStore.swift      服务器地址的保存与校验
     APIClient.swift        /api 接口封装
     Models.swift           接口数据模型

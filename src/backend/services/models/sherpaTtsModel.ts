@@ -157,22 +157,14 @@ export const resolveSherpaTtsVoice = (id?: string | null): SherpaTtsVoice => {
 };
 
 /**
- * 生成某音色的有序下载地址：
- * - Piper 音色：ModelScope 镜像优先（国内直连），GitHub 官方 release 兜底；
- * - Kokoro 音色：直接指向 `k2-fsa/sherpa-onnx` 官方 release（目前社区镜像未托管该包，避免 404 干扰手动下载指引）。
+ * 生成某音色的有序下载地址：统一指向 `k2-fsa/sherpa-onnx` 官方 release，不依赖第三方私人镜像。
  *
  * @param voice 音色配置。
  * @returns 候选下载地址。
  */
 export const sherpaTtsDownloadUrls = (voice: SherpaTtsVoice): string[] => {
     const githubUrl = `https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/${voice.archiveName}`;
-    if (voice.engine === 'kokoro') {
-        return [githubUrl];
-    }
-    return [
-        `https://www.modelscope.cn/models/solidSpoon/dashplayer-offline-models/resolve/master/${voice.archiveName}`,
-        githubUrl,
-    ];
+    return [githubUrl];
 };
 
 /** 任一音色安装后都必须存在的公共文件。 */

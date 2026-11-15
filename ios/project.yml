@@ -1,4 +1,4 @@
-name: DashPlayerMobile
+name: RefrainMobile
 options:
   bundleIdPrefix: com.kylesean
   deploymentTarget:
@@ -20,17 +20,17 @@ settings:
     DEVELOPMENT_TEAM: ""
 
 targets:
-  DashPlayerMobile:
+  RefrainMobile:
     type: application
     platform: iOS
     sources:
-      - path: DashPlayerMobile/Sources
-      - path: DashPlayerMobile/Assets.xcassets
+      - path: RefrainMobile/Sources
+      - path: RefrainMobile/Assets.xcassets
         buildPhase: resources
     settings:
       base:
-        INFOPLIST_FILE: DashPlayerMobile/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.kylesean.DashPlayerMobile
+        INFOPLIST_FILE: RefrainMobile/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.kylesean.RefrainMobile
         PRODUCT_NAME: Refrain
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
