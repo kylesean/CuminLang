@@ -150,6 +150,8 @@ interface RecordDialogBodyProps {
     title: string;
     initialShortcuts: string[];
     defaultValue: string;
+    /** 其余动作已占用的标准化快捷键 -> 动作名称列表，用于录制/保存前冲突提示。 */
+    occupiedShortcuts: Map<string, string[]>;
     dialogTitle: string;
     dialogDescription: string;
     saveChangesLabel: string;
@@ -164,6 +166,18 @@ interface RecordDialogBodyProps {
     onClose: () => void;
 }
 
+/** 归一化单个按键序列，供跨动作冲突比对。 */
+const normalizeComboKey = (combo: string): string =>
+    combo.toLowerCase().replaceAll(' ', '').trim();
+
+const RESERVED_SHORTCUTS = new Map<string, string>([
+    ['escape', 'Escape'],
+    ['esc', 'Escape'],
+    ['mod+f', 'Cmd/Ctrl+F'],
+    ['ctrl+f', 'Cmd/Ctrl+F'],
+    ['meta+f', 'Cmd/Ctrl+F'],
+]);
+
 /**
  * 录制弹窗正文：管理按键捕获状态与临时草稿。
  */
@@ -171,6 +185,7 @@ const RecordDialogBody: React.FC<RecordDialogBodyProps> = ({
     title,
     initialShortcuts,
     defaultValue,
+    occupiedShortcuts,
     dialogTitle,
     dialogDescription,
     saveChangesLabel,
@@ -193,6 +208,39 @@ const RecordDialogBody: React.FC<RecordDialogBodyProps> = ({
     const recordedShortcut = React.useMemo(() => {
         return Array.from(keys).join('+').trim().replaceAll(' ', '');
     }, [keys]);
+
+    const describeConflict = React.useCallback((combo: string): string | null => {
+        const normalized = normalizeComboKey(combo);
+        if (!normalized) {
+            return null;
+        }
+        const reserved = RESERVED_SHORTCUTS.get(normalized);
+        if (reserved) {
+            return t('shortcut.reservedConflict', {
+                key: reserved,
+                defaultValue: `与系统保留快捷键 ${reserved} 冲突`,
+            });
+        }
+        const owners = occupiedShortcuts.get(normalized);
+        if (owners && owners.length > 0) {
+            return t('shortcut.actionConflict', {
+                actions: owners.join('、'),
+                defaultValue: `与「${owners.join('、')}」冲突`,
+            });
+        }
+        return null;
+    }, [occupiedShortcuts, t]);
+
+    const recordedConflict = React.useMemo(
+        () => (recordedShortcut ? describeConflict(recordedShortcut) : null),
+        [describeConflict, recordedShortcut],
+    );
+    const draftConflicts = React.useMemo(
+        () => shortcuts
+            .map((item) => ({ shortcut: item, message: describeConflict(item) }))
+            .filter((entry): entry is { shortcut: string; message: string } => entry.message !== null),
+        [describeConflict, shortcuts],
+    );
 
     const restartTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -336,25 +384,32 @@ const RecordDialogBody: React.FC<RecordDialogBodyProps> = ({
                     </button>
 
                     {recordedShortcut && (
-                        <HStack gap={2} vAlign="center">
-                            <Button
-                                label={t('shortcut.rerecord')}
-                                size="sm"
-                                variant="secondary"
-                                icon={<Icon icon={RotateCcw as unknown as IconType} size="sm" />}
-                                onClick={handleRerecord}
-                            />
-                            <Button
-                                label={addRecordedLabel}
-                                size="sm"
-                                variant="primary"
-                                icon={<Icon icon={Plus as unknown as IconType} size="sm" />}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    appendRecordedShortcut();
-                                }}
-                            />
-                        </HStack>
+                        <VStack gap={2} hAlign="center">
+                            {recordedConflict && (
+                                <span className="text-sm text-warning-text" role="status">
+                                    {recordedConflict}
+                                </span>
+                            )}
+                            <HStack gap={2} vAlign="center">
+                                <Button
+                                    label={t('shortcut.rerecord')}
+                                    size="sm"
+                                    variant="secondary"
+                                    icon={<Icon icon={RotateCcw as unknown as IconType} size="sm" />}
+                                    onClick={handleRerecord}
+                                />
+                                <Button
+                                    label={addRecordedLabel}
+                                    size="sm"
+                                    variant="primary"
+                                    icon={<Icon icon={Plus as unknown as IconType} size="sm" />}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        appendRecordedShortcut();
+                                    }}
+                                />
+                            </HStack>
+                        </VStack>
                     )}
                 </VStack>
             </Card>
@@ -400,6 +455,15 @@ const RecordDialogBody: React.FC<RecordDialogBodyProps> = ({
                         )}
                     </HStack>
                 </Card>
+                {draftConflicts.length > 0 && (
+                    <VStack gap={1}>
+                        {draftConflicts.map((conflict) => (
+                            <span key={conflict.shortcut} className="text-sm text-warning-text" role="status">
+                                {`${conflict.shortcut}: ${conflict.message}`}
+                            </span>
+                        ))}
+                    </VStack>
+                )}
             </VStack>
 
             {/* 弹窗底部操作 */}
@@ -524,6 +588,31 @@ const ShortcutSetting: React.FC = () => {
 
     const watchedShortcuts = useWatch({ control: form.control });
 
+    const allShortcutItems = React.useMemo(
+        () => groups.flatMap((group) => group.items),
+        [groups],
+    );
+
+    const getOccupiedShortcutsFor = React.useCallback((currentKey: ShortcutKey): Map<string, string[]> => {
+        const map = new Map<string, string[]>();
+        for (const item of allShortcutItems) {
+            if (item.key === currentKey) {
+                continue;
+            }
+            const raw = watchedShortcuts[item.key] ?? '';
+            for (const combo of parseShortcutList(raw)) {
+                const normalized = normalizeComboKey(combo);
+                if (!normalized) {
+                    continue;
+                }
+                const list = map.get(normalized) ?? [];
+                list.push(item.title);
+                map.set(normalized, list);
+            }
+        }
+        return map;
+    }, [allShortcutItems, watchedShortcuts]);
+
     // 过滤逻辑（支持按名称、描述或当前按键过滤）
     const filteredGroups = React.useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -608,6 +697,7 @@ const ShortcutSetting: React.FC = () => {
                                                     description={item.description}
                                                     value={field.value ?? ''}
                                                     defaultValue={SettingKeyObj[toShortcutStoreKey(item.key)]}
+                                                    occupiedShortcuts={getOccupiedShortcutsFor(item.key)}
                                                     onChange={(val) => {
                                                         field.onChange(val);
                                                         flush().catch(() => null);
@@ -646,6 +736,7 @@ const ShortcutRow: React.FC<{
     description: string;
     value: string;
     defaultValue: string;
+    occupiedShortcuts: Map<string, string[]>;
     onChange: (value: string) => void;
     editLabel: string;
     resetDefaultLabel: string;
@@ -664,6 +755,7 @@ const ShortcutRow: React.FC<{
     description,
     value,
     defaultValue,
+    occupiedShortcuts,
     onChange,
     editLabel,
     resetDefaultLabel,
@@ -716,6 +808,7 @@ const ShortcutRow: React.FC<{
                             title={title}
                             initialShortcuts={parseShortcutList(value)}
                             defaultValue={defaultValue}
+                            occupiedShortcuts={occupiedShortcuts}
                             dialogTitle={dialogTitle}
                             dialogDescription={dialogDescription}
                             saveChangesLabel={saveChangesLabel}

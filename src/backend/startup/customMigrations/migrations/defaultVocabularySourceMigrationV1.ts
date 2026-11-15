@@ -15,7 +15,7 @@ const DEFAULT_SEED_VERSION_KEY = 'syssetup.vocabularySeedVersion';
 /**
  * 读取默认词表的播种标记。
  *
- * 播种标记由 `seedDefaultVocabularyIfNeeded` 通过 SystemConfigService 写入
+ * 播种标记由 `seedDefaultVocabularyIfNeeded` 通过 SysConfRepository 写入
  * **SQLite 的 dp_sys_conf**，不是 electron-store。早期版本这里用
  * `ctx.settings.getPersisted` 读配置 JSON，永远拿到 null，于是整条迁移变成
  * 死代码：升级用户的默认词仍是 `learning/manual`，字幕上满屏下划线。

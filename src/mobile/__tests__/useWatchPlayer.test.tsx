@@ -160,4 +160,54 @@ describe('mobile player & VideoBar state machines', () => {
         expect(screen.getByText(/0:10/)).toBeDefined();
         expect(screen.queryByText(/0:45/)).toBeNull();
     });
+
+    it('timeupdate 通过 positionChannel 仅刷新 VideoBar，不引起宿主组件重渲染', async () => {
+        const detail = makeDetail(5);
+        let parentRenders = 0;
+
+        function Harness() {
+            parentRenders += 1;
+            const player = useWatchPlayer(detail);
+            return (
+                <div>
+                    <video ref={player.videoRef} onTimeUpdate={player.handleTimeUpdate}>
+                        <track kind="captions" />
+                    </video>
+                    <VideoBar
+                        paused={player.paused}
+                        positionChannel={player.positionChannel}
+                        duration={100}
+                        disabled={false}
+                        onTogglePlay={player.togglePlay}
+                        onSeek={player.seekTo}
+                        onFullscreen={player.enterFullscreen}
+                    />
+                </div>
+            );
+        }
+
+        const { container } = render(<Harness />);
+        const videoEl = container.querySelector('video') as HTMLVideoElement;
+        const rendersAfterMount = parentRenders;
+
+        Object.defineProperty(videoEl, 'currentTime', { value: 0.4, writable: true, configurable: true });
+        await act(async () => {
+            fireEvent(videoEl, new Event('timeupdate'));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        // 首次进入第 0 句触发译文窗口拉取；此后同一句内连续 timeupdate 不再引起宿主重渲染
+        expect(screen.getByText(/0:00/)).toBeDefined();
+        const rendersAfterSettlingSentence = parentRenders;
+
+        videoEl.currentTime = 1.2;
+        act(() => {
+            fireEvent(videoEl, new Event('timeupdate'));
+        });
+
+        expect(screen.getByText(/0:01/)).toBeDefined();
+        expect(parentRenders).toBe(rendersAfterSettlingSentence);
+        expect(rendersAfterMount).toBeGreaterThanOrEqual(1);
+    });
 });

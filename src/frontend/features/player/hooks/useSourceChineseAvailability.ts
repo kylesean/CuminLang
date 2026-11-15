@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 
 /**
  * 当前字幕文件是否包含可直接展示的中文行。
@@ -11,7 +11,7 @@ import { usePlayerState } from '@/frontend/features/player/playerState';
  * @returns 当前字幕是否至少有一行 `textZH`。
  */
 export function useSourceChineseAvailability(): boolean {
-    const sentences = usePlayerState((state) => state.sentences);
+    const sentences = usePlayer((state) => state.sentences);
     return useMemo(
         () => sentences.some((sentence) => Boolean(sentence.textZH?.trim())),
         [sentences],

@@ -20,7 +20,6 @@ import { buildLearningSessionKey } from '@/frontend/features/player/learningSess
 import { useRecapPromptStore } from '@/frontend/features/player/components/learning-toolbar/recapPromptStore';
 import RecapEndedPrompt from '@/frontend/features/player/components/learning-toolbar/RecapEndedPrompt';
 import { useNavigate } from 'react-router-dom';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 import PlaybackEmptyState from './EmptyState';
 import LearningPage from '@/frontend/features/chat/LearningPage';
 import useChatPanel from '@/frontend/features/chat/chatStore';
@@ -48,7 +47,7 @@ const PlaybackLayout = () => {
     const mediaErrorCode = usePlayer((s) => s.mediaErrorCode);
     const fullScreen = useLayout((s) => s.fullScreen);
     const podcastMode = useLayout(s => s.podcastMode);
-    const hasSource = usePlayerState((s) => !!s.src);
+    const hasSource = usePlayer((s) => !!s.src);
     const hasLearningContext = useChatPanel((s) => s.hasLearningContext);
     const learningVisible = useChatPanel((s) => s.learningVisible);
     const miniVideoCollapsed = useChatPanel((s) => s.miniVideoCollapsed);

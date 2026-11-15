@@ -230,4 +230,23 @@ describe('单词查询的预置词典优先链路', () => {
         expect(r2).toMatchObject({ word: 'ephemeral' });
         expect(generateMock).toHaveBeenCalledTimes(1);
     });
+
+    it('命中预置多词性词条时，根据上下文句子词性优先展示匹配义项', async () => {
+        const { service } = buildService({
+            dictionaryProvider: Promise.resolve(null),
+            words: [
+                {
+                    word: 'record',
+                    phonetic: '/ˈrekərd/',
+                    translation: 'n. 记录，唱片\nvt. 记录，录制',
+                },
+            ],
+        });
+
+        const asVerb = await service.transWord('recorded', false, undefined, 'She recorded the entire conversation yesterday.');
+        expect(asVerb?.definitions[0]?.partOfSpeech).toBe('vt.');
+
+        const asNoun = await service.transWord('record', false, undefined, 'The runner broke the world record.');
+        expect(asNoun?.definitions[0]?.partOfSpeech).toBe('n.');
+    });
 });

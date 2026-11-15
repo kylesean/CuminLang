@@ -1,8 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
-import { motion, useSpring } from 'framer-motion';
+import { motion, useReducedMotion, useSpring } from 'framer-motion';
 import { cn } from '@/frontend/lib/utils';
 import { usePlayer } from '@/frontend/features/player/playerStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
 import type { Sentence } from '@/common/types/SentenceC';
 import TranslatableLinePodcast from './TranslatableLinePodcast';
@@ -22,13 +21,18 @@ const PodcastViewer = ({ className }: { className?: string }) => {
     const showCn = usePlayerUi((s) => s.showCn);
     const showSourceZh = usePlayerUi((s) => s.showSourceZh);
     const srtTender = usePlayer((s) => s.srtTender);
-    const clearAdjust = () => { void playerActions.clearAdjust(); };
+    const clearAdjust = () => { void usePlayer.getState().clearAdjust(); };
 
     const viewerContainerRef = useRef<HTMLDivElement>(null);
     const activeItemRef = useRef<HTMLDivElement>(null);
+    const prefersReducedMotion = useReducedMotion();
 
-    // 针对 120Hz / 高刷屏精心调校的工业级物理弹簧（极致跟手、无多余振荡）
-    const springY = useSpring(0, {
+    // 针对 120Hz / 高刷屏精心调校的工业级物理弹簧（尊重 prefers-reduced-motion）
+    const springY = useSpring(0, prefersReducedMotion ? {
+        stiffness: 10000,
+        damping: 1000,
+        mass: 0.1,
+    } : {
         stiffness: 340,
         damping: 32,
         mass: 0.6,
@@ -80,8 +84,8 @@ const PodcastViewer = ({ className }: { className?: string }) => {
             )}
         >
             {/* 上下方渐变柔化遮罩 */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-background via-background/85 to-transparent z-20" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-16 h-36 bg-gradient-to-t from-background via-background/85 to-transparent z-20" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-body via-body/85 to-transparent z-20" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-16 h-36 bg-gradient-to-t from-body via-body/85 to-transparent z-20" />
 
             {/* 纯净流动的沉浸式字幕流（GPU 硬件合成层 + 0 重排） */}
             <motion.div
@@ -109,22 +113,22 @@ const PodcastViewer = ({ className }: { className?: string }) => {
                             role="button"
                             tabIndex={0}
                             onClick={() => {
-                                playerActions.gotoSentence(sentence);
+                                usePlayer.getState().gotoSentence(sentence);
                             }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
                                     e.preventDefault();
-                                    playerActions.gotoSentence(sentence);
+                                    usePlayer.getState().gotoSentence(sentence);
                                 }
                             }}
                             style={{
                                 transform: `scale(${scale})`,
                                 opacity,
-                                filter: blur > 0 ? `blur(${blur}px)` : 'none'
+                                filter: !prefersReducedMotion && blur > 0 ? `blur(${blur}px)` : 'none'
                             }}
                             className={cn(
                                 'w-full max-w-3xl px-6 md:px-8 py-2 text-center pointer-events-auto cursor-pointer rounded-2xl origin-center',
-                                'transition-[transform,opacity,filter] duration-300 ease-out will-change-transform will-change-[filter]',
+                                !prefersReducedMotion && 'transition-[transform,opacity,filter] duration-300 ease-out will-change-transform will-change-[filter]',
                                 isCurrent ? 'cursor-default' : 'hover:opacity-80'
                             )}
                         >

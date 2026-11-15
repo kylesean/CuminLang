@@ -83,4 +83,19 @@ describe('WordMatchService', () => {
         expect(refreshed[0].mastery).toBeLessThan(first[0].mastery);
         expect(refreshed[0].mastery).toBeCloseTo(0.8 * Math.pow(0.5, 2 / 336), 6);
     });
+
+    it('支持词表中的多词词组（语块）按时态变形匹配并优先于单词切片', async () => {
+        const repository = {
+            getAll: vi.fn(async () => [
+                buildWord('figure out', 'learning'),
+                buildWord('look', 'familiar'),
+            ]),
+        } as unknown as WordsRepository;
+        const service = new WordMatchServiceImpl(repository);
+
+        const matches = await service.matchWordsInText('She finally figured out how to look happy.');
+
+        expect(matches.map((item) => item.normalized)).toEqual(['figure out', 'look']);
+        expect(matches[0]?.original).toBe('figured out');
+    });
 });

@@ -21,9 +21,7 @@ interface ScriptSentenceRowProps {
     isNoteOpen: boolean;
     showTranslation: boolean;
     searchQuery: string;
-    popEle: string | null;
     sceneDivider?: SceneBoundary;
-    onRequestPop: (key: string) => void;
     onPlaySentence: (sentence: Sentence) => void;
     onPauseAudio: () => void;
     onToggleSave: (sentence: Sentence) => void;
@@ -47,9 +45,7 @@ export function ScriptSentenceRow({
     isNoteOpen,
     showTranslation,
     searchQuery,
-    popEle,
     sceneDivider,
-    onRequestPop,
     onPlaySentence,
     onPauseAudio,
     onToggleSave,
@@ -133,8 +129,6 @@ export function ScriptSentenceRow({
                                 text: sentence.text || '',
                                 searchQuery,
                                 isActiveMatch: false,
-                                popEle,
-                                onRequestPop,
                                 alwaysDark: false,
                                 surface: 'transcript',
                             })}

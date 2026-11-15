@@ -296,4 +296,88 @@ describe('WordEncounterService 复习闭环', () => {
         await expect(service.rateReview({ word: 'journey', rating: 'good' }))
             .rejects.toThrow('不在复习队列');
     });
+
+    it('targetWords 指定队列会过滤已掌握/忽略的词条', async () => {
+        memoryDb = createMemoryDb();
+        const { service, words } = buildService(memoryDb);
+        await words.insertOne({ word: 'journey', translate: '旅程', status: 'learning', source: 'manual' });
+        await words.insertOne({ word: 'orbit', translate: '轨道', status: 'known', source: 'manual' });
+
+        const queue = await service.getReviewQueue(12, ['journey', 'orbit']);
+        expect(queue.items.map((item) => item.word)).toEqual(['journey']);
+    });
+
+    it('复述/角色扮演正向产出支持词形还原，并将已到期复习卡隐式顺延', async () => {
+        memoryDb = createMemoryDb();
+        const { service, words, cards } = buildService(memoryDb);
+        await words.insertOne({ word: 'figure out', translate: '弄明白', status: 'learning', source: 'manual' });
+        await cards.upsert({
+            word: 'figure out',
+            due_at: new Date(Date.now() - DAY_MS).toISOString(),
+            state: 'new',
+            reps: 0,
+            lapses: 0,
+            stability: 0,
+            difficulty: 0,
+            last_review_at: null,
+            last_rating: null,
+        });
+
+        await service.recordProductionEvidence({
+            words: ['figured out'],
+            score: 85,
+            action: 'retell',
+            videoId: 'video-1',
+        });
+
+        const updatedCard = await cards.findByWord('figure out');
+        expect(updatedCard).not.toBeNull();
+        expect(updatedCard!.reps).toBe(1);
+        expect(updatedCard!.last_rating).toBe('good');
+        expect(Date.parse(updatedCard!.due_at)).toBeGreaterThan(Date.now());
+    });
+
+    it('查词 (open) 不推高初始 mastery 为 0 的生词，也不刷新已有 last_seen_at 遗忘时钟', async () => {
+        memoryDb = createMemoryDb();
+        const { service, words } = buildService(memoryDb);
+        await words.insertOne({ word: 'ephemeral', translate: '短暂的', status: 'learning', source: 'manual' });
+        const oldLastSeen = new Date(Date.now() - 10 * DAY_MS).toISOString();
+        await memoryDb.db.update(wordsTable)
+            .set({ mastery: 0, confidence: 0.1, last_seen_at: oldLastSeen })
+            .where(eq(wordsTable.word, 'ephemeral'))
+            .run();
+
+        await service.record({ word: 'ephemeral', action: 'open' });
+
+        const updated = await words.findByWord('ephemeral');
+        expect(updated?.mastery).toBe(0);
+        expect(updated?.last_seen_at).toBe(oldLastSeen);
+    });
+
+    it('未到期的复习卡在重复听写时只更新掌握度，不提前滚动排期', async () => {
+        memoryDb = createMemoryDb();
+        const { service, words, cards } = buildService(memoryDb);
+        await words.insertOne({ word: 'resilient', translate: '有韧性的', status: 'learning', source: 'manual' });
+        const futureDueAt = new Date(Date.now() + 7 * DAY_MS).toISOString();
+        await cards.upsert({
+            word: 'resilient',
+            due_at: futureDueAt,
+            state: 'review',
+            reps: 3,
+            lapses: 0,
+            stability: 7,
+            difficulty: 5,
+            last_review_at: new Date(Date.now() - DAY_MS).toISOString(),
+            last_rating: 'good',
+        });
+
+        await service.record({ word: 'resilient', action: 'dictation', score: 95 });
+
+        const afterWord = await words.findByWord('resilient');
+        const afterCard = await cards.findByWord('resilient');
+        expect(afterWord?.mastery).toBeGreaterThan(0);
+        expect(afterCard?.stability).toBe(7);
+        expect(afterCard?.reps).toBe(3);
+        expect(afterCard?.due_at).toBe(futureDueAt);
+    });
 });

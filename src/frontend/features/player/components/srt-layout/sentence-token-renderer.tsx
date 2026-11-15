@@ -10,8 +10,8 @@ export interface RenderSentenceTokensOptions {
     text: string;
     searchQuery?: string;
     isActiveMatch?: boolean;
-    popEle: string | null;
-    onRequestPop: (key: string) => void;
+    popEle?: string | null;
+    onRequestPop?: (key: string) => void;
     /** 是否显示原文；false 时原文透明（悬停显形），用于主字幕的"隐藏英文"模式。 */
     show?: boolean;
     /** 是否强制深色主题词样式；讲稿流为 true，主字幕跟随主题。 */
@@ -90,8 +90,9 @@ export function renderSentenceTokens({
                         sentenceText={text}
                         sentenceIndex={sentence.index}
                         sentenceHash={textHash}
-                        pop={popEle === partId}
-                        requestPop={() => onRequestPop(partId)}
+                        pop={popEle !== undefined ? popEle === partId : undefined}
+                        requestPop={onRequestPop ? () => onRequestPop(partId) : undefined}
+                        popKey={partId}
                         show={show}
                         alwaysDark={alwaysDark}
                         classNames={wordClassNames}
@@ -138,8 +139,9 @@ export function renderSentenceTokens({
                     sentenceText={text}
                     sentenceIndex={sentence.index}
                     sentenceHash={textHash}
-                    pop={popEle === partId}
-                    requestPop={() => onRequestPop(partId)}
+                        pop={popEle !== undefined ? popEle === partId : undefined}
+                        requestPop={onRequestPop ? () => onRequestPop(partId) : undefined}
+                        popKey={partId}
                     show={show}
                     alwaysDark={alwaysDark}
                     classNames={wordClassNames}

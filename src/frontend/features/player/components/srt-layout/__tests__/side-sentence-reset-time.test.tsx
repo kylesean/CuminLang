@@ -9,8 +9,8 @@ vi.mock('react-i18next', async (importOriginal) => ({
     useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@/frontend/features/player/playerState', () => ({
-    usePlayerState: () => false,
+vi.mock('@/frontend/features/player/playerStore', () => ({
+    usePlayer: Object.assign(() => false, { getState: () => ({}) }),
 }));
 
 const sentence: Sentence = {

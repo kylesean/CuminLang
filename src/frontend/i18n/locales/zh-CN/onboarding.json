@@ -104,6 +104,7 @@
                 "apiKeyLabel": "API Key",
                 "apiKeyPlaceholder": "sk-...",
                 "apiKeyOptionalPlaceholder": "本地服务可留空",
+                "modelLabel": "模型",
                 "modelPlaceholder": "手动输入模型 ID",
                 "saveButton": "保存并启用 AI 接口",
                 "saving": "保存中…",

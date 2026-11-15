@@ -1,14 +1,14 @@
 import path from 'path';
 import { inject, injectable } from 'inversify';
 import TYPES from '@/backend/ioc/types';
+import { clearDB } from '@/backend/infrastructure/db/db';
 import { UPDATE_TOAST_LAST_SHOWN_AT_KEY } from '@/common/constants/systemConfigKeys';
 import type { UpdateCheckResult } from '@/common/types/update-check';
 import { checkUpdate } from '@/backend/services/CheckUpdate';
-import type SystemConfigService from '@/backend/services/SystemConfigService';
+import type SysConfRepository from '@/backend/services/repositories/SysConfRepository';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
-import type DatabaseMaintenance from '@/backend/services/gateways/db/DatabaseMaintenance';
 
 /**
  * 系统维护与杂项应用服务。
@@ -78,23 +78,21 @@ export class SystemServiceImpl implements SystemService {
     /**
      * 构造系统服务实例。
      *
-     * @param systemConfigService 系统配置读写服务。
+     * @param sysConfRepository 系统配置仓储。
      * @param storageDirectoryProvider 外部存储目录提供器。
      * @param fileSystemGateway 文件系统访问端口。
-     * @param databaseMaintenance 数据库维护端口。
      */
     constructor(
-        @inject(TYPES.SystemConfigService) private readonly systemConfigService: SystemConfigService,
+        @inject(TYPES.SysConfRepository) private readonly sysConfRepository: SysConfRepository,
         @inject(TYPES.StorageDirectoryProvider) private readonly storageDirectoryProvider: StorageDirectoryProvider,
         @inject(TYPES.FileSystemGateway) private readonly fileSystemGateway: FileSystemGateway,
-        @inject(TYPES.DatabaseMaintenance) private readonly databaseMaintenance: DatabaseMaintenance,
     ) {}
 
     /**
      * 清空运行环境数据库。
      */
     public async resetDatabase(): Promise<void> {
-        await this.databaseMaintenance.clearAll();
+        await clearDB();
     }
 
     /**
@@ -135,13 +133,13 @@ export class SystemServiceImpl implements SystemService {
         }
 
         const now = Date.now();
-        const lastShownRaw = await this.systemConfigService.getValue(UPDATE_TOAST_LAST_SHOWN_AT_KEY);
+        const lastShownRaw = await this.sysConfRepository.getValue(UPDATE_TOAST_LAST_SHOWN_AT_KEY);
         const lastShownAt = lastShownRaw ? Number(lastShownRaw) : 0;
         const shouldNotify =
             Number.isNaN(lastShownAt) || now - lastShownAt >= SystemServiceImpl.UPDATE_TOAST_MIN_INTERVAL_MS;
 
         if (shouldNotify) {
-            await this.systemConfigService.setValue(UPDATE_TOAST_LAST_SHOWN_AT_KEY, String(now));
+            await this.sysConfRepository.setValue(UPDATE_TOAST_LAST_SHOWN_AT_KEY, String(now));
         }
 
         return {
@@ -157,7 +155,7 @@ export class SystemServiceImpl implements SystemService {
      * @returns 配置值；不存在时返回 `null`。
      */
     public async getSystemConfig(key: string): Promise<string | null> {
-        return this.systemConfigService.getValue(key);
+        return this.sysConfRepository.getValue(key);
     }
 
     /**
@@ -167,6 +165,6 @@ export class SystemServiceImpl implements SystemService {
      * @param value 配置值。
      */
     public async setSystemConfig(key: string, value: string): Promise<void> {
-        await this.systemConfigService.setValue(key, value);
+        await this.sysConfRepository.setValue(key, value);
     }
 }

@@ -20,9 +20,7 @@ import { RadioIndicator } from '@astryxdesign/core/Indicator';
 
 import { cn } from '@/frontend/lib/utils';
 import { CONTROL_POPOVER_PANEL } from '@/frontend/features/player/components/ControlPopover';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 import { useTrainingModeStore } from '@/frontend/features/player/trainingStore';
 import { TrainingSettingsDialog } from '@/frontend/features/player/components/TrainingSettingsDialog';
 import useSetting from '@/frontend/features/settings/settingsStore';
@@ -160,7 +158,7 @@ export default function TrainingMenuButton({
     const shadowing = usePlayer((s) => s.shadowing);
     const sentenceLoop = usePlayer((s) => s.sentenceLoop);
     const activePlan = usePlayer((s) => s.activePlan);
-    const playbackRate = usePlayerState((s) => s.playbackRate);
+    const playbackRate = usePlayer((s) => s.playbackRate);
     const trainingConfig = useTrainingModeStore((s) => s.config);
     const skipGap = useTrainingModeStore((s) => s.skipGap);
     const rewindOnResume = useTrainingModeStore((s) => s.rewindOnResume);
@@ -298,10 +296,10 @@ export default function TrainingMenuButton({
                                     icon={<Play className="w-4 h-4" />}
                                     label={t('controlBar.rowNormalPlayback')}
                                     onSelect={() => {
-                                        playerActions.setSingleRepeat(false);
-                                        playerActions.setAutoPause(false);
-                                        playerActions.setShadowing(false);
-                                        playerActions.setSentenceLoop(null);
+                                        usePlayer.getState().setSingleRepeat(false);
+                                        usePlayer.getState().setAutoPause(false);
+                                        usePlayer.getState().setShadowing(false);
+                                        usePlayer.getState().setSentenceLoop(null);
                                     }}
                                     testId="training-mode-off"
                                 />
@@ -311,7 +309,7 @@ export default function TrainingMenuButton({
                                     label={t('controlBar.rowSingleRepeat')}
                                     rightContent={repeatKey ? <Kbd keys={repeatKey} /> : undefined}
                                     title={repeatShortcut ? `${t('controlBar.rowSingleRepeat')} (${t('controlBar.shortcutHint', { shortcut: repeatShortcut })})` : t('controlBar.rowSingleRepeat')}
-                                    onSelect={() => playerActions.setSingleRepeat(!singleRepeat)}
+                                    onSelect={() => usePlayer.getState().setSingleRepeat(!singleRepeat)}
                                     testId="training-mode-single-repeat"
                                 />
                                 <ModeOptionRow
@@ -320,7 +318,7 @@ export default function TrainingMenuButton({
                                     label={t('controlBar.rowAutoPause')}
                                     rightContent={autoPauseKey ? <Kbd keys={autoPauseKey} /> : undefined}
                                     title={autoPauseShortcut ? `${t('controlBar.rowAutoPause')} (${t('controlBar.shortcutHint', { shortcut: autoPauseShortcut })})` : t('controlBar.rowAutoPause')}
-                                    onSelect={() => playerActions.setAutoPause(!autoPause)}
+                                    onSelect={() => usePlayer.getState().setAutoPause(!autoPause)}
                                     testId="training-mode-auto-pause"
                                 />
                                 <ModeOptionRow
@@ -335,7 +333,7 @@ export default function TrainingMenuButton({
                                     )}
                                     title={t('controlBar.loopTimesTitle', { times: trainingConfig.repeatTimes })}
                                     onSelect={() => {
-                                        playerActions.setSentenceLoop(loopTimesActive ? null : { times: trainingConfig.repeatTimes });
+                                        usePlayer.getState().setSentenceLoop(loopTimesActive ? null : { times: trainingConfig.repeatTimes });
                                     }}
                                     testId="training-mode-loop-times"
                                 />
@@ -351,7 +349,7 @@ export default function TrainingMenuButton({
                                     )}
                                     title={t('controlBar.loopRatesTitle', { rates: trainingConfig.progressiveRates.map((r) => `${r}x`).join(' → ') })}
                                     onSelect={() => {
-                                        playerActions.setSentenceLoop(
+                                        usePlayer.getState().setSentenceLoop(
                                             loopRatesActive
                                                 ? null
                                                 : { times: trainingConfig.progressiveRates.length, rates: trainingConfig.progressiveRates }
@@ -370,14 +368,14 @@ export default function TrainingMenuButton({
                                 label={t('controlBar.rowSkipGap')}
                                 labelTooltip={t('controlBar.skipGapTitle')}
                                 checked={skipGap}
-                                onChange={() => playerActions.setSkipGap(!skipGap)}
+                                onChange={() => useTrainingModeStore.getState().setSkipGap(!skipGap)}
                                 testId="training-assist-skip-gap"
                             />
                             <PopoverSwitchRow
                                 label={t('controlBar.rowRewindOnResume')}
                                 labelTooltip={t('controlBar.rewindTitle')}
                                 checked={rewindOnResume}
-                                onChange={() => playerActions.setRewindOnResume(!rewindOnResume)}
+                                onChange={() => useTrainingModeStore.getState().setRewindOnResume(!rewindOnResume)}
                                 testId="training-assist-rewind-resume"
                             />
                         </VStack>

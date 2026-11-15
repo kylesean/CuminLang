@@ -39,7 +39,7 @@ function stubStartupState(options: {
                     : { failed: false, phase: null, migrationId: null, description: null, errorMessage: null }
             );
         }
-        if (path === 'watch-history/list/basic') {
+        if (path === 'watch-history/list/basic' || path === 'watch-history/list') {
             return Promise.resolve([]);
         }
         return Promise.resolve({});
@@ -64,7 +64,7 @@ describe('应用启动门槛', () => {
 
         render(<App />);
 
-        expect(await screen.findByLabelText('appTitle')).toBeDefined();
+        expect(await screen.findByRole('button', { name: 'home' })).toBeDefined();
         expect(screen.queryByText('steps.storage.heroTitle')).toBeNull();
     });
 

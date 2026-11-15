@@ -36,7 +36,7 @@ const MusicCard: React.FC<MusicCardProps> = ({ fileName }) => {
                 'transition-all duration-300',
             )}
         >
-            <div className="absolute inset-0 bg-gradient-to-t from-background/30 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-body/30 to-transparent" />
             <Music className="w-12 h-12 text-media-fg drop-shadow-lg z-10" />
         </div>
     );

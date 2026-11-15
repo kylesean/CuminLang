@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import TrainingMenuButton from '../TrainingMenuButton';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { useTrainingModeStore } from '@/frontend/features/player/trainingStore';
 
@@ -14,17 +13,6 @@ vi.mock('react-i18next', async (importOriginal) => {
         }),
     };
 });
-
-vi.mock('@/frontend/features/player/components/PlayerActions', () => ({
-    playerActions: {
-        setSingleRepeat: vi.fn(),
-        setAutoPause: vi.fn(),
-        setShadowing: vi.fn(),
-        setSentenceLoop: vi.fn(),
-        setSkipGap: vi.fn(),
-        setRewindOnResume: vi.fn(),
-    },
-}));
 
 vi.mock('@/frontend/features/player/components/TrainingSettingsDialog', () => ({
     TrainingSettingsDialog: ({ open }: { open: boolean }) =>
@@ -70,19 +58,15 @@ describe('TrainingMenuButton', () => {
         fireEvent.click(screen.getByRole('button', { name: /controlBar\.trainingMenuLabel/i }));
 
         fireEvent.click(screen.getByTestId('training-mode-auto-pause'));
-        expect(playerActions.setAutoPause).toHaveBeenCalledWith(true);
-
-        act(() => {
-            usePlayer.setState({ autoPause: true });
-        });
+        expect(usePlayer.getState().autoPause).toBe(true);
         expect(screen.getByTestId('training-mode-auto-pause')).toHaveAttribute('aria-checked', 'true');
         expect(screen.getByTestId('training-mode-off')).toHaveAttribute('aria-checked', 'false');
 
         fireEvent.click(screen.getByTestId('training-mode-off'));
-        expect(playerActions.setSingleRepeat).toHaveBeenCalledWith(false);
-        expect(playerActions.setAutoPause).toHaveBeenCalledWith(false);
-        expect(playerActions.setShadowing).toHaveBeenCalledWith(false);
-        expect(playerActions.setSentenceLoop).toHaveBeenCalledWith(null);
+        expect(usePlayer.getState().singleRepeat).toBe(false);
+        expect(usePlayer.getState().autoPause).toBe(false);
+        expect(usePlayer.getState().shadowing).toBe(false);
+        expect(usePlayer.getState().sentenceLoop).toBeNull();
     });
 
     it('toggles skipGap assistant switch', () => {
@@ -92,7 +76,7 @@ describe('TrainingMenuButton', () => {
         const switchWrapper = screen.getByTestId('training-assist-skip-gap');
         const input = switchWrapper.querySelector('input') || switchWrapper;
         fireEvent.click(input);
-        expect(playerActions.setSkipGap).toHaveBeenCalledWith(true);
+        expect(useTrainingModeStore.getState().skipGap).toBe(true);
     });
 
     it('opens training settings dialog when clicking bottom settings button', () => {

@@ -136,7 +136,8 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
         const {
             transcript,
             audioFile,
-            rhythm,
+            tokens,
+            rhythm: initialRhythm,
             userPcm,
             prosody,
         } = await this.transcribeRecording(
@@ -150,6 +151,7 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
         );
         const alignment = alignPracticeTokens(expectedText, transcript);
 
+        let rhythm = initialRhythm;
         let finalScore = alignment.score;
         let scoringEngine: 'asr' | 'asr+gop' = 'asr';
         const phonemeGopAvailable = this.phonemeGopService ? await this.phonemeGopService.isReady() : false;
@@ -164,11 +166,15 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
             if (gopOutputs && gopOutputs.length > 0) {
                 scoringEngine = 'asr+gop';
                 const byWordIdx = new Map(gopOutputs.map((g) => [g.wordIndex, g]));
+                const ctcWordTimings = new Map<number, { start: number; end: number }>();
                 let expIdx = 0;
                 const wordScores: number[] = [];
                 for (const wordResult of alignment.words) {
                     if (wordResult.status === 'extra') continue;
                     const gop = byWordIdx.get(expIdx);
+                    if (gop?.startSec !== undefined && gop?.endSec !== undefined) {
+                        ctcWordTimings.set(expIdx, { start: gop.startSec, end: gop.endSec });
+                    }
                     expIdx += 1;
                     if (gop) {
                         wordResult.phonemeScore = gop.phonemeScore;
@@ -177,6 +183,16 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
                             wordScores.push(gop.phonemeScore);
                         }
                     }
+                }
+                if (ctcWordTimings.size > 0) {
+                    rhythm = this.analyzeRhythmFromPcm(
+                        userPcm,
+                        expectedText,
+                        transcript,
+                        tokens,
+                        referenceDurationSec,
+                        ctcWordTimings,
+                    );
                 }
                 if (wordScores.length > 0) {
                     const avgPhonemeScore = wordScores.reduce((a, b) => a + b, 0) / wordScores.length;
@@ -210,7 +226,7 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
     public async scoreDictation(params: SentencePracticeDictationParams): Promise<SentencePracticeResultVO> {
         const { fileHash, sentenceIndex, typedText, expectedText } = params;
         this.validateKeys(fileHash, sentenceIndex);
-        const alignment = alignPracticeTokens(expectedText, typedText);
+        const alignment = alignPracticeTokens(expectedText, typedText, { allowHomophones: false });
         await this.persistRecord(
             fileHash,
             sentenceIndex,
@@ -383,6 +399,7 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
     ): Promise<{
         transcript: string;
         audioFile: string;
+        tokens: RhythmToken[];
         rhythm: SentencePracticeRhythmFeedback | null;
         userPcm: PcmAudio | null;
         prosody: SentencePracticeProsodyFeedback | null;
@@ -413,7 +430,7 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
             const prosody = userPcm
                 ? await this.analyzeProsody(practiceRoot, mediaPath, clipRange, userPcm)
                 : null;
-            return { transcript: result.text.trim(), audioFile, rhythm, userPcm, prosody };
+            return { transcript: result.text.trim(), audioFile, tokens: result.tokens, rhythm, userPcm, prosody };
         } catch (error) {
             // 没有练习记录承载的录音没有留存价值,评分失败即清理
             await this.fileSystemGateway.removeFileIfExists(audioAbs).catch(() => undefined);
@@ -431,6 +448,7 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
         transcript: string,
         tokens: RhythmToken[],
         referenceDurationSec?: number,
+        ctcWordTimings?: ReadonlyMap<number, { start: number; end: number }>,
     ): SentencePracticeRhythmFeedback | null {
         try {
             return buildRhythmFeedback({
@@ -439,6 +457,7 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
                 tokens,
                 pcm,
                 referenceDurationSec,
+                ctcWordTimings,
                 lookupPhonetic: (word) => this.lookupPhonetic(word),
             });
         } catch (error) {
@@ -464,12 +483,10 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
         if (!(await this.fileSystemGateway.fileExists(mediaPath))) {
             return null;
         }
-        const refSlicePath = path.join(practiceRoot, 'transient', `ref-${randomUUID()}.m4a`);
         const refWavPath = path.join(practiceRoot, 'transient', `ref-${randomUUID()}.wav`);
         try {
             await this.fileSystemGateway.ensureDirectory(path.dirname(refWavPath));
-            await this.ffmpegService.trimVideo(mediaPath, clipRange.start, clipRange.end, refSlicePath);
-            await this.ffmpegService.convertToWav(refSlicePath, refWavPath);
+            await this.ffmpegService.convertToWav(mediaPath, refWavPath, clipRange);
             const refBuffer = await this.fileSystemGateway.readBinaryFile(refWavPath);
             const refPcm = decodePcm16Wav(refBuffer);
             if (!refPcm) return null;
@@ -477,7 +494,6 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
         } catch {
             return null;
         } finally {
-            await this.fileSystemGateway.removeFileIfExists(refSlicePath).catch(() => undefined);
             await this.fileSystemGateway.removeFileIfExists(refWavPath).catch(() => undefined);
         }
     }

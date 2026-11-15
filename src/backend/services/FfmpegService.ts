@@ -64,9 +64,9 @@ export default interface FfmpegService {
     getVideoInfo(filePath: string): Promise<VideoInfo>;
 
     /**
-     * 转换音频文件为 WAV 格式。
+     * 转换音频文件为 WAV 格式（可选时间裁剪范围）。
      */
-    convertToWav(inputPath: string, outputPath: string): Promise<void>;
+    convertToWav(inputPath: string, outputPath: string, range?: { start: number; end: number }): Promise<void>;
 
     /**
      * 将媒体按时间范围直接转换为 16kHz 单声道 PCM WAV 分片。
@@ -279,10 +279,14 @@ export class FfmpegServiceImpl implements FfmpegService {
     }
 
     /**
-     * 转换音频文件为 WAV 格式（强制 16kHz、单声道、16-bit PCM）。
+     * 转换音频文件为 WAV 格式（强制 16kHz、单声道、16-bit PCM；可选时间裁剪范围）。
      */
     @WithSemaphore('ffmpeg')
-    public async convertToWav(inputPath: string, outputPath: string): Promise<void> {
+    public async convertToWav(
+        inputPath: string,
+        outputPath: string,
+        range?: { start: number; end: number },
+    ): Promise<void> {
         await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(inputPath);
         await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(outputPath);
         await this.ffmpegGateway.convertToWav({
@@ -290,6 +294,8 @@ export class FfmpegServiceImpl implements FfmpegService {
             outputFile: outputPath,
             sampleRate: 16000,
             channels: 1,
+            startSecond: range?.start,
+            endSecond: range?.end,
         });
     }
 

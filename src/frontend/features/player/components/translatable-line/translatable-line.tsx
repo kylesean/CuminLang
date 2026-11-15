@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { cn } from '@/frontend/lib/utils';
 import { FONT_SIZE } from '@/frontend/styles/style';
@@ -25,7 +25,7 @@ interface TranslatableSubtitleLineCoreParam {
 const TranslatableLine = ({
     sentence,
     show,
-    hoverDark,
+    hoverDark = false,
     className,
     wordClassNames,
 }: TranslatableSubtitleLineCoreParam) => {
@@ -35,16 +35,6 @@ const TranslatableLine = ({
     const fontSize = useSetting((state) =>
         state.values.get('appearance.fontSize'),
     );
-    const [popELe, setPopEle] = useState<string | null>(null);
-
-    /**
-     * 记录当前应显示释义弹层的词项。
-     */
-    const handleRequestPop = (k: string) => {
-        if (popELe !== k) {
-            setPopEle(k);
-        }
-    };
 
     /**
      * 禁止双击默认选词，同时保留单击和拖拽选区。
@@ -75,8 +65,6 @@ const TranslatableLine = ({
             {renderSentenceTokens({
                 sentence,
                 text,
-                popEle: popELe,
-                onRequestPop: handleRequestPop,
                 show,
                 alwaysDark: hoverDark,
                 // 主字幕使用主题默认词样式
@@ -89,7 +77,3 @@ const TranslatableLine = ({
 };
 
 export default TranslatableLine;
-
-TranslatableLine.defaultProps = {
-    hoverDark: false
-};

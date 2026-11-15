@@ -5,8 +5,6 @@ import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import StrUtil from '@/common/utils/str-util';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
-import { usePlayerState } from '@/frontend/features/player/playerState';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { cn } from '@/frontend/lib/utils';
 import type { Sentence } from '@/common/types/SentenceC';
@@ -20,11 +18,53 @@ import SubtitleLine from '@/frontend/features/player/components/subtitles/Subtit
 const OVERLAY_LINE_CLASS = 'my-0 mx-10 py-1.5 px-4 bg-media-bg/60 backdrop-blur-xs text-media-fg rounded-lg shadow-lg';
 const OVERLAY_CORE_CLASS = 'text-media-fg media-text-shadow';
 
+interface BlockTranslationLinesProps {
+    item: Sentence;
+    showCn: boolean;
+    showSourceZh: boolean;
+    isOverlay: boolean;
+}
+
+function BlockTranslationLinesBase({
+    item,
+    showCn,
+    showSourceZh,
+    isOverlay,
+}: BlockTranslationLinesProps) {
+    const translation = useTranslation((state) => state.translations.get(item.translationKey)) || '';
+    const renderLine = (key: string, text: string, order: 'second' | 'third', source?: 'ai' | 'source') =>
+        isOverlay
+            ? <SubtitleLine key={key} text={text} order={order} source={source} />
+            : <AdaptiveChineseLine key={key} sentence={item} text={text} order={order} source={source} />;
+
+    const lines: ReactElement[] = [];
+    if (showCn && StrUtil.isNotBlank(translation)) {
+        lines.push(renderLine(
+            `block-translation-${item.key}`,
+            translation,
+            'second',
+            showSourceZh && StrUtil.isNotBlank(item.textZH) ? 'ai' : undefined,
+        ));
+    }
+    if (showSourceZh && StrUtil.isNotBlank(item.textZH)) {
+        lines.push(renderLine(
+            `block-sourceZh-${item.key}`,
+            item.textZH!,
+            lines.length === 0 ? 'second' : 'third',
+            showCn && StrUtil.isNotBlank(translation) ? 'source' : undefined,
+        ));
+    }
+    if (lines.length === 0) return null;
+    return <>{lines}</>;
+}
+
+const BlockTranslationLines = React.memo(BlockTranslationLinesBase);
+
 export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' | 'overlay' }) {
     const isOverlay = variant === 'overlay';
     const logger = getRendererLogger('MainSubtitle');
-    const sentence = usePlayerState((s) => s.currentSentence);
-    const sentences = usePlayerState((s) => s.sentences);
+    const sentence = usePlayer((s) => s.currentSentence);
+    const sentences = usePlayer((s) => s.sentences);
 
     const requestTranslation = useTranslation(state => state.requestTranslation);
     const engine = useTranslation(state => state.engine);
@@ -34,8 +74,6 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
     // 顶层订阅组件所需状态
     const translationKey = sentence?.translationKey || '';
     const newTranslation = useTranslation(state => state.translations.get(translationKey)) || '';
-    /** 整句模式需要渲染块内其他行的译文：订阅整个译文表，任一译文到达都触发重渲染。 */
-    const translations = useTranslation(state => state.translations);
     /** 当前句所在的意群块；整句模式关闭时为 null，回退单行渲染。 */
     const block = usePlayer(state => state.getCurrentBlock());
     /** 显示范围：sentence 仅当前句，context 额外显示前后各一句。 */
@@ -113,10 +151,10 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
     // 两种不会触发胶囊区 mouseleave 的情况兜底关闭悬停临时循环：当前句清空（切视频，胶囊区随早退分支卸载）、组件卸载（离开播放页）
     useEffect(() => {
         if (!sentence) {
-            playerActions.setHoverRepeat(false);
+            usePlayer.getState().setHoverRepeat(false);
         }
     }, [sentence]);
-    useEffect(() => () => { playerActions.setHoverRepeat(false); }, []);
+    useEffect(() => () => { usePlayer.getState().setHoverRepeat(false); }, []);
 
     // 字幕轨道显隐：只在这里订阅展示值，切换入口在视频底部控制条
 
@@ -131,34 +169,7 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
         ? <SubtitleLine key={key} text={text} order={order} source={source} />
         : <AdaptiveChineseLine key={key} sentence={item} text={text} order={order} source={source} />;
 
-    /** 渲染一行字幕的译文与源自带中文（整句模式用），按开关与有无依次输出。 */
-    const renderZhLinesForBlock = (item: Sentence): ReactElement[] => {
-        const lines: ReactElement[] = [];
-        const translation = translations.get(item.translationKey) || '';
-        if (showCn && StrUtil.isNotBlank(translation)) {
-            lines.push(renderZhLine(
-                `block-translation-${item.key}`,
-                item,
-                translation,
-                'second',
-                showSourceZh && StrUtil.isNotBlank(item.textZH) ? 'ai' : undefined,
-            ));
-        }
-        if (showSourceZh && StrUtil.isNotBlank(item.textZH)) {
-            lines.push(renderZhLine(
-                `block-sourceZh-${item.key}`,
-                item,
-                item.textZH!,
-                lines.length === 0 ? 'second' : 'third',
-                showCn && StrUtil.isNotBlank(translation) ? 'source' : undefined,
-            ));
-        }
-        return lines;
-    };
-
-    /**
-     * 渲染当前句（及可选的上下文句子）。
-     */
+    /** 渲染当前句（及可选的上下文句子）。 */
     const renderBlockLines = (): ReactElement[] => {
         if (!block) {
             return [];
@@ -167,26 +178,6 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
         const lines: ReactElement[] = [];
         for (const item of items) {
             const active = item.key === sentence?.key;
-            const itemLines: ReactElement[] = [];
-            if (StrUtil.isNotBlank(item.text)) {
-                itemLines.push(
-                    <div
-                        key={`block-first-${item.key}`}
-                        className={cn(
-                            'w-full shrink-0 transition-opacity',
-                            isOverlay && 'flex justify-center',
-                            !active && 'opacity-50',
-                        )}
-                    >
-                        <TranslatableLine
-                            className={isOverlay ? OVERLAY_LINE_CLASS : undefined}
-                            coreClassName={isOverlay ? OVERLAY_CORE_CLASS : undefined}
-                            sentence={item}
-                        />
-                    </div>
-                );
-            }
-            itemLines.push(...renderZhLinesForBlock(item));
             // 每句（原文 + 它的译文）包成一组：块超出面板时，滚动定位只需要认当前句这一组
             lines.push(
                 <div
@@ -194,7 +185,28 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
                     data-subtitle-active={active ? 'true' : 'false'}
                     className="flex w-full flex-col items-center gap-1.5"
                 >
-                    {itemLines}
+                    {StrUtil.isNotBlank(item.text) && (
+                        <div
+                            key={`block-first-${item.key}`}
+                            className={cn(
+                                'w-full shrink-0 transition-opacity',
+                                isOverlay && 'flex justify-center',
+                                !active && 'opacity-50',
+                            )}
+                        >
+                            <TranslatableLine
+                                className={isOverlay ? OVERLAY_LINE_CLASS : undefined}
+                                coreClassName={isOverlay ? OVERLAY_CORE_CLASS : undefined}
+                                sentence={item}
+                            />
+                        </div>
+                    )}
+                    <BlockTranslationLines
+                        item={item}
+                        showCn={showCn}
+                        showSourceZh={showSourceZh}
+                        isOverlay={isOverlay}
+                    />
                 </div>
             );
         }

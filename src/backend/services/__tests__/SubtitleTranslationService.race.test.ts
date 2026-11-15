@@ -17,42 +17,74 @@ import type OpenAiSubtitleBatchTranslator from '@/backend/services/gateways/tran
 import type LocalSubtitleBatchTranslator from '@/backend/services/gateways/translate/LocalSubtitleBatchTranslator';
 import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
 
+function createHarness(getCurrentTranslationProvider: SettingService['getCurrentTranslationProvider']) {
+    const batchTrans = vi.fn().mockResolvedValue(new Map([['hello', '你好']]));
+    const getClient = vi.fn().mockReturnValue({ batchTrans } as unknown as TencentTranslateClient);
+    const findBySentencesAndMode = vi.fn().mockResolvedValue([]);
+    const upsertMany = vi.fn().mockResolvedValue(undefined);
+    const fireAndForget = vi.fn();
+
+    const service = new SubtitleTranslationServiceImpl(
+        { getCurrentTranslationProvider } as unknown as SettingService,
+        {} as LocalAiService,
+        {
+            get: vi.fn().mockReturnValue({
+                sentences: [{
+                    index: 0,
+                    text: 'hello',
+                    translationKey: 'hash-1:0',
+                    start: 0,
+                    end: 1,
+                }],
+            }),
+        } as unknown as CacheService,
+        {} as ModelRoutingService,
+        { findBySentencesAndMode, upsertMany } as unknown as SentenceTranslatesRepository,
+        { fireAndForget } as unknown as RendererGateway,
+        { getClient } as unknown as ClientProviderService<TencentTranslateClient>,
+        {} as OpenAiSubtitleBatchTranslator,
+        {} as LocalSubtitleBatchTranslator,
+        { clear: vi.fn(), markFallback: vi.fn() } as unknown as ResourceFallbackService,
+    );
+
+    return { service, batchTrans, getClient, findBySentencesAndMode, upsertMany, fireAndForget };
+}
+
 describe('SubtitleTranslationService updateDemand 与 releaseSession 竞态', () => {
-    it('updateDemand 等待配置解析期间若会话已 releaseSession，不应复活已关闭会话', async () => {
+    it('会话保持活跃时，updateDemand 会调度执行翻译并向渲染进程推送结果', async () => {
+        const harness = createHarness(vi.fn().mockResolvedValue('tencent'));
+
+        await harness.service.updateDemand({
+            fileHash: 'hash-1',
+            currentIndex: 0,
+            demandId: 1,
+            rendererSessionId: 'renderer-a',
+        });
+
+        await vi.waitFor(() => {
+            expect(harness.fireAndForget).toHaveBeenCalledWith(
+                'translation/batch-result',
+                expect.objectContaining({
+                    translations: [
+                        expect.objectContaining({ fileHash: 'hash-1', key: 'hash-1:0', translation: '你好' }),
+                    ],
+                }),
+            );
+        });
+        expect(harness.batchTrans).toHaveBeenCalledWith(['hello'], expect.objectContaining({ fileHash: 'hash-1' }));
+    });
+
+    it('updateDemand 等待配置解析期间若会话已 releaseSession，不应复活已关闭会话或触发翻译请求', async () => {
         let resolveProvider!: (v: 'tencent') => void;
-        const settingService = {
-            getCurrentTranslationProvider: vi.fn().mockImplementation(
+        const harness = createHarness(
+            vi.fn().mockImplementation(
                 () => new Promise<'tencent'>((resolve) => {
                     resolveProvider = resolve;
                 }),
             ),
-        } as unknown as SettingService;
-
-        const cacheService = {
-            get: vi.fn().mockReturnValue({
-                sentences: [{ index: 0, text: 'hello', startTime: 0, endTime: 1 }],
-            }),
-        } as unknown as CacheService;
-
-        const service = new SubtitleTranslationServiceImpl(
-            settingService,
-            {} as LocalAiService,
-            cacheService,
-            {} as ModelRoutingService,
-            {} as SentenceTranslatesRepository,
-            {} as RendererGateway,
-            {} as ClientProviderService<TencentTranslateClient>,
-            {} as OpenAiSubtitleBatchTranslator,
-            {} as LocalSubtitleBatchTranslator,
-            { clear: vi.fn(), markFallback: vi.fn() } as unknown as ResourceFallbackService,
         );
 
-        const schedulerUpdateSpy = vi.spyOn(
-            (service as unknown as { scheduler: { updateDemand: (d: unknown) => void } }).scheduler,
-            'updateDemand',
-        );
-
-        const pendingDemand = service.updateDemand({
+        const pendingDemand = harness.service.updateDemand({
             fileHash: 'hash-1',
             currentIndex: 0,
             demandId: 1,
@@ -60,10 +92,17 @@ describe('SubtitleTranslationService updateDemand 与 releaseSession 竞态', ()
         });
 
         // 在异步解析尚未完成前释放会话
-        service.releaseSession('hash-1', 'renderer-a');
+        harness.service.releaseSession('hash-1', 'renderer-a');
         resolveProvider('tencent');
         await pendingDemand;
 
-        expect(schedulerUpdateSpy).not.toHaveBeenCalled();
+        // 调度器若被误触发，微任务队列中会发起仓储查重和翻译请求；放行微任务后验证仍完全静默
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(harness.findBySentencesAndMode).not.toHaveBeenCalled();
+        expect(harness.getClient).not.toHaveBeenCalled();
+        expect(harness.batchTrans).not.toHaveBeenCalled();
+        expect(harness.fireAndForget).not.toHaveBeenCalled();
     });
 });

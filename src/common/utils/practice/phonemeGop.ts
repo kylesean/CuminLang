@@ -99,6 +99,9 @@ export interface WordPhonemeGopOutput {
     wordIndex: number;
     phonemeScore: number;
     phonemes: SentencePracticePhonemeResult[];
+    /** 基于 CTC 对齐帧估算的词起止时间（秒，wav2vec2 20ms 步长）。 */
+    startSec?: number;
+    endSec?: number;
 }
 
 /**
@@ -210,6 +213,7 @@ export function scoreWordsWithCtcGop(
         }
     }
 
+    const frameRangesByWord = new Map<number, { minFrame: number; maxFrame: number }>();
     const byWord = new Map<number, SentencePracticePhonemeResult[]>();
     for (let k = 0; k < K; k += 1) {
         const item = flatPhonemes[k];
@@ -220,6 +224,13 @@ export function scoreWordsWithCtcGop(
             byWord.set(item.wordIndex, list);
             continue;
         }
+        const prevRange = frameRangesByWord.get(item.wordIndex);
+        const minF = frames[0];
+        const maxF = frames[frames.length - 1];
+        frameRangesByWord.set(item.wordIndex, {
+            minFrame: prevRange ? Math.min(prevRange.minFrame, minF) : minF,
+            maxFrame: prevRange ? Math.max(prevRange.maxFrame, maxF) : maxF,
+        });
 
         let targetSum = 0;
         let bestOtherId = -1;
@@ -259,12 +270,24 @@ export function scoreWordsWithCtcGop(
         byWord.set(item.wordIndex, list);
     }
 
+    const FRAME_STEP_SEC = 0.02;
     const outputs: WordPhonemeGopOutput[] = [];
     for (const wt of wordTargets) {
         const phonemes = byWord.get(wt.wordIndex);
         if (!phonemes || phonemes.length === 0) continue;
         const avg = Math.round(phonemes.reduce((acc, p) => acc + p.score, 0) / phonemes.length);
-        outputs.push({ wordIndex: wt.wordIndex, phonemeScore: avg, phonemes });
+        const frameRange = frameRangesByWord.get(wt.wordIndex);
+        outputs.push({
+            wordIndex: wt.wordIndex,
+            phonemeScore: avg,
+            phonemes,
+            ...(frameRange
+                ? {
+                    startSec: Number((frameRange.minFrame * FRAME_STEP_SEC).toFixed(3)),
+                    endSec: Number(((frameRange.maxFrame + 1) * FRAME_STEP_SEC).toFixed(3)),
+                }
+                : {}),
+        });
     }
     return outputs;
 }

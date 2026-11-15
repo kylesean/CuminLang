@@ -17,11 +17,10 @@ import {
 } from '@/common/types/vocabulary';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { useLearningSessionSince } from '@/frontend/features/player/learningSessionStore';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { videoLearningApi } from '@/frontend/features/video-learning/videoLearningApi';
 import { revalidateReviewQueue } from '@/frontend/features/video-learning/reviewQueue';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { togglePlayerView } from '@/frontend/features/player/lib/player-view-controller';
 import ContextSuggestionChip from './ContextSuggestionChip';
 import LearningMomentChip from './LearningMomentChip';
@@ -94,8 +93,8 @@ export default function SubtitleLearningHints({
     const videoId = usePlaybackSession((state) => state.videoId);
     const srtHash = usePlaybackSession((state) => state.srtHash);
     const session = useLearningSessionSince(videoId, srtHash ?? sentence.fileHash);
-    const playing = usePlayerState((state) => state.playing);
-    const playRequestId = usePlayerState((state) => state.playRequestId);
+    const playing = usePlayer((state) => state.playing);
+    const playRequestId = usePlayer((state) => state.playRequestId);
     const paused = !playing;
     // off / calm 不主动提示，节奏为 null，整条链路直接跳过。
     const cadence = resolveMomentCadence(guidance);
@@ -239,7 +238,7 @@ export default function SubtitleLearningHints({
         setOpenForKey(null);
         const next = togglePlayerView('practice');
         if (next === 'practice') {
-            playerActions.pause();
+            usePlayer.getState().pause();
         }
     };
 

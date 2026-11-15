@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { alignPracticeTokens, normalizePracticeTokens } from '@/common/utils/practice/pronunciationScoring';
+import {
+    alignPracticeTokens,
+    computeContentWeightedScore,
+    normalizePracticeTokens,
+} from '@/common/utils/practice/pronunciationScoring';
 
 describe('alignPracticeTokens 词级对齐评分', () => {
     it('完全一致(大小写/标点差异被规范化)得满分', () => {
@@ -61,5 +65,28 @@ describe('alignPracticeTokens 词级对齐评分', () => {
         // 听写输入都不可能产出它，留在期望序列只会虚增分母造成固定扣分
         expect(normalizePracticeTokens('oh - really')).toEqual(['oh', 'really']);
         expect(normalizePracticeTokens('a well-known fact')).toEqual(['a', 'well-known', 'fact']);
+    });
+
+    it('口语缩读与连读弱化形式等价对齐且容忍同音词', () => {
+        expect(alignPracticeTokens("It's gonna be fine", 'It is going to be fine').score).toBe(100);
+        expect(alignPracticeTokens('Do not worry', "Don't worry").score).toBe(100);
+        expect(alignPracticeTokens('I know their right answer', 'I no there write answer').score).toBe(100);
+    });
+
+    it('关闭 allowHomophones 时，听写同音异义错字不能判为 match 或满分', () => {
+        const result = alignPracticeTokens(
+            'Write their name right there',
+            'Right there name write their',
+            { allowHomophones: false },
+        );
+        expect(result.score).toBeLessThan(100);
+        expect(result.words.map((w) => w.status)).toEqual(['sub', 'sub', 'match', 'sub', 'sub']);
+    });
+
+    it('computeContentWeightedScore 赋予实词比功能词更高权重', () => {
+        const missedFunctionWord = alignPracticeTokens('to the bright mountain', 'the bright mountain');
+        const missedContentWord = alignPracticeTokens('to the bright mountain', 'to the mountain');
+        expect(computeContentWeightedScore(missedFunctionWord.words))
+            .toBeGreaterThan(computeContentWeightedScore(missedContentWord.words));
     });
 });

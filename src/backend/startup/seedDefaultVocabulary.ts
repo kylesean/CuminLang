@@ -5,7 +5,7 @@ import { words } from '@/backend/infrastructure/db/tables/words';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import TYPES from '@/backend/ioc/types';
 import container from '@/backend/ioc/inversify.config';
-import type SystemConfigService from '@/backend/services/SystemConfigService';
+import type SysConfRepository from '@/backend/services/repositories/SysConfRepository';
 import { type DefaultVocabularyWord, loadDefaultVocabulary } from '@/backend/utils/defaultVocabulary';
 import {
     DEFAULT_VOCABULARY_VERSION,
@@ -17,7 +17,7 @@ export { DEFAULT_VOCABULARY_VERSION, writeDefaultVocabularyInTransaction };
 
 export const seedDefaultVocabularyIfNeeded = async (): Promise<void> => {
     const logger = getMainLogger('seedDefaultVocabulary');
-    const sysConf = container.get<SystemConfigService>(TYPES.SystemConfigService);
+    const sysConf = container.get<SysConfRepository>(TYPES.SysConfRepository);
 
     const seededVersion = await sysConf.getValue(SEED_VERSION_KEY);
     if (seededVersion === DEFAULT_VOCABULARY_VERSION) {

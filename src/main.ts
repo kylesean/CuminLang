@@ -14,13 +14,14 @@ import { seedDefaultVocabularyIfNeeded } from '@/backend/startup/seedDefaultVoca
 import type DpTaskService from '@/backend/services/DpTaskService';
 import runStartupMigrations from '@/backend/startup/runStartupMigrations';
 import { getMigrationFailure } from '@/backend/startup/migrationFailureState';
-import { initProxyFeature } from '@/backend/startup/initProxy';
+import { disposeProxyFeature, initProxyFeature } from '@/backend/startup/initProxy';
 import container from '@/backend/ioc/inversify.config';
 import TYPES from '@/backend/ioc/types';
 import type { VideoLearningService } from '@/backend/services/VideoLearningService';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import { initProcessWatchdog } from '@/backend/startup/initProcessWatchdog';
 import { initLogMaintenance } from '@/backend/startup/initLogMaintenance';
+import { terminateAllActiveChildProcesses } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { RESET_DB_RESYNC_FLAG } from '@/common/constants/resetDb';
 import { isDevelopmentMode } from '@/backend/utils/runtimeEnv';
 import { storeGet } from '@/backend/infrastructure/settings/store';
@@ -41,40 +42,43 @@ if (squirrelStartup) {
 const logger = getMainLogger('MainStartup');
 const devtoolsLogger = getMainLogger('devtools');
 const startupStartedAt = performance.now();
-// 组合根运行期注入并发工具日志端口，保持通用工具不依赖基础设施。
-setConcurrencyLogger(getMainLogger('concurrency'));
-// 进程级崩溃不经过 JS 异常通道，监听必须在任何初始化工作之前挂上。
-initProcessWatchdog();
-// JS 层未捕获异常落盘与日志目录预算清理，紧随进程级监听。
-initLogMaintenance();
 
-/**
- * 注册本地媒体协议。
- *
- * 必须在 app ready 之前完成：Electron 只在 ready 之前接受特权协议声明，
- * 之后再调用 registerSchemesAsPrivileged 不会生效。
- *
- * 为什么需要自定义协议：渲染端要播放媒体库里的本地视频，`file://` 页面在
- * `webSecurity` 打开后无法读取同源的 `file://` 子资源；改成 `media://` 之后，
- * 渲染端拿到的是标准安全源，由主进程按目录归属做授权后再返回文件内容。
- */
-protocol.registerSchemesAsPrivileged([
-    {
-        scheme: MEDIA_PROTOCOL_SCHEME,
-        privileges: {
-            // 让 URL 按 media://host/path 的标准形态解析。
-            standard: true,
-            // 视作安全源，渲染端可以像加载 https 资源一样加载媒体。
-            secure: true,
-            supportFetchAPI: true,
-            // <video>/<audio> 的 Range 拖动播放依赖流式响应。
-            stream: true,
-            // 不给协议开后门：后续的 CSP 仍然对 media:// 生效。
-            bypassCSP: false,
-            corsEnabled: false,
+if (!squirrelStartup) {
+    // 组合根运行期注入并发工具日志端口，保持通用工具不依赖基础设施。
+    setConcurrencyLogger(getMainLogger('concurrency'));
+    // 进程级崩溃不经过 JS 异常通道，监听必须在任何初始化工作之前挂上。
+    initProcessWatchdog();
+    // JS 层未捕获异常落盘与日志目录预算清理，紧随进程级监听。
+    initLogMaintenance();
+
+    /**
+     * 注册本地媒体协议。
+     *
+     * 必须在 app ready 之前完成：Electron 只在 ready 之前接受特权协议声明，
+     * 之后再调用 registerSchemesAsPrivileged 不会生效。
+     *
+     * 为什么需要自定义协议：渲染端要播放媒体库里的本地视频，`file://` 页面在
+     * `webSecurity` 打开后无法读取同源的 `file://` 子资源；改成 `media://` 之后，
+     * 渲染端拿到的是标准安全源，由主进程按目录归属做授权后再返回文件内容。
+     */
+    protocol.registerSchemesAsPrivileged([
+        {
+            scheme: MEDIA_PROTOCOL_SCHEME,
+            privileges: {
+                // 让 URL 按 media://host/path 的标准形态解析。
+                standard: true,
+                // 视作安全源，渲染端可以像加载 https 资源一样加载媒体。
+                secure: true,
+                supportFetchAPI: true,
+                // <video>/<audio> 的 Range 拖动播放依赖流式响应。
+                stream: true,
+                // 不给协议开后门：后续的 CSP 仍然对 media:// 生效。
+                bypassCSP: false,
+                corsEnabled: false,
+            },
         },
-    },
-]);
+    ]);
+}
 
 /**
  * 记录主进程启动阶段耗时，统一使用进程启动后的相对毫秒数。
@@ -99,9 +103,11 @@ const mainWindowRef = {
  * 结果是迁移冲突、端口占用与设置来回翻转。
  * 抢不到锁的实例立刻退出，把启动意图交还给先启动的那个实例。
  */
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const hasSingleInstanceLock = squirrelStartup ? false : app.requestSingleInstanceLock();
 
-if (!hasSingleInstanceLock) {
+if (squirrelStartup) {
+    // Squirrel 安装/更新/卸载钩子只需退出，不拉起主流程。
+} else if (!hasSingleInstanceLock) {
     logger.info('another instance is already running, quit current one');
     app.quit();
 } else {
@@ -238,6 +244,9 @@ const createWindow = () => {
             preload: path.join(__dirname, 'preload.cjs'),
             // 本地媒体改由 media:// 协议提供，同源策略不再需要关闭。
             webSecurity: true,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
         },
         ...(isMac
             ? {
@@ -459,6 +468,8 @@ app.on('before-quit', (event) => {
     logger.info('app before quit', { forceExitAfterMs: QUIT_FORCE_EXIT_TIMEOUT_MS });
     armForceExitWatchdog();
     try {
+        disposeProxyFeature();
+        terminateAllActiveChildProcesses();
         const localAiShutdown = container.get<LocalAiService>(TYPES.LocalAiService).shutdown()
             .catch((error) => {
                 logger.error('local AI shutdown failed', { error });

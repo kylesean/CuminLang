@@ -75,11 +75,6 @@ export default function WordDetailCanvas({
     const [generatingDef, setGeneratingDef] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [ratingBusy, setRatingBusy] = useState(false);
-    const [popEle, setPopEle] = useState<string | null>(null);
-
-    const handleRequestPop = (nextKey: string) => {
-        setPopEle((prev) => (prev === nextKey ? null : nextKey));
-    };
 
     useEffect(() => {
         let cancelled = false;
@@ -452,8 +447,6 @@ export default function WordDetailCanvas({
                                         {renderSentenceTokens({
                                             sentence: buildOccurrenceSentence(occ),
                                             text: occ.context,
-                                            popEle,
-                                            onRequestPop: handleRequestPop,
                                             alwaysDark: false,
                                             surface: 'transcript',
                                             sentenceHash: occ.id,

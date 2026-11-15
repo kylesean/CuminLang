@@ -6,9 +6,8 @@ import SpeedSlider from '../SpeedSlider';
 import { cn } from '@/frontend/lib/utils';
 import useLayout from '@/frontend/app/stores/layoutStore';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import FullscreenToggleButton from '@/frontend/features/player/components/subtitles/FullscreenToggleButton';
 import ControlBarPinButton from '@/frontend/features/player/components/subtitles/ControlBarPinButton';
 import {
@@ -54,7 +53,7 @@ export default function PlaybackControlBar({
         volume,
         playbackRate,
         muted
-    } = usePlayerState(
+    } = usePlayer(
         useShallow((state) => ({
             volume: state.volume,
             playbackRate: state.playbackRate,
@@ -128,8 +127,8 @@ export default function PlaybackControlBar({
     const handleScrubCommit = useCallback((time: number) => {
         logger.debug('time slider commit', { time });
         onTimeChange?.(time);
-        playerActions.setAutoPause(false);
-        playerActions.setSingleRepeat(false);
+        usePlayer.getState().setAutoPause(false);
+        usePlayer.getState().setSingleRepeat(false);
     }, [onTimeChange]);
 
     return (
@@ -176,14 +175,14 @@ export default function PlaybackControlBar({
                                 speed={playbackRate}
                                 popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
-                                onSpeedChange={(speed) => playerActions.setPlaybackRate(speed)}
+                                onSpeedChange={(speed) => usePlayer.getState().setPlaybackRate(speed)}
                             />
                             <VolumeSlider
                                 tone="media"
                                 muted={muted}
-                                onMutedChange={(nextMuted) => playerActions.setMuted(nextMuted)}
+                                onMutedChange={(nextMuted) => usePlayer.getState().setMuted(nextMuted)}
                                 volume={volume}
-                                onVolumeChange={(nextVolume) => playerActions.setVolume(nextVolume)}
+                                onVolumeChange={(nextVolume) => usePlayer.getState().setVolume(nextVolume)}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
                                 collapseSliderBelowXl
                             />

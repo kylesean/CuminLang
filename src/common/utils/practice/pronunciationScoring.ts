@@ -1,4 +1,5 @@
 import type { SentencePracticeWordResult } from '@/common/contracts/sentence-practice';
+import { isContentLemma } from '@/common/learning/contentWords';
 import { cleanWord, isWordToken, splitWords } from '@/common/utils/subtitle/tokenize';
 import { stripNonSpeechAnnotations } from '@/common/utils/practice/practiceTextClean';
 
@@ -74,9 +75,146 @@ export const normalizePracticeTokens = (text: string): string[] =>
  * @param actualText 用户产出文本。
  * @returns 分数与按原句词序排列的逐词结果(extra 词追加在末尾)。
  */
-export const alignPracticeTokens = (expectedText: string, actualText: string): PracticeAlignment => {
-    const expected = normalizePracticeTokens(expectedText);
-    const actual = normalizePracticeTokens(actualText);
+const CONTRACTION_PAIRS: Record<string, readonly string[]> = {
+    "it's": ['it', 'is'],
+    "that's": ['that', 'is'],
+    "there's": ['there', 'is'],
+    "what's": ['what', 'is'],
+    "he's": ['he', 'is'],
+    "she's": ['she', 'is'],
+    "i'm": ['i', 'am'],
+    "you're": ['you', 'are'],
+    "we're": ['we', 'are'],
+    "they're": ['they', 'are'],
+    "i've": ['i', 'have'],
+    "you've": ['you', 'have'],
+    "we've": ['we', 'have'],
+    "they've": ['they', 'have'],
+    "i'll": ['i', 'will'],
+    "you'll": ['you', 'will'],
+    "we'll": ['we', 'will'],
+    "they'll": ['they', 'will'],
+    "don't": ['do', 'not'],
+    "doesn't": ['does', 'not'],
+    "didn't": ['did', 'not'],
+    "isn't": ['is', 'not'],
+    "aren't": ['are', 'not'],
+    "wasn't": ['was', 'not'],
+    "weren't": ['were', 'not'],
+    "can't": ['can', 'not'],
+    "won't": ['will', 'not'],
+    "wouldn't": ['would', 'not'],
+    "shouldn't": ['should', 'not'],
+    "couldn't": ['could', 'not'],
+};
+
+const SPOKEN_REDUCTIONS: Record<string, readonly string[]> = {
+    gonna: ['going', 'to'],
+    wanna: ['want', 'to'],
+    gotta: ['got', 'to'],
+    kinda: ['kind', 'of'],
+    sorta: ['sort', 'of'],
+    outta: ['out', 'of'],
+    lemme: ['let', 'me'],
+    gimme: ['give', 'me'],
+};
+
+const HOMOPHONE_GROUPS: readonly (readonly string[])[] = [
+    ['know', 'no'],
+    ['two', 'too', 'to'],
+    ['right', 'write'],
+    ['there', 'their'],
+    ['here', 'hear'],
+    ['for', 'four'],
+    ['see', 'sea'],
+    ['by', 'bye', 'buy'],
+    ['new', 'knew'],
+    ['our', 'hour'],
+    ['one', 'won'],
+    ['wait', 'weight'],
+    ['wear', 'where'],
+    ['weather', 'whether'],
+    ['peace', 'piece'],
+    ['whole', 'hole'],
+    ['weak', 'week'],
+    ['sun', 'son'],
+    ['meet', 'meat'],
+    ['break', 'brake'],
+];
+
+const HOMOPHONE_MAP = (() => {
+    const map = new Map<string, number>();
+    HOMOPHONE_GROUPS.forEach((group, groupId) => {
+        for (const word of group) {
+            map.set(word, groupId);
+        }
+    });
+    return map;
+})();
+
+const areTokensEquivalent = (expected: string, actual: string, allowHomophones = true): boolean => {
+    if (expected === actual) return true;
+    if (!allowHomophones) return false;
+    const g1 = HOMOPHONE_MAP.get(expected);
+    const g2 = HOMOPHONE_MAP.get(actual);
+    return g1 !== undefined && g1 === g2;
+};
+
+/**
+ * 展开英语口语缩读（it's ↔ it is, don't ↔ do not）与连读弱化形式（gonna ↔ going to）。
+ */
+export const expandSpokenTokens = (tokens: readonly string[]): string[] => {
+    const expanded: string[] = [];
+    for (let i = 0; i < tokens.length; i += 1) {
+        const curr = tokens[i];
+        const next = tokens[i + 1];
+        if (next) {
+            const joined = `${curr}'${next}`;
+            const pairExpansion = CONTRACTION_PAIRS[joined];
+            if (pairExpansion) {
+                expanded.push(...pairExpansion);
+                i += 1;
+                continue;
+            }
+        }
+        const singleExpansion = SPOKEN_REDUCTIONS[curr];
+        if (singleExpansion) {
+            expanded.push(...singleExpansion);
+            continue;
+        }
+        expanded.push(curr);
+    }
+    return expanded;
+};
+
+/**
+ * 按实词（权重 1.0）与功能词（权重 0.4）计算加权得分，突出关键语义词表现。
+ */
+export const computeContentWeightedScore = (words: readonly SentencePracticeWordResult[]): number => {
+    let weightedMatched = 0;
+    let totalWeight = 0;
+    for (const entry of words) {
+        if (entry.status === 'extra' || !entry.expected) continue;
+        const weight = isContentLemma(entry.expected) ? 1 : 0.4;
+        totalWeight += weight;
+        if (entry.status === 'match') {
+            weightedMatched += weight;
+        } else if (entry.status === 'sub') {
+            weightedMatched += weight * SUB_WEIGHT * (entry.similarity ?? 0);
+        }
+    }
+    if (totalWeight <= 0) return 100;
+    return Math.round(Math.max(0, Math.min(100, (weightedMatched / totalWeight) * 100)));
+};
+
+export const alignPracticeTokens = (
+    expectedText: string,
+    actualText: string,
+    options?: { allowHomophones?: boolean },
+): PracticeAlignment => {
+    const allowHomophones = options?.allowHomophones ?? true;
+    const expected = expandSpokenTokens(normalizePracticeTokens(expectedText));
+    const actual = expandSpokenTokens(normalizePracticeTokens(actualText));
     if (expected.length === 0) {
         return {
             score: actual.length === 0 ? 100 : 0,
@@ -99,7 +237,9 @@ export const alignPracticeTokens = (expectedText: string, actualText: string): P
     for (let j = 1; j <= m; j++) dp[0][j] = j;
     for (let i = 1; i <= n; i++) {
         for (let j = 1; j <= m; j++) {
-            const pairCost = 1 - charSimilarity(expected[i - 1], actual[j - 1]);
+            const pairCost = areTokensEquivalent(expected[i - 1], actual[j - 1], allowHomophones)
+                ? 0
+                : 1 - charSimilarity(expected[i - 1], actual[j - 1]);
             dp[i][j] = Math.min(
                 dp[i - 1][j - 1] + pairCost,
                 dp[i - 1][j] + 1,
@@ -114,9 +254,10 @@ export const alignPracticeTokens = (expectedText: string, actualText: string): P
     let j = m;
     while (i > 0 || j > 0) {
         if (i > 0 && j > 0) {
-            const pairCost = 1 - charSimilarity(expected[i - 1], actual[j - 1]);
+            const equivalent = areTokensEquivalent(expected[i - 1], actual[j - 1], allowHomophones);
+            const pairCost = equivalent ? 0 : 1 - charSimilarity(expected[i - 1], actual[j - 1]);
             if (dp[i][j] === dp[i - 1][j - 1] + pairCost) {
-                if (expected[i - 1] === actual[j - 1]) {
+                if (equivalent) {
                     raw.push({ expected: expected[i - 1], heard: actual[j - 1], status: 'match' });
                 } else {
                     raw.push({

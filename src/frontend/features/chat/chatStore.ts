@@ -3,10 +3,9 @@
  */
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { engEqual, p } from '@/common/utils/Util';
+import { p } from '@/common/utils/Util';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
-import { getTtsUrl, playAudioUrl } from '@/frontend/infrastructure/audio/AudioPlayer';
 import StrUtil from '@/common/utils/str-util';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { TypeGuards } from '@/common/utils/TypeGuards';
@@ -25,12 +24,6 @@ import usePracticePanel from '@/frontend/features/practice/practiceStore';
 const DEFAULT_PRESET_ID = 'image-schema-tutor';
 
 export type ChatPanelState = {
-    internal: {
-        context: {
-            value: string | null;
-            time: number;
-        };
-    };
     chatSessionId: string;
     topicText: string;
     topicTranslation: string;
@@ -85,24 +78,11 @@ export type ChatPanelActions = {
     setAttachedFocusExpr: (expr: string | null) => void;
     setPreviewingEvidenceIndex: (index: number | null) => void;
     setMiniVideoCollapsed: (collapsed: boolean) => void;
-    updateInternalContext: (value: string) => void;
-    ctxMenuOpened: () => void;
-    ctxMenuExplain: () => void;
-    ctxMenuPlayAudio: () => void;
-    ctxMenuPolish: () => void;
-    ctxMenuQuote: () => void;
-    ctxMenuCopy: () => void;
     setInput: (input: string) => void;
     consumeQueuedMessage: (id: number) => void;
 };
 
 const empty = (): ChatPanelState => ({
-    internal: {
-        context: {
-            value: null,
-            time: 0,
-        },
-    },
     chatSessionId: '',
     topicText: '',
     topicTranslation: '',
@@ -684,69 +664,6 @@ const useChatPanel = create(
         setMiniVideoCollapsed: (miniVideoCollapsed: boolean) => {
             set({ miniVideoCollapsed });
         },
-        updateInternalContext: (value: string) => {
-            get().internal.context.value = value;
-            get().internal.context.time = Date.now();
-        },
-        ctxMenuOpened: () => {
-            const internalContext = getInternalContext();
-            chatLogger.debug('context menu opened', { context: internalContext });
-            set({
-                context: internalContext,
-            });
-        },
-        ctxMenuExplain: async () => {
-            const userSelect = window.getSelection()?.toString() ?? '';
-            if (StrUtil.isBlank(userSelect)) return;
-            const context = get().context;
-            if (StrUtil.isBlank(context) || engEqual(context, userSelect)) {
-                await get().sent(`用物理意象讲透 "${userSelect}" 的本意与用法`);
-            } else {
-                await get().sent([
-                    `结合这句台词，帮我拆解 "${userSelect}" 的物理画面和语境深意：`,
-                    '"""',
-                    context,
-                    '"""',
-                ].join('\n'));
-            }
-        },
-        ctxMenuPlayAudio: async () => {
-            let text: string | null = window.getSelection()?.toString() ?? '';
-            if (StrUtil.isBlank(text)) {
-                text = get().context;
-            }
-            if (StrUtil.isBlank(text)) return;
-            const ttsUrl = await getTtsUrl(text);
-            await playAudioUrl(ttsUrl);
-        },
-        ctxMenuPolish: async () => {
-            let text = window.getSelection()?.toString() ?? '';
-            if (StrUtil.isBlank(text)) {
-                text = get().context ?? '';
-            }
-            if (StrUtil.isBlank(text)) return;
-            await get().sent(`帮我把这句话按母语者的习惯给出 2 个地道改写（附上语感差异）：\n"""\n${text}\n"""`);
-        },
-        ctxMenuQuote: () => {
-            let text: string | null = window.getSelection()?.toString() ?? '';
-            if (StrUtil.isBlank(text)) {
-                text = get().context;
-            }
-            if (StrUtil.isBlank(text)) return;
-            text = `<context>\n${text.trim()}\n</context>\n\n`;
-            if (StrUtil.isNotBlank(get().input)) {
-                text = `${get().input}\n${text}`;
-            }
-            set({ input: text });
-        },
-        ctxMenuCopy: async () => {
-            let text: string | null = window.getSelection()?.toString() ?? '';
-            if (StrUtil.isBlank(text)) {
-                text = get().context;
-            }
-            if (StrUtil.isBlank(text)) return;
-            await navigator.clipboard.writeText(text);
-        },
         setInput: (input: string) => {
             set({ input });
         },
@@ -757,14 +674,5 @@ const useChatPanel = create(
         },
     })),
 );
-
-export function getInternalContext(): string | null {
-    const context = useChatPanel.getState().internal.context;
-    if (!context) return null;
-    if (Math.abs(Date.now() - context.time) > 500) {
-        return null;
-    }
-    return context.value;
-}
 
 export default useChatPanel;

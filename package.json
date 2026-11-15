@@ -200,6 +200,7 @@
     "pre-push": "pnpm run test:run"
   },
   "lint-staged": {
-    "{src,qa}/**/*.{ts,tsx}": "eslint --fix"
+    "{src,qa}/**/*.{ts,tsx,mjs}": "eslint --fix --max-warnings=0",
+    "scripts/**/*.mjs": "eslint --fix --max-warnings=0"
   }
 }

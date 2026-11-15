@@ -48,38 +48,112 @@ export function analyzeWords(text: string): AnalyzedToken[] {
     }));
 }
 
+/** 已编译的多词词组匹配项。 */
+interface CompiledPhrase<TPayload> {
+    canonical: string;
+    lemmas: string[];
+    surfaces: string[];
+    entry: VocabularyEntry<TPayload>;
+}
+
 /**
  * 字幕侧使用 wink 的 POS-aware lemma 查询索引；词表侧保留用户输入原文，
- * 不拆分、不做 lemma 归一化，也不生成额外词形。
+ * 单词按原文索引，多词词组（lexical chunks）按首词 lemma 分桶并以最长匹配优先。
  */
 export class WinkVocabularyMatcher<TPayload> implements VocabularyMatcher<TPayload> {
     private readonly wordIndex = new Map<string, VocabularyEntry<TPayload>>();
+    private readonly phraseBuckets = new Map<string, CompiledPhrase<TPayload>[]>();
 
     /**
      * 编译词表 lemma 索引。
      * @param entries 词表原始词条及其业务对象。
      */
     constructor(entries: VocabularyEntry<TPayload>[]) {
+        const pushBucket = (bucketKey: string, compiled: CompiledPhrase<TPayload>) => {
+            if (!bucketKey) return;
+            const list = this.phraseBuckets.get(bucketKey) ?? [];
+            if (!list.includes(compiled)) {
+                list.push(compiled);
+                list.sort((a, b) => b.lemmas.length - a.lemmas.length);
+                this.phraseBuckets.set(bucketKey, list);
+            }
+        };
+
         entries.forEach((entry) => {
             const key = entry.text.trim().toLowerCase();
             if (!key) return;
+            const phraseTokens = /\s/u.test(key)
+                ? analyzeWords(key).filter((token) => token.type === 'word')
+                : [];
+            if (phraseTokens.length >= 2) {
+                const lemmas = phraseTokens.map((token) => token.lemma.toLowerCase());
+                const surfaces = phraseTokens.map((token) => token.text.toLowerCase());
+                const compiled: CompiledPhrase<TPayload> = {
+                    canonical: key,
+                    lemmas,
+                    surfaces,
+                    entry,
+                };
+                pushBucket(lemmas[0], compiled);
+                pushBucket(surfaces[0], compiled);
+                return;
+            }
             this.wordIndex.set(key, entry);
         });
     }
 
     /**
-     * 分析整段字幕并按 lemma 查找词表。
+     * 分析整段字幕并按 lemma 查找词表（优先匹配连续多词词组，其次单词）。
      * @param text 一行字幕原文。
      * @returns 命中的原文词形和对应词表条目。
      */
     match(text: string): VocabularyMatch<TPayload>[] {
         if (!text?.trim()) return [];
-        return this.analyze(text).flatMap((token) => {
-            if (token.type !== 'word') return [];
+        const wordTokens = this.analyze(text).filter((token) => token.type === 'word');
+        const matches: VocabularyMatch<TPayload>[] = [];
+
+        for (let i = 0; i < wordTokens.length; i += 1) {
+            const token = wordTokens[i];
             const lemma = token.lemma.toLowerCase();
+            const surface = token.text.toLowerCase();
+
+            const bucket = this.phraseBuckets.get(lemma) ?? this.phraseBuckets.get(surface);
+            let matchedPhrase: CompiledPhrase<TPayload> | null = null;
+            if (bucket) {
+                for (const candidate of bucket) {
+                    if (i + candidate.lemmas.length > wordTokens.length) continue;
+                    const allMatched = candidate.lemmas.every((expectedLemma, offset) => {
+                        const target = wordTokens[i + offset];
+                        return (
+                            target.lemma.toLowerCase() === expectedLemma
+                            || target.text.toLowerCase() === candidate.surfaces[offset]
+                        );
+                    });
+                    if (allMatched) {
+                        matchedPhrase = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (matchedPhrase) {
+                const span = matchedPhrase.lemmas.length;
+                const original = wordTokens.slice(i, i + span).map((item) => item.text).join(' ');
+                matches.push({
+                    original,
+                    normalized: matchedPhrase.canonical,
+                    payload: matchedPhrase.entry.payload,
+                });
+                i += span - 1;
+                continue;
+            }
+
             const entry = this.wordIndex.get(lemma);
-            return entry ? [{ original: token.text, normalized: lemma, payload: entry.payload }] : [];
-        });
+            if (entry) {
+                matches.push({ original: token.text, normalized: lemma, payload: entry.payload });
+            }
+        }
+        return matches;
     }
 
     /**
@@ -87,7 +161,7 @@ export class WinkVocabularyMatcher<TPayload> implements VocabularyMatcher<TPaylo
      * @param text 原文。
      * @returns token 语义信息。
      */
-    private analyze(text: string): Array<{ text: string; lemma: string; type: string }> {
+    private analyze(text: string): AnalyzedToken[] {
         return analyzeWords(text);
     }
 }

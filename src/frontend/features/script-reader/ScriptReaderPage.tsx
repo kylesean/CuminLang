@@ -69,7 +69,6 @@ export default function ScriptReaderPage() {
     const [filter, setFilter] = useState<ScriptReaderFilter>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [showTranslation, setShowTranslation] = useState(true);
-    const [popEle, setPopEle] = useState<string | null>(null);
     const [openNoteKey, setOpenNoteKey] = useState<string | null>(null);
     const [sceneDividers, setSceneDividers] = useState<SceneBoundary[]>([]);
     const [savedByKey, setSavedByKey] = useState<Map<string, SavedSentenceVO>>(() => new Map());
@@ -141,7 +140,6 @@ export default function ScriptReaderPage() {
         setFilter('all');
         setSearchQuery('');
         setOpenNoteKey(null);
-        setPopEle(null);
         setSceneDividers([]);
     }, []);
 
@@ -525,10 +523,6 @@ export default function ScriptReaderPage() {
         setTimeout(() => scrollToSentenceIndex(sentenceIndex), 0);
     }, [filter, searchQuery, audioReader, activeDoc, scrollToSentenceIndex]);
 
-    const handleRequestPop = useCallback((key: string) => {
-        setPopEle((prev) => (prev === key ? prev : key));
-    }, []);
-
     const handlePlaySentence = useCallback((target: Sentence) => {
         audioReader.playFromSentenceIndex(target.index);
     }, [audioReader]);
@@ -573,7 +567,7 @@ export default function ScriptReaderPage() {
                     />
 
                     {/* 右栏：阅读画布 */}
-                    <main className="flex-1 min-w-0 flex flex-col min-h-0 bg-body/60">
+                    <section aria-label={t('scriptReader.canvasLabel', { defaultValue: '文稿阅读画布' })} className="flex-1 min-w-0 flex flex-col min-h-0 bg-body/60">
                         {activeDoc ? (
                             <>
                                 <ScriptReaderToolbar
@@ -635,9 +629,7 @@ export default function ScriptReaderPage() {
                                                                 isNoteOpen={openNoteKey === key}
                                                                 showTranslation={showTranslation}
                                                                 searchQuery={searchQuery}
-                                                                popEle={popEle}
                                                                 sceneDivider={dividerByIndex.get(s.index)}
-                                                                onRequestPop={handleRequestPop}
                                                                 onPlaySentence={handlePlaySentence}
                                                                 onPauseAudio={audioReader.stop}
                                                                 onToggleSave={handleToggleSave}
@@ -664,9 +656,7 @@ export default function ScriptReaderPage() {
                                                             isNoteOpen={openNoteKey === key}
                                                             showTranslation={showTranslation}
                                                             searchQuery={searchQuery}
-                                                            popEle={popEle}
                                                             sceneDivider={dividerByIndex.get(s.index)}
-                                                            onRequestPop={handleRequestPop}
                                                             onPlaySentence={handlePlaySentence}
                                                             onPauseAudio={audioReader.stop}
                                                             onToggleSave={handleToggleSave}
@@ -692,11 +682,9 @@ export default function ScriptReaderPage() {
                                                         isPlaying={audioReader.isPlaying}
                                                         showTranslation={showTranslation}
                                                         searchQuery={searchQuery}
-                                                        popEle={popEle}
                                                         savedKeys={savedKeys}
                                                         savedByKey={savedByKey}
                                                         openNoteKey={openNoteKey}
-                                                        onRequestPop={handleRequestPop}
                                                         onPlaySentence={handlePlaySentence}
                                                         onPauseAudio={audioReader.stop}
                                                         onToggleSave={handleToggleSave}
@@ -717,11 +705,9 @@ export default function ScriptReaderPage() {
                                                     isPlaying={audioReader.isPlaying}
                                                     showTranslation={showTranslation}
                                                     searchQuery={searchQuery}
-                                                    popEle={popEle}
                                                     savedKeys={savedKeys}
                                                     savedByKey={savedByKey}
                                                     openNoteKey={openNoteKey}
-                                                    onRequestPop={handleRequestPop}
                                                     onPlaySentence={handlePlaySentence}
                                                     onPauseAudio={audioReader.stop}
                                                     onToggleSave={handleToggleSave}
@@ -762,7 +748,7 @@ export default function ScriptReaderPage() {
                                 </Text>
                             </div>
                         )}
-                    </main>
+                    </section>
                 </Card>
             </div>
         </div>

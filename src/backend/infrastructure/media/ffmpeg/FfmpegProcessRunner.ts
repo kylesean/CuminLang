@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from 'child_process';
+import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { FfmpegExecutionError } from '@/backend/services/gateways/media/FfmpegGateway';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import { OutputTail } from '@/backend/utils/output-tail';
@@ -83,6 +84,7 @@ export class FfmpegProcessRunner {
 
         /** 用于跟踪当前子进程，便于取消时发送信号。 */
         let processRef: ChildProcess | null = null;
+        let processExited = false;
         /** SIGKILL 升级定时器；进程退出后必须清理，避免残留句柄。 */
         let sigkillTimer: NodeJS.Timeout | undefined;
 
@@ -92,6 +94,7 @@ export class FfmpegProcessRunner {
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
             processRef = child;
+            trackActiveChildProcess(child);
 
             let stdoutText = '';
             child.stdout?.on('data', (chunk) => {
@@ -113,12 +116,21 @@ export class FfmpegProcessRunner {
             });
 
             child.on('error', (error) => {
+                processExited = true;
+                processRef = null;
+                if (sigkillTimer) {
+                    clearTimeout(sigkillTimer);
+                    sigkillTimer = undefined;
+                }
                 reject(error);
             });
 
             child.on('close', (code) => {
+                processExited = true;
+                processRef = null;
                 if (sigkillTimer) {
                     clearTimeout(sigkillTimer);
+                    sigkillTimer = undefined;
                 }
                 const exitCode = code ?? -1;
                 const durationMs = Date.now() - startedAt;
@@ -151,10 +163,10 @@ export class FfmpegProcessRunner {
 
         const cancel = () => {
             cancelRequested = true;
-            if (!processRef || processRef.killed) return;
+            if (!processRef || processExited) return;
             processRef.kill('SIGTERM');
             sigkillTimer = setTimeout(() => {
-                if (!processRef || processRef.killed) return;
+                if (!processRef || processExited) return;
                 processRef.kill('SIGKILL');
             }, 1200);
         };

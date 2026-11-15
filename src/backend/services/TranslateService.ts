@@ -18,6 +18,10 @@ import type EnglishDictionaryService from '@/backend/services/EnglishDictionaryS
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import type LocalAiService from '@/backend/services/LocalAiService';
 import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
+import {
+    rankDefinitionsByContextPos,
+    rankEnglishSensesByContextPos,
+} from '@/backend/utils/dictionary/parseDictionaryTranslation';
 
 export default interface TranslateService {
     transWord(
@@ -284,11 +288,18 @@ export class TranslateServiceImpl implements TranslateService {
         if (!result) {
             return result;
         }
+        const definitions = result.source === 'builtin' || result.source === 'imported'
+            ? rankDefinitionsByContextPos(result.definitions, str, context)
+            : result.definitions;
         const englishSenses = this.englishDictionaryService.lookup(str);
         if (!englishSenses || englishSenses.length === 0) {
-            return result;
+            return definitions === result.definitions ? result : { ...result, definitions };
         }
-        return { ...result, englishSenses };
+        return {
+            ...result,
+            definitions,
+            englishSenses: rankEnglishSensesByContextPos(englishSenses, str, context),
+        };
     }
 
     /**

@@ -86,7 +86,7 @@ Astryx 的 `--color-<status>` 是**填充色**，文字色在 `--color-text-<sta
 - 间距走 4px 网格：`gap-1`(4px) / `gap-1.5`(6px) / `gap-2`(8px) / `gap-3`(12px)。
 - 控件高度用 Astryx 的 `--size-element-sm` 等 token，不要写死 `h-7` / `h-8`。
   （工具条按钮的 32px 网格在 `toolbarStyles.ts` 里统一，属于有意的例外。）
-- 弹层宽度：播放设置与训练面板统一 **320px**。改宽度必须同步两处，
+- 弹层宽度：播放设置与训练面板统一 **340px**。改宽度必须同步两处，
   否则同一控制条上的两个弹层会错位。
 - 圆角用 `rounded-md`(element) / `rounded-lg`(container) / `rounded-2xl`(page)。
   不要写 `rounded-[10px]`。
@@ -125,21 +125,15 @@ Astryx 的 `SegmentedControl` 容器是 `width: fit-content` + `max-width: 100%`
 标签侧用 `min-w-0 shrink whitespace-nowrap`：允许被压缩到省略号，
 但**不允许折行**——折成「词汇提/示」两行比省略号更破坏对齐。
 
-如果标签在 320px 里放不下，说明选项太多：改用 `Select`，而不是继续加宽弹层。
+如果标签在 340px 里放不下，说明选项太多：改用 `Select`，而不是继续加宽弹层。
 
 ### 5.2 紧凑设置面板的排版原语
 
 设置面板「显得乱」几乎总是同一组原因：行内边距不一致、控件与标签的对齐基线
 不同、有的条目有底色有的没有、说明文字常驻导致行高参差。
 
-Astryx 官方 `settings-dialog` 模板给出了三条规则，本项目实现为
-`PopoverSettingRow.tsx` 里的原语，**新面板必须复用，不要重写**：
-
-| 原语 | 用途 |
-| --- | --- |
-| `PopoverSwitchRow` | 布尔设置（开关在右） |
-| `PopoverControlRow` | 自定义控件（分段/选择器在右） |
-| `PopoverSettingGroup` | 一个主题一张 `Card variant="muted"`，行间 `Divider` |
+`PopoverSwitchRow.tsx` 提供了布尔开关原语（开关在右、行内边距统一、工具提示收进 `InfoTip`），
+新面板中的开关行必须复用它，避免手写多种对齐基线。
 
 规则：
 
@@ -153,20 +147,6 @@ Astryx 官方 `settings-dialog` 模板给出了三条规则，本项目实现为
    分隔线也无法拉通到卡片边缘。
 5. **控件永不收缩**（`shrink-0`），文本列 `min-w-0` 允许换行。
 6. **分组标题用 `Text type="supporting"`**，与卡片左边缘齐平（不要缩进到行标题）。
-
-面板骨架：
-
-```tsx
-<div className="flex flex-col gap-3">
-  <PopoverSettingGroup title={t('...groupPlayback')}>
-    <PopoverSwitchRow label="…" checked={…} onChange={…} />
-  </PopoverSettingGroup>
-  <PopoverSettingGroup title={t('...groupSubtitle')}>
-    <PopoverSwitchRow … />
-    <PopoverControlRow label="…" control={<SegmentedControl … />} />
-  </PopoverSettingGroup>
-</div>
-```
 
 ## 6. 文案与本地化
 

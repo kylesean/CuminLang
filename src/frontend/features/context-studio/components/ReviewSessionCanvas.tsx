@@ -23,6 +23,7 @@ import type { WordItem } from '@/frontend/features/video-learning/components/Wor
 import { contextStudioApi } from '@/frontend/features/context-studio/contextStudioApi';
 import { videoLearningApi } from '@/frontend/features/video-learning/videoLearningApi';
 import { playContextAudio, stopActiveAudio } from '@/frontend/infrastructure/audio/AudioPlayer';
+import { ClozeContextSentence } from '@/frontend/features/review/ClozeContextSentence';
 import { cn } from '@/frontend/lib/utils';
 
 interface ReviewSessionCanvasProps {
@@ -33,53 +34,6 @@ interface ReviewSessionCanvasProps {
     onRated: (word: string, result: ReviewRateResultVO) => void;
     onOpenWord: (word: string) => void;
     onExit: () => void;
-}
-
-function escapeRegExp(input: string): string {
-    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * 将例句中的目标单词替换为掩码或高亮片段，避免剧透答案。
- */
-function renderContextSentence(
-    text: string,
-    targetWord: string,
-    revealed: boolean,
-) {
-    const cleanWord = targetWord.trim();
-    if (!cleanWord) {
-        return text;
-    }
-    const regex = new RegExp(`(\\b${escapeRegExp(cleanWord)}\\w*)`, 'gi');
-    const parts = text.split(regex);
-    if (parts.length <= 1) {
-        return text;
-    }
-
-    return parts.map((part, idx) => {
-        if (idx % 2 === 1) {
-            if (!revealed) {
-                return (
-                    <span
-                        key={idx}
-                        className="inline-flex items-center px-2 py-0.5 mx-0.5 rounded-md bg-muted border border-border/50 text-secondary font-medium select-none"
-                    >
-                        _____
-                    </span>
-                );
-            }
-            return (
-                <span
-                    key={idx}
-                    className="font-semibold text-accent underline decoration-accent/50 underline-offset-4"
-                >
-                    {part}
-                </span>
-            );
-        }
-        return <span key={idx}>{part}</span>;
-    });
 }
 
 const RATING_OPTIONS: ReadonlyArray<{
@@ -548,7 +502,11 @@ export function ReviewSessionCanvas({
                             {primaryContext ? (
                                 <div className="rounded-lg border border-border/40 bg-body/60 p-4 flex flex-col gap-2">
                                     <p className="text-base text-primary leading-relaxed">
-                                        {renderContextSentence(primaryContext.text, currentCard.word, revealed)}
+                                        <ClozeContextSentence
+                                            text={primaryContext.text}
+                                            targetWord={currentCard.word}
+                                            revealed={revealed}
+                                        />
                                     </p>
                                     {revealed && primaryContext.contextZh && (
                                         <p className="text-sm text-secondary leading-relaxed">

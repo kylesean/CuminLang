@@ -24,6 +24,14 @@ describe('applyMasteryEvidence', () => {
         expect(saved.suggestedStatus).toBeUndefined();
     });
 
+    it('初始 mastery 为 0 的生词查词时保持 0，不向 0.35 虚涨', () => {
+        const opened = applyMasteryEvidence({ mastery: 0, confidence: 0 }, { kind: 'open' });
+
+        expect(opened.mastery).toBe(0);
+        expect(opened.confidence).toBeGreaterThan(0);
+        expect(opened.suggestedStatus).toBeUndefined();
+    });
+
     it('高分练习提升掌握度，证据足够时建议 familiar', () => {
         const result = applyMasteryEvidence(
             { mastery: 0.6, confidence: 0.4 },

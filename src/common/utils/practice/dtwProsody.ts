@@ -163,8 +163,9 @@ export const compareProsodyDtw = (
     }
 
     const denom = Math.sqrt(denR * denU);
-    const pearson = denom > 1e-8 ? num / denom : 0;
-    const energyCorrelation = Math.round(Math.max(0, Math.min(100, ((pearson + 1) / 2) * 100)));
+    const energyCorrelation = denom > 1e-8
+        ? Math.round(Math.max(0, Math.min(100, (((num / denom) + 1) / 2) * 100)))
+        : 0;
     const pauseMatchScore = Math.round((pauseMatches / aligned.length) * 100);
     const prosodyScore = Math.round(energyCorrelation * 0.6 + pauseMatchScore * 0.4);
 

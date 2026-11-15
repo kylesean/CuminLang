@@ -37,8 +37,6 @@ import { createBoostedAudio, useAudioVolume } from '@/frontend/infrastructure/au
 import { usePopover } from '@astryxdesign/core/Popover';
 import { CONTROL_POPOVER_PANEL } from '@/frontend/features/player/components/ControlPopover';
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import useTranslationStore from '@/frontend/features/player/translationStore';
@@ -192,7 +190,7 @@ export default function PracticeDock() {
     const recorderBusy = recorderPhase !== 'idle';
     const recorderProcessing = recorderPhase === 'processing';
 
-    const currentSentence = usePlayerState((s) => s.currentSentence);
+    const currentSentence = usePlayer((s) => s.currentSentence);
     const sentences = usePlayer((s) => s.sentences);
     const srtTender = usePlayer((s) => s.srtTender);
     const translations = useTranslationStore((s) => s.translations);
@@ -340,7 +338,7 @@ export default function PracticeDock() {
         latestUnitKeyRef.current = unitKey;
         audioRef.current?.pause();
         audioRef.current = null;
-        playerActions.clearPracticeClip?.();
+        usePlayer.getState().clearPracticeClip?.();
         setDictationRevealed(false);
         setPeekingSpoiler(false);
     }, [unitKey, mode, setDictationRevealed, setPeekingSpoiler]);
@@ -350,14 +348,14 @@ export default function PracticeDock() {
         if (!visible) {
             audioRef.current?.pause();
             audioRef.current = null;
-            playerActions.clearPracticeClip?.();
+            usePlayer.getState().clearPracticeClip?.();
         }
     }, [visible]);
 
     useEffect(() => () => {
         audioRef.current?.pause();
         audioRef.current = null;
-        playerActions.clearPracticeClip?.();
+        usePlayer.getState().clearPracticeClip?.();
     }, []);
 
     const translationText = useMemo(() => {
@@ -370,12 +368,12 @@ export default function PracticeDock() {
     }, [activeUnit, translations]);
 
     const playClip = useCallback((unit: PracticeUnit, rate?: number) => {
-        if (playerActions.playPracticeClip) {
-            playerActions.playPracticeClip(unit.range, unit.anchor, rate !== undefined ? { rate } : undefined);
+        if (usePlayer.getState().playPracticeClip) {
+            usePlayer.getState().playPracticeClip(unit.range, unit.anchor, rate !== undefined ? { rate } : undefined);
             return;
         }
-        playerActions.gotoSentence(unit.anchor);
-        playerActions.play();
+        usePlayer.getState().gotoSentence(unit.anchor);
+        usePlayer.getState().play();
     }, []);
 
     const handleReplay = useCallback(() => {
@@ -403,7 +401,7 @@ export default function PracticeDock() {
         if (autoPlay) {
             playClip(targetUnit);
         } else {
-            playerActions.seekToTarget?.({ time: targetUnit.range.start, target: targetUnit.anchor, play: false });
+            usePlayer.getState().seekToTarget?.({ time: targetUnit.range.start, target: targetUnit.anchor, play: false });
         }
     }, [currentFilteredPos, filteredUnits, playClip, t]);
 

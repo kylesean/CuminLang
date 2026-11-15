@@ -10,6 +10,7 @@ import StrUtil from '@/common/utils/str-util';
 import type WatchHistoryRepository from '@/backend/services/repositories/WatchHistoryRepository';
 import { WatchHistoryProjectType, type WatchHistoryRecord } from '@/backend/services/repositories/WatchHistoryRepository';
 import type WatchHistoryExtRepository from '@/backend/services/repositories/WatchHistoryExtRepository';
+import type { WatchHistoryExtRecord } from '@/backend/services/repositories/WatchHistoryExtRepository';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
@@ -110,7 +111,10 @@ export default WatchHistoryService;
 
 
 /** 将一条观看历史记录转换为展示数据。 */
-type WatchHistoryItemBuilder = (history: WatchHistoryRecord) => Promise<WatchHistoryVO | null>;
+type WatchHistoryItemBuilder = (
+    history: WatchHistoryRecord,
+    preloadedExt?: WatchHistoryExtRecord | null,
+) => Promise<WatchHistoryVO | null>;
 
 /**
  * 编排观看历史相关的用户动作。
@@ -204,7 +208,8 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
                 return [];
             }
 
-            const items = await this.buildItems(records, buildItem);
+            const extMap = await this.watchHistoryExtRepository.findByWatchHistoryIds(records.map((r) => r.id));
+            const items = await this.buildItems(records, buildItem, extMap);
             const merged = mergeHtml5Variants(items);
             merged.sort((a, b) => (
                 (a.displayFileName ?? a.fileName).localeCompare(b.displayFileName ?? b.fileName)
@@ -212,29 +217,33 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
             return merged;
         }
 
-        const files = await this.watchHistoryRepository.listByProjectType(WatchHistoryProjectType.FILE);
-        const fileItems = await this.buildItems(files, buildItem);
-
-        const folders = await this.watchHistoryRepository.listDistinctFoldersByProjectType(
-            WatchHistoryProjectType.DIRECTORY,
+        const [files, directoryRecords] = await Promise.all([
+            this.watchHistoryRepository.listByProjectType(WatchHistoryProjectType.FILE),
+            this.watchHistoryRepository.listByProjectTypeOrderedByUpdatedAtDesc(WatchHistoryProjectType.DIRECTORY),
+        ]);
+        const extMap = await this.watchHistoryExtRepository.findByWatchHistoryIds(
+            [...files, ...directoryRecords].map((r) => r.id),
         );
+        const fileItems = await this.buildItems(files, buildItem, extMap);
+
+        const historiesByFolder = new Map<string, WatchHistoryRecord[]>();
+        for (const record of directoryRecords) {
+            const list = historiesByFolder.get(record.base_path);
+            if (list) {
+                list.push(record);
+            } else {
+                historiesByFolder.set(record.base_path, [record]);
+            }
+        }
+
+        const singleFileKeys = new Set(fileItems.map((f) => `${f.basePath}\0${f.fileName}`));
         const folderItems: WatchHistoryVO[] = [];
-        for (const folder of folders) {
-            const folderHistories = await this.watchHistoryRepository
-                .listByBasePathAndProjectTypeOrderedByUpdatedAtDesc(
-                    folder,
-                    WatchHistoryProjectType.DIRECTORY,
-                );
-            const item = await this.buildFolderItem(folderHistories, buildItem);
-            if (item) {
+        for (const folderHistories of historiesByFolder.values()) {
+            const item = await this.buildFolderItem(folderHistories, buildItem, extMap);
+            if (item && !singleFileKeys.has(`${item.basePath}\0${item.fileName}`)) {
                 // 如果当前目录项展示的代表性视频（及其路径）已经在单文件列表 fileItems 中单独存在，
                 // 则不应在同一最近列表中展示重合项，避免同一视频的单文件和所属文件夹同时并排挤在最近列表中
-                const isDuplicateWithSingleFile = fileItems.some(
-                    (f) => f.basePath === item.basePath && f.fileName === item.fileName,
-                );
-                if (!isDuplicateWithSingleFile) {
-                    folderItems.push(item);
-                }
+                folderItems.push(item);
             }
         }
 
@@ -248,14 +257,16 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
      *
      * @param histories 按更新时间倒序排列的目录视频记录。
      * @param buildItem 单条视频记录的构建方式。
+     * @param extMap 预加载的扩展字段映射。
      * @returns 目录展示项；没有可展示的视频时返回 `null`。
      */
     private async buildFolderItem(
         histories: WatchHistoryRecord[],
         buildItem: WatchHistoryItemBuilder,
+        extMap: Map<string, WatchHistoryExtRecord>,
     ): Promise<WatchHistoryVO | null> {
         for (const history of histories) {
-            const item = await buildItem(history);
+            const item = await buildItem(history, extMap.get(history.id) ?? null);
             if (item) {
                 const folderName = path.basename(history.base_path.replace(/[\\/]+$/, ''));
                 return {
@@ -306,10 +317,11 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
     private async buildItems(
         histories: WatchHistoryRecord[],
         buildItem: WatchHistoryItemBuilder,
+        extMap: Map<string, WatchHistoryExtRecord>,
     ): Promise<WatchHistoryVO[]> {
         const items: WatchHistoryVO[] = [];
         for (const history of histories) {
-            const item = await buildItem(history);
+            const item = await buildItem(history, extMap.get(history.id) ?? null);
             if (item) {
                 items.push(item);
             }
@@ -327,7 +339,7 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
         await this.watchHistoryLibrary.sync();
         const items = await this.listItems(
             basePath,
-            (history) => this.watchHistoryViewBuilder.buildFull(history),
+            (history, preloadedExt) => this.watchHistoryViewBuilder.buildFull(history, preloadedExt),
             true,
         );
         for (const item of items) {
@@ -345,7 +357,7 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
     public async listBasic(basePath: string): Promise<WatchHistoryVO[]> {
         const items = await this.listItems(
             basePath,
-            (history) => this.watchHistoryViewBuilder.buildBasic(history),
+            (history, preloadedExt) => this.watchHistoryViewBuilder.buildBasic(history, preloadedExt),
             false,
         );
         for (const item of items) {

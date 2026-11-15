@@ -125,11 +125,11 @@ export function getHoldRecords(): HoldRecord[] {
  * @returns 写入到缓冲里的条目（请求类写入会在下一帧补写 `to`）。
  */
 export function recordScrollWrite(entry: Omit<ScrollWriteEntry, 't'>): ScrollWriteEntry {
-    const record: ScrollWriteEntry = { ...entry, t: performance.now() };
-    if (!isDevMode()) {
-        // 生产构建不记流水：一次性对象返回给调用方，不占内存也不暴露内部状态
-        return record;
+    if (!import.meta.env.DEV && !isDevMode()) {
+        // 生产构建不记流水也不额外采样性能时间戳
+        return { ...entry, t: 0 };
     }
+    const record: ScrollWriteEntry = { ...entry, t: performance.now() };
     scrollWrites.push(record);
     if (scrollWrites.length > MAX_SCROLL_WRITES) {
         scrollWrites.splice(0, scrollWrites.length - MAX_SCROLL_WRITES);
@@ -155,6 +155,9 @@ export function findPlayerSidebarScroller(): HTMLElement | null {
  * @param source 来源标识。
  */
 export function recordScrollRequest(source: string): void {
+    if (!import.meta.env.DEV && !isDevMode()) {
+        return;
+    }
     const scroller = findPlayerSidebarScroller();
     const from = scroller?.scrollTop ?? 0;
     const record = recordScrollWrite({ source, from, to: from, kind: 'request' });

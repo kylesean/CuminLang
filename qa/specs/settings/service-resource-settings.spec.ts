@@ -37,7 +37,7 @@ const DEFAULT_MODEL = SettingKeyObj['models.openai.available'];
  * 详情接口不下发明文，只给「•••• + 末四位」的脱敏提示；输入框留空表示沿用已保存的值。
  * 按末四位拼出完整文案，既能抓住「明文回显」回归，也能抓住「脱敏格式退化」。
  */
-const SAVED_KEY_PLACEHOLDER = `已保存 ••••${API_KEY.slice(-4)}，留空即沿用`;
+const SAVED_KEY_PLACEHOLDER = `已保存密钥（••••${API_KEY.slice(-4)}），输入新密钥后点保存替换`;
 
 /**
  * 删除模型行：先点行内删除，再在统一确认弹窗里确认。
@@ -62,12 +62,13 @@ test.describe('服务与资源设置', () => {
         await openResourcesTab(page, '云端服务');
 
         await page.getByPlaceholder('sk-...').fill(API_KEY);
+        await page.getByRole('button', { name: '保存' }).click();
         await page.getByPlaceholder('https://api.deepseek.com/v1').fill(ENDPOINT);
 
         // 模型标识靠「添加」进列表，不是直接编辑文本
-        await page.getByPlaceholder('输入模型标识，如 gpt-4o-mini').fill(NEW_MODEL);
-        await page.getByRole('button', { name: '添加' }).click();
-        await expect(page.getByRole('cell', { name: NEW_MODEL })).toBeVisible();
+        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await page.getByRole('button', { name: '添加', exact: true }).click();
+        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toBeVisible();
 
         await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
         await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(ENDPOINT);
@@ -76,12 +77,13 @@ test.describe('服务与资源设置', () => {
 
         // 重进页面：密钥不再明文下发，只展示脱敏提示；地址与模型清单仍来自后端回读
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await openResourcesTab(page, '云端服务');
         const savedKeyInput = page.getByPlaceholder(SAVED_KEY_PLACEHOLDER);
         await expect(savedKeyInput).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
         await expect(savedKeyInput).toHaveValue('');
         await expect(savedKeyInput).not.toHaveAttribute('placeholder', new RegExp(API_KEY));
         await expect(page.getByPlaceholder('https://api.deepseek.com/v1')).toHaveValue(ENDPOINT);
-        await expect(page.getByRole('cell', { name: NEW_MODEL })).toBeVisible();
+        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toBeVisible();
 
         // 留空保存必须沿用旧 key：只改接口地址触发一次自动保存，密钥输入框保持为空
         const rotatedEndpoint = 'https://api.e2e.test/v2';
@@ -91,9 +93,10 @@ test.describe('服务与资源设置', () => {
 
         // 再重进一次：密钥仍是「已保存」的脱敏态，说明留空保存没有把旧 key 当成清空
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await openResourcesTab(page, '云端服务');
         await expect(page.getByPlaceholder(SAVED_KEY_PLACEHOLDER)).toHaveValue('');
         await expect(page.getByPlaceholder('https://api.deepseek.com/v1')).toHaveValue(rotatedEndpoint);
-        await expect(page.getByRole('cell', { name: NEW_MODEL })).toBeVisible();
+        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toBeVisible();
     });
 
     test('[SET-SVC-02] 识别方式、翻译风格与词典补充方式改动会落盘，重进页面仍回显', async ({ session, userDataDir }) => {

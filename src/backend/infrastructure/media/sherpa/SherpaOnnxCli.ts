@@ -4,6 +4,7 @@ import * as path from 'path';
 import { injectable } from 'inversify';
 import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import { LOG_TAIL_LINES, OutputTail, tailLines } from '@/backend/utils/output-tail';
 
@@ -80,6 +81,7 @@ export class SherpaOnnxCli {
                     stdio: ['ignore', 'pipe', 'pipe'],
                 });
                 runningChild = child;
+                trackActiveChildProcess(child);
                 const procSet = this.activeProcesses.get(processKey) ?? new Set<ChildProcess>();
                 procSet.add(child);
                 this.activeProcesses.set(processKey, procSet);

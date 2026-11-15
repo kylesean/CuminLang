@@ -5,28 +5,8 @@
  * 页面组件只消费视图模型，不再关心工具调用协议，方便单独预览与迭代版式。
  */
 
-/** 页面上一条对话消息里的一个块，按模型输出的先后顺序排列。 */
-export type LearningMessageBlock =
-    | { kind: 'text'; text: string }
-    | {
-        kind: 'search';
-        /** 本轮的检索关键词。 */
-        queries: string[];
-        /** 命中的字幕行，可点击跳转。 */
-        hits: { index: number; text: string }[];
-        /** 命中总条数（可能大于返回的 hits 数量）。 */
-        total: number;
-        /** 是否仍在检索中。 */
-        running: boolean;
-    }
-    | {
-        kind: 'context';
-        /** 已读取的字幕索引区间；未完成时为 null。 */
-        range: { start: number; end: number } | null;
-        /** 是否仍在读取中。 */
-        running: boolean;
-    }
-    | { kind: 'error'; text: string };
+export type { LearningMessageBlock } from '@/common/types/chat';
+import type { LearningMessageBlock } from '@/common/types/chat';
 
 /** 页面上一条对话消息。 */
 export type LearningMessageView = {

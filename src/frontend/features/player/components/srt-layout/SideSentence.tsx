@@ -1,4 +1,4 @@
-import React, { forwardRef, useMemo, useState } from 'react';
+import React, { forwardRef, memo, useMemo } from 'react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { useShallow } from 'zustand/react/shallow';
@@ -7,14 +7,13 @@ import { toast } from 'react-hot-toast';
 
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { usePlayerUiState } from '@/frontend/features/player/playerUiStore';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { useSavedSentences } from '@/frontend/features/context-studio/savedSentencesStore';
 import { cn } from '@/frontend/lib/utils';
 import type { Sentence } from '@/common/types/SentenceC';
 import useTranslation from '@/frontend/features/player/translationStore';
 import TimeUtil from '@/common/utils/TimeUtil';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { renderSentenceTokens } from './sentence-token-renderer';
 import { highlightSlice } from './transcript-highlight';
 
@@ -118,7 +117,7 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
         ref
     ) => {
         const { t } = useI18nTranslation('player');
-        const playing = usePlayerState((state) => state.playing);
+        const playing = usePlayer((state) => state.playing);
         const videoId = usePlaybackSession((state) => state.videoId);
         const sentenceKey = `${sentence.fileHash}:${sentence.index}`;
         const isSaved = useSavedSentences((state) => state.savedKeys.has(sentenceKey));
@@ -144,13 +143,6 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
         const secondaryText = (showSideTranslation || isZhSearchMatch) ? sentence.textZH || newTranslation || '' : '';
 
         const fontSize = useSetting((state) => state.values.get('appearance.fontSize'));
-        const [popEle, setPopEle] = useState<string | null>(null);
-
-        const handleRequestPop = (k: string) => {
-            if (popEle !== k) {
-                setPopEle(k);
-            }
-        };
 
         const renderHighlightedText = (text: string) =>
             renderSentenceTokens({
@@ -158,8 +150,6 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
                 text,
                 searchQuery,
                 isActiveMatch: isActiveSearchMatch,
-                popEle,
-                onRequestPop: handleRequestPop,
             });
 
         /** 选区多句合并样式计算。 */
@@ -353,10 +343,10 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
                                 if (onToggleSingleRepeat) {
                                     onToggleSingleRepeat(sentence);
                                 } else if (isCurrent) {
-                                    playerActions.setSingleRepeat(!isRepeat);
+                                    usePlayer.getState().setSingleRepeat(!isRepeat);
                                 } else {
-                                    playerActions.gotoSentence(sentence);
-                                    playerActions.setSingleRepeat(true);
+                                    usePlayer.getState().gotoSentence(sentence);
+                                    usePlayer.getState().setSingleRepeat(true);
                                 }
                             }}
                             className={cn(
@@ -417,4 +407,4 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
 
 SideSentence.displayName = 'SideSentence';
 
-export default SideSentence;
+export default memo(SideSentence);

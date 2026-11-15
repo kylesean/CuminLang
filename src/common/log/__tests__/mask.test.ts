@@ -62,6 +62,13 @@ describe('日志脱敏', () => {
                 .toBe('http://10.0.0.2/x?time=30&format=jpg');
         });
 
+        it.each([
+            ['http://alice:s3cr3t@127.0.0.1:7890', 'http://***@127.0.0.1:7890'],
+            ['socks5://user:pass@proxy.example.com:1080/path', 'socks5://***@proxy.example.com:1080/path'],
+        ])('掩掉 URL Basic Auth 用户信息 %s', (input, expected) => {
+            expect(maskSensitiveValues(input)).toBe(expected);
+        });
+
         it('无敏感模式时原样返回', () => {
             expect(maskSensitiveValues('普通日志内容')).toBe('普通日志内容');
         });

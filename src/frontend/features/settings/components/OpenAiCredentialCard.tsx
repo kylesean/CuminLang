@@ -420,7 +420,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
 
             {/* API Key：显式点击保存生效，避免自动保存误触覆盖 */}
             <SettingField
-                title="API Key"
+                title={t('serviceCredentials.openai.keyLabel')}
                 description={isLocalEndpoint
                     ? t('serviceCredentials.openai.localEndpointHint')
                     : t('serviceCredentials.openai.keyHint')}
@@ -428,7 +428,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                 <HStack gap={1.5} vAlign="center">
                     <TextInput
                         type="password"
-                        label="API Key"
+                        label={t('serviceCredentials.openai.keyLabel')}
                         isLabelHidden
                         value={keyDraft}
                         onChange={setKeyDraft}
@@ -651,7 +651,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                     onOpenChange={setPresetDialogOpen}
                 />
                 <VStack gap={2} padding={4}>
-                    <ScrollableArea label="Presets" height={440}>
+                    <ScrollableArea label={t('serviceCredentials.openai.quickPresetsLabel')} height={440}>
                         <VStack gap={2}>
                             {presetDialogMode === 'add' && (
                                 <Card

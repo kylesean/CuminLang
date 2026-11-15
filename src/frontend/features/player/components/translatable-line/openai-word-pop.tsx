@@ -100,7 +100,7 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
         () => settingsApi.listTtsVoices(),
         { revalidateOnFocus: false },
     );
-    const voiceAccent = ttsVoices?.voices.find((voice) => voice.id === ttsVoices.selected)?.accent;
+    const voiceAccent = ttsVoices?.voices?.find((voice) => voice.id === ttsVoices.selected)?.accent;
     /**
      * 第二层（学习状态 + 语境解读）是否展开。
      *

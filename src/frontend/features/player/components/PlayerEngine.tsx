@@ -10,7 +10,6 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import HtmlPlayer from 'react-player/HtmlPlayer';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 import { usePlayer, type SeekRequest } from '@/frontend/features/player/playerStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
@@ -71,7 +70,7 @@ const PlayerEngine: React.FC<PlayerEngineProps> = ({
     playRequestId,
     setDuration,
     updateExactPlayTime,
-  } = usePlayerState(
+  } = usePlayer(
     useShallow((s) => ({
       src: s.src,
       playing: s.playing,

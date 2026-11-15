@@ -135,4 +135,22 @@ describe('设置存储的凭据加密', () => {
 
         expect(storeGet(SECRET_KEY)).toBe('');
     });
+
+    it('多供应商 API 密钥字典落盘加密，清空时不写入密文占位', async () => {
+        const { storeSet, storeGet } = await importStore();
+        const providerKeysJson = JSON.stringify({
+            openai: 'sk-provider-1',
+            deepseek: 'sk-provider-2',
+        });
+
+        storeSet('apiKeys.openAi.providerKeys', providerKeysJson);
+
+        expect(persisted.get('apiKeys.openAi.providerKeys')).not.toBe(providerKeysJson);
+        expect(String(persisted.get('apiKeys.openAi.providerKeys'))).toContain('dp-enc:');
+        expect(storeGet('apiKeys.openAi.providerKeys')).toBe(providerKeysJson);
+
+        storeSet('apiKeys.openAi.providerKeys', '');
+        expect(persisted.get('apiKeys.openAi.providerKeys')).toBe('');
+        expect(storeGet('apiKeys.openAi.providerKeys')).toBe('');
+    });
 });

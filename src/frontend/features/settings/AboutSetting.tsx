@@ -186,7 +186,7 @@ const AboutSetting: React.FC = () => {
                         </HStack>
 
                         <Card variant="default" padding={3}>
-                            <ScrollableArea label="Release Notes" height={192}>
+                            <ScrollableArea label={t('about.update.releaseNotesLabel')} height={192}>
                                 <Md>
                                     {(updateResult?.releases ?? []).map((release) => (
                                         codeBlock`

@@ -3,7 +3,6 @@ import { toast } from 'react-hot-toast';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { cn } from '@/frontend/lib/utils';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import usePracticePanel from '@/frontend/features/practice/practiceStore';
 import { exitOverlayView, togglePlayerView } from '@/frontend/features/player/lib/player-view-controller';
@@ -41,7 +40,7 @@ export default function PracticeModeButton({ variant = 'capsule' }: { variant?: 
         // 互斥由统一入口处理：打开练习会收起学习页与播客模式。
         const next = togglePlayerView('practice');
         if (next === 'practice') {
-            playerActions.pause();
+            usePlayer.getState().pause();
         }
     };
 

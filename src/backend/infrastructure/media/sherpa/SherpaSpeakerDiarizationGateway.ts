@@ -4,6 +4,7 @@ import * as path from 'path';
 import { injectable } from 'inversify';
 
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import type SpeakerDiarizationGateway from '@/backend/services/gateways/media/SpeakerDiarizationGateway';
 import {
     type SpeakerDiarizationRequest,
@@ -104,6 +105,7 @@ export class SherpaSpeakerDiarizationGateway implements SpeakerDiarizationGatewa
                     stdio: ['ignore', 'pipe', 'pipe'],
                 });
                 runningChild = child;
+                trackActiveChildProcess(child);
                 const procSet = this.activeProcesses.get(processKey) ?? new Set<ChildProcess>();
                 procSet.add(child);
                 this.activeProcesses.set(processKey, procSet);

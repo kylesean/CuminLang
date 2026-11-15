@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { inject, injectable } from 'inversify';
 
 import type { Db } from '@/backend/infrastructure/db/createDb';
@@ -32,6 +32,28 @@ export default class WatchHistoryExtRepositoryImpl implements WatchHistoryExtRep
                 podcast_mode_manual: row.podcast_mode_manual,
             }
             : null;
+    }
+
+    public async findByWatchHistoryIds(watchHistoryIds: string[]): Promise<Map<string, WatchHistoryExtRecord>> {
+        const result = new Map<string, WatchHistoryExtRecord>();
+        if (watchHistoryIds.length === 0) {
+            return result;
+        }
+        const chunkSize = 500;
+        for (let i = 0; i < watchHistoryIds.length; i += chunkSize) {
+            const chunk = watchHistoryIds.slice(i, i + chunkSize);
+            const rows = await this.db
+                .select()
+                .from(watchHistoryExt)
+                .where(inArray(watchHistoryExt.watch_history_id, chunk));
+            for (const row of rows) {
+                result.set(row.watch_history_id, {
+                    podcast_mode_user_set: row.podcast_mode_user_set,
+                    podcast_mode_manual: row.podcast_mode_manual,
+                });
+            }
+        }
+        return result;
     }
 
     public async upsert(watchHistoryId: string, patch: WatchHistoryExtPatch): Promise<WatchHistoryExtRecord> {

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { expect, type Page } from '@playwright/test';
 
 import { test } from '../../support/fixtures';
+import { VOCAB_ANNOTATION_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /** 媒体夹具：真实视频 + 双语 SRT。 */
 const FIXTURE_VIDEO = path.resolve(__dirname, '..', '..', 'fixtures', 'media', 'qa-bilingual.mp4');
@@ -39,7 +40,7 @@ async function openFixture(page: Page) {
 /** 读取主字幕里目标词的注释元素。 */
 function annotationOf(page: Page) {
     return page
-        .locator('[data-vocab-annotation]')
+        .getByTestId(VOCAB_ANNOTATION_TESTIDS.learning)
         .filter({ hasText: new RegExp(`^${TARGET_WORD}$`, 'i') })
         .first();
 }
@@ -50,7 +51,7 @@ test.describe('词汇注释状态投影', () => {
         await openFixture(page);
 
         // steady 属于默认词表，播种状态是 ignored；新库不应出现任何 learning 注释。
-        await expect(page.locator('[data-vocab-annotation="learning"]')).toHaveCount(0);
+        await expect(page.getByTestId(VOCAB_ANNOTATION_TESTIDS.learning)).toHaveCount(0);
     });
 
     test('[SET-VOC-02] 状态切换实时反映到主字幕下划线', async ({ session }) => {

@@ -2,11 +2,20 @@ import React from 'react';
 import { Maximize, Pause, Play } from 'lucide-react';
 import { formatClock, t } from './lib';
 
+export interface PositionChannel {
+    subscribe: (listener: () => void) => () => void;
+    getSnapshot: () => number;
+}
+
+const NOOP_SUBSCRIBE = () => () => {};
+
 interface VideoBarProps {
     /** 视频当前是否暂停。 */
     paused: boolean;
-    /** 当前播放位置，单位秒。 */
-    position: number;
+    /** 静态播放位置（单位秒）；当传入 positionChannel 时以订阅通道为准。 */
+    position?: number;
+    /** 高频播放位置外部订阅通道，避免每次 timeupdate 触发页面级重渲染。 */
+    positionChannel?: PositionChannel;
     /** 视频总时长，单位秒；未知时为 0，此时进度条禁用。 */
     duration: number;
     /** 视频是否加载失败；失败时整条控件禁用。 */
@@ -30,7 +39,8 @@ interface VideoBarProps {
  */
 const VideoBar = ({
     paused,
-    position,
+    position = 0,
+    positionChannel,
     duration,
     disabled,
     onTogglePlay,
@@ -39,9 +49,15 @@ const VideoBar = ({
 }: VideoBarProps) => {
     /** 拖动中的预览位置；没在拖动或控件不可用时回退显示真实播放位置。 */
     const [scrub, setScrub] = React.useState<number | null>(null);
+    const getStaticPosition = React.useCallback(() => position, [position]);
+    const subscribedPosition = React.useSyncExternalStore(
+        positionChannel?.subscribe ?? NOOP_SUBSCRIBE,
+        positionChannel?.getSnapshot ?? getStaticPosition,
+        positionChannel?.getSnapshot ?? getStaticPosition,
+    );
     const effectiveScrub = disabled || duration <= 0 ? null : scrub;
 
-    const shown = effectiveScrub ?? position;
+    const shown = effectiveScrub ?? (positionChannel ? subscribedPosition : position);
     /** 已播部分占整条的比例，用来给进度条上色（0~1）。 */
     const ratio = duration > 0 ? Math.min(1, Math.max(0, shown / duration)) : 0;
 

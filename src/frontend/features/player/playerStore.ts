@@ -12,7 +12,6 @@ import { playerApi } from '@/frontend/features/player/playerApi';
 import { padPracticeClipRange } from '@/frontend/features/player/lib/practice-clip-range';
 import { stopActiveAudio } from '@/frontend/infrastructure/audio/AudioPlayer';
 import {
-    findSentenceBlock,
     groupSentencesIntoBlocks,
     type SentenceBlock,
 } from '@/frontend/features/player/lib/sentence-grouping';
@@ -422,15 +421,29 @@ export const usePlayer = create<PlayerState>((set, get) => {
   };
 
   /** 意群归并结果的引用缓存：loadSubtitles 换入新 sentences 数组时自动失效重建。 */
-  let sentenceBlocksCache: { source: Sentence[]; blocks: SentenceBlock[] } | null = null;
-  const getSentenceBlocks = (sentences: Sentence[]): SentenceBlock[] => {
+  let sentenceBlocksCache: {
+    source: Sentence[];
+    blocks: SentenceBlock[];
+    blockByKey: Map<string, SentenceBlock>;
+  } | null = null;
+  const getSentenceBlocksCache = (sentences: Sentence[]) => {
     if (sentenceBlocksCache?.source === sentences) {
-      return sentenceBlocksCache.blocks;
+      return sentenceBlocksCache;
     }
     const blocks = groupSentencesIntoBlocks(sentences);
-    sentenceBlocksCache = { source: sentences, blocks };
-    return blocks;
+    const blockByKey = new Map<string, SentenceBlock>();
+    for (const block of blocks) {
+      for (const item of block.sentences) {
+        if (!blockByKey.has(item.key)) {
+          blockByKey.set(item.key, block);
+        }
+      }
+    }
+    sentenceBlocksCache = { source: sentences, blocks, blockByKey };
+    return sentenceBlocksCache;
   };
+  const getSentenceBlocks = (sentences: Sentence[]): SentenceBlock[] =>
+    getSentenceBlocksCache(sentences).blocks;
 
   /**
    * 当前句所在的意群块。
@@ -440,10 +453,10 @@ export const usePlayer = create<PlayerState>((set, get) => {
    */
   const getCurrentBlock = (): SentenceBlock | null => {
     const { sentences, currentSentence } = get();
-    if (sentences.length === 0) {
+    if (sentences.length === 0 || !currentSentence) {
       return null;
     }
-    return findSentenceBlock(getSentenceBlocks(sentences), currentSentence);
+    return getSentenceBlocksCache(sentences).blockByKey.get(currentSentence.key) ?? null;
   };
 
   // 清理尾部预览
@@ -473,6 +486,33 @@ export const usePlayer = create<PlayerState>((set, get) => {
     }
   };
 
+  const clearCurrentLockTimer = () => {
+    if (currentLockTimer) {
+      clearTimeout(currentLockTimer);
+      currentLockTimer = null;
+    }
+  };
+
+  const buildCurrentLock = (target: Sentence | undefined, ms?: number): CurrentLockState | null =>
+    target
+      ? {
+          active: true,
+          untilTs: ms === undefined ? Number.POSITIVE_INFINITY : Date.now() + ms,
+          key: sentenceKey(target),
+        }
+      : null;
+
+  const scheduleCurrentLockRelease = (target: Sentence | undefined, ms?: number) => {
+    if (target && ms !== undefined) {
+      currentLockTimer = setTimeout(() => {
+        set((prev) => ({
+          internal: { ...prev.internal, currentLock: null }
+        }));
+        currentLockTimer = null;
+      }, ms);
+    }
+  };
+
   const applyTargetedSeek = ({
     time,
     target,
@@ -483,6 +523,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     play?: boolean;
   }) => {
     clearShadowTimer();
+    clearCurrentLockTimer();
     shadowedSentenceKey = null;
     const requestId = ++seekRequestCounter;
     set((prev) => ({
@@ -494,10 +535,11 @@ export const usePlayer = create<PlayerState>((set, get) => {
         ...prev.internal,
         onPlaySeekTime: null,
         seekInFlight: true,
+        exactPlayTime: time,
+        timeOverride: { active: true, time },
+        currentLock: buildCurrentLock(target),
       },
     }));
-    pinSeekTime(time);
-    activateCurrentLock(target);
   };
 
   /**
@@ -579,49 +621,16 @@ export const usePlayer = create<PlayerState>((set, get) => {
    * 这里不设过期时间：覆盖的释放完全由落点事件（`resolveSeek`）决定，
    * 避免"从请求时刻起算 500ms"导致落点后窗口缩水。
    */
-  const pinSeekTime = (time: number) => {
-    set((prev) => ({
-      internal: {
-        ...prev.internal,
-        exactPlayTime: time,
-        timeOverride: { active: true, time },
-      }
-    }));
-  };
-
-  /**
-   * 设定"当前句锁定"：禁止按时间回写 currentSentence。
-   *
-   * 用于 seek 时不在请求时刻计时，而是在落点到达后由 `releaseCurrentLock` 释放；
-   * 影子跟读等非 seek 场景可传入 `ms` 直接指定锁定时长。
-   * 未指定目标句时（普通进度条拖动）不锁定，落点即可按真实时间回写。
-   */
   const activateCurrentLock = (target: Sentence | undefined, ms?: number) => {
-    if (currentLockTimer) {
-      clearTimeout(currentLockTimer);
-      currentLockTimer = null;
-    }
+    clearCurrentLockTimer();
     set((prev) => ({
       currentSentence: target ?? prev.currentSentence,
       internal: {
         ...prev.internal,
-        currentLock: target
-          ? {
-              active: true,
-              untilTs: ms === undefined ? Number.POSITIVE_INFINITY : Date.now() + ms,
-              key: sentenceKey(target),
-            }
-          : null
+        currentLock: buildCurrentLock(target, ms),
       }
     }));
-    if (target && ms !== undefined) {
-      currentLockTimer = setTimeout(() => {
-        set((prev) => ({
-          internal: { ...prev.internal, currentLock: null }
-        }));
-        currentLockTimer = null;
-      }, ms);
-    }
+    scheduleCurrentLockRelease(target, ms);
   };
 
   // 落点到达后再保留一小段高亮锁，覆盖两句边界处的查询歧义
@@ -1358,11 +1367,11 @@ export const usePlayer = create<PlayerState>((set, get) => {
           ...prev.internal,
           onPlaySeekTime: null,
           seekInFlight: true,
-          currentLock: null
+          currentLock: null,
+          exactPlayTime: next.time,
+          timeOverride: { active: true, time: next.time },
         }
       }));
-
-      pinSeekTime(next.time);
     },
 
     /**
@@ -1561,7 +1570,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
       set((prev) => ({
         internal: { ...prev.internal, exactPlayTime: currentTime }
       }));
-      setTimeout(onTimeUpdate, 0);
+      onTimeUpdate();
     },
 
     getExactPlayTime: () => get().internal.exactPlayTime,

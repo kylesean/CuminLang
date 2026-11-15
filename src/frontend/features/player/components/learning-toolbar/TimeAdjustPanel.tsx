@@ -4,9 +4,7 @@ import { useTranslation as useI18nTranslation } from 'react-i18next';
 
 import { cn } from '@/frontend/lib/utils';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 
 /**
  * 当前句时间微调面板（不含弹层外壳）。
@@ -16,8 +14,8 @@ import { usePlayerState } from '@/frontend/features/player/playerState';
  */
 export default function TimeAdjustPanel() {
     const { t } = useI18nTranslation('player');
-    const sentence = usePlayerState((s) => s.currentSentence);
-    const srtTender = usePlayerState((s) => s.srtTender);
+    const sentence = usePlayer((s) => s.currentSentence);
+    const srtTender = usePlayer((s) => s.srtTender);
     const adjusted = Boolean(sentence && srtTender && srtTender.adjusted(sentence));
     const diff = srtTender && sentence && adjusted ? srtTender.timeDiff(sentence) : { start: 0, end: 0 };
     const snapshotKey = `${sentence?.fileHash ?? 'none'}:${sentence?.index ?? -1}:${diff.start.toFixed(2)}:${diff.end.toFixed(2)}`;
@@ -41,9 +39,9 @@ export default function TimeAdjustPanel() {
         const delta = next - current;
         if (Math.abs(delta) < 0.005) return;
         if (field === 'start') {
-            playerActions.adjustCurrentBegin(delta);
+            usePlayer.getState().adjustCurrentBegin(delta);
         } else {
-            playerActions.adjustCurrentEnd(delta);
+            usePlayer.getState().adjustCurrentEnd(delta);
         }
     };
 
@@ -52,8 +50,8 @@ export default function TimeAdjustPanel() {
             <button
                 type="button"
                 onClick={() => (field === 'start'
-                    ? playerActions.adjustCurrentBegin(-0.2)
-                    : playerActions.adjustCurrentEnd(-0.2))}
+                    ? usePlayer.getState().adjustCurrentBegin(-0.2)
+                    : usePlayer.getState().adjustCurrentEnd(-0.2))}
                 className="flex h-7 flex-1 items-center justify-center rounded-md border border-border/60 bg-muted/40 font-mono text-sm font-medium text-primary transition-colors hover:bg-muted active:scale-95"
             >
                 -0.2s
@@ -61,8 +59,8 @@ export default function TimeAdjustPanel() {
             <button
                 type="button"
                 onClick={() => (field === 'start'
-                    ? playerActions.adjustCurrentBegin(0.2)
-                    : playerActions.adjustCurrentEnd(0.2))}
+                    ? usePlayer.getState().adjustCurrentBegin(0.2)
+                    : usePlayer.getState().adjustCurrentEnd(0.2))}
                 className="flex h-7 flex-1 items-center justify-center rounded-md border border-border/60 bg-muted/40 font-mono text-sm font-medium text-primary transition-colors hover:bg-muted active:scale-95"
             >
                 +0.2s
@@ -102,7 +100,7 @@ export default function TimeAdjustPanel() {
                     type="button"
                     onClick={() => {
                         if (adjusted) {
-                            void playerActions.clearAdjust();
+                            void usePlayer.getState().clearAdjust();
                             setDraftState(null);
                         }
                     }}

@@ -10,7 +10,6 @@ import { Text } from '@astryxdesign/core/Text';
 import { Mic, Repeat, Gauge, Sliders, RotateCcw } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { type TrainingModeConfig, useTrainingModeStore } from '@/frontend/features/player/trainingStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 
 /** 训练模式设置弹窗的入参。 */
@@ -82,9 +81,9 @@ function TrainingSettingsForm({ onClose }: { onClose: () => void }) {
     // 如果当前正在运行重复或精听计划，则热更新
     if (sentenceLoop) {
       if (sentenceLoop.rates) {
-        playerActions.setSentenceLoop({ times: safeRates.length, rates: safeRates });
+        usePlayer.getState().setSentenceLoop({ times: safeRates.length, rates: safeRates });
       } else {
-        playerActions.setSentenceLoop({ times: safeRepeat });
+        usePlayer.getState().setSentenceLoop({ times: safeRepeat });
       }
     }
 

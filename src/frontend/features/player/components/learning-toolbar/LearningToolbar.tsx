@@ -4,7 +4,6 @@ import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 
 import { cn } from '@/frontend/lib/utils';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import PracticeModeButton from '@/frontend/features/player/components/srt-layout/PracticeModeButton';
@@ -88,7 +87,7 @@ export default function LearningToolbar({
                 >
                     <button
                         type="button"
-                        onClick={() => playerActions.setSingleRepeat(!singleRepeat)}
+                        onClick={() => usePlayer.getState().setSingleRepeat(!singleRepeat)}
                         aria-pressed={singleRepeat}
                         aria-label={t('controlBar.modeSingleRepeat')}
                         className={cn(
@@ -106,7 +105,7 @@ export default function LearningToolbar({
                 >
                     <button
                         type="button"
-                        onClick={() => playerActions.setAutoPause(!autoPause)}
+                        onClick={() => usePlayer.getState().setAutoPause(!autoPause)}
                         aria-pressed={autoPause}
                         aria-label={t('controlBar.modeAutoPause')}
                         className={cn(

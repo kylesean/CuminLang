@@ -24,19 +24,12 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const BASE_TIME = new Date('2026-01-10T00:00:00.000Z');
 
 /**
- * 等待条件成立。
- *
- * 计时用 performance.now 而不是 Date.now：测试里 Date 被冻结，
- * 用它做超时判断会永远等不到超时。
+ * 等待条件成立；计时用 Vitest 轮询（Date 被冻结时 interval 仍使用真实时钟）。
  */
 const waitUntil = async (predicate: () => boolean | Promise<boolean>, timeoutMs = 2000): Promise<void> => {
-    const deadline = performance.now() + timeoutMs;
-    while (!(await predicate())) {
-        if (performance.now() > deadline) {
-            throw new Error('等待条件超时');
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await vi.waitFor(async () => {
+        expect(await predicate()).toBe(true);
+    }, { timeout: timeoutMs, interval: 10 });
 };
 
 /**
@@ -124,9 +117,10 @@ describe('后台任务保留策略', () => {
 
         const taskId = await service.create();
         service.finish(taskId, { progress: '完成' });
-        // 等待任务状态真正落库，再留出窗口让可能触发的清理落地。
+        // 等待任务状态真正落库，并让同一 flush 末尾的 maybeCleanupExpiredTasks 微任务跑完。
         await waitUntil(async () => (await listProgress()).includes('完成'));
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await Promise.resolve();
+        await Promise.resolve();
         expect(deleteTerminalBefore).toHaveBeenCalledTimes(1);
 
         // 时间推过一小时后，下一次任务落库会重新触发清理。

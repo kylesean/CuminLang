@@ -47,3 +47,9 @@ export const SETTING_ROW_TESTIDS = {
 
 /** 设置行键。 */
 export type SettingRowKey = keyof typeof SETTING_ROW_TESTIDS;
+
+/** 字幕/讲稿词汇注释状态测试标识。 */
+export const VOCAB_ANNOTATION_TESTIDS = {
+    learning: 'vocab-annotation-learning',
+    familiar: 'vocab-annotation-familiar',
+} as const;

@@ -79,6 +79,7 @@ export default interface WatchHistoryRepository {
         type: WatchHistoryProjectType,
     ): Promise<WatchHistoryRecord[]>;
     listByProjectType(type: WatchHistoryProjectType): Promise<WatchHistoryRecord[]>;
+    listByProjectTypeOrderedByUpdatedAtDesc(type: WatchHistoryProjectType): Promise<WatchHistoryRecord[]>;
     listDistinctFoldersByProjectType(type: WatchHistoryProjectType): Promise<string[]>;
     existsByBasePathAndProjectType(basePath: string, type: WatchHistoryProjectType): Promise<boolean>;
     insert(values: WatchHistoryInsert): Promise<WatchHistoryRecord>;

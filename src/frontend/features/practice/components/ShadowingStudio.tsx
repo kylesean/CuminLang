@@ -20,9 +20,7 @@ import { Switch } from '@astryxdesign/core/Switch';
 import type { SentencePracticeResultVO } from '@/common/contracts/sentence-practice';
 import type { RhythmTrendVO } from '@/common/learning/rhythmTrend';
 import UrlUtil from '@/common/utils/UrlUtil';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 import { useTrainingModeStore } from '@/frontend/features/player/trainingStore';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { cn } from '@/frontend/lib/utils';
@@ -128,15 +126,15 @@ function BeatShadowingView({
     translationText: string;
 }) {
     const { t } = useTranslation('practice');
-    const playing = usePlayerState((s) => s.playing);
+    const playing = usePlayer((s) => s.playing);
     const shadowingPause = usePlayer((s) => s.shadowingPause);
     const shadowingRatio = useTrainingModeStore((s) => s.config.shadowingRatio);
     const updateConfig = useTrainingModeStore((s) => s.updateConfig);
 
     useEffect(() => {
-        playerActions.setShadowing?.(true);
+        usePlayer.getState().setShadowing?.(true);
         return () => {
-            playerActions.setShadowing?.(false);
+            usePlayer.getState().setShadowing?.(false);
         };
     }, []);
 
@@ -159,7 +157,7 @@ function BeatShadowingView({
                     key={shadowingPause.untilTs}
                     untilTs={shadowingPause.untilTs}
                     durationMs={shadowingPause.durationMs}
-                    onSkip={() => playerActions.nextSentence?.()}
+                    onSkip={() => usePlayer.getState().nextSentence?.()}
                 />
             )}
 
@@ -174,10 +172,10 @@ function BeatShadowingView({
                             : t('shadowing.beatStart', { defaultValue: '开始节拍连读' })}
                         onClick={() => {
                             if (isBeatActive) {
-                                playerActions.pause();
+                                usePlayer.getState().pause();
                             } else {
-                                playerActions.gotoSentence(unit.anchor);
-                                playerActions.play();
+                                usePlayer.getState().gotoSentence(unit.anchor);
+                                usePlayer.getState().play();
                             }
                         }}
                     />
@@ -187,8 +185,8 @@ function BeatShadowingView({
                         icon={<RotateCcw className="h-3.5 w-3.5" />}
                         label={t('panel.replay')}
                         onClick={() => {
-                            playerActions.gotoSentence(unit.anchor);
-                            playerActions.play();
+                            usePlayer.getState().gotoSentence(unit.anchor);
+                            usePlayer.getState().play();
                         }}
                     />
                 </div>
@@ -281,7 +279,7 @@ function RecordShadowingView({
         }
         if (clipOwnedRef.current) {
             clipOwnedRef.current = false;
-            playerActions.clearPracticeClip?.();
+            usePlayer.getState().clearPracticeClip?.();
         }
         if (minePlayRafRef.current !== null) {
             cancelAnimationFrame(minePlayRafRef.current);
@@ -315,7 +313,7 @@ function RecordShadowingView({
             }
             if (clipOwnedRef.current) {
                 clipOwnedRef.current = false;
-                playerActions.clearPracticeClip?.();
+                usePlayer.getState().clearPracticeClip?.();
             }
             playbackAudioRef.current?.pause();
             playbackAudioRef.current = null;
@@ -452,13 +450,13 @@ function RecordShadowingView({
         if (!playableMineUrl) return;
         if (abPhase !== 'idle') {
             stopContrastAudio();
-            playerActions.pause();
+            usePlayer.getState().pause();
             return;
         }
         const runId = ++abRunIdRef.current;
         clipOwnedRef.current = true;
         setAbPhase('playing-original');
-        playerActions.playPracticeClip(unit.range, unit.anchor, {
+        usePlayer.getState().playPracticeClip(unit.range, unit.anchor, {
             onEnded: () => {
                 clipOwnedRef.current = false;
                 if (abRunIdRef.current !== runId || !mountedRef.current) return;
@@ -486,7 +484,7 @@ function RecordShadowingView({
         stopContrastAudio();
         const runId = ++abRunIdRef.current;
         clipOwnedRef.current = true;
-        playerActions.playPracticeClip(unit.range, unit.anchor, {
+        usePlayer.getState().playPracticeClip(unit.range, unit.anchor, {
             onEnded: () => {
                 clipOwnedRef.current = false;
                 if (abRunIdRef.current !== runId || !mountedRef.current) return;

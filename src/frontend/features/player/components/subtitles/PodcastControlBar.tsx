@@ -8,8 +8,7 @@ import { MonitorPlay, Pause, Play } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
-import { usePlayerState } from '@/frontend/features/player/playerState';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import {
     PlaybackProgressSlider,
     PlaybackTimeReadout,
@@ -34,7 +33,7 @@ export default function PodcastControlBar({
     className = '',
     onTimeChange,
 }: PodcastControlBarProps) {
-    const { volume, playbackRate, muted, playing } = usePlayerState(
+    const { volume, playbackRate, muted, playing } = usePlayer(
         useShallow((s) => ({
             volume: s.volume,
             playbackRate: s.playbackRate,
@@ -49,9 +48,9 @@ export default function PodcastControlBar({
     const handleScrubCommit = useCallback((time: number) => {
         logger.debug('Podcast time slider scrub commit', { time });
         onTimeChange?.(time);
-        playerActions.seekTo({ time });
-        playerActions.setAutoPause(false);
-        playerActions.setSingleRepeat(false);
+        usePlayer.getState().seekTo({ time });
+        usePlayer.getState().setAutoPause(false);
+        usePlayer.getState().setSingleRepeat(false);
     }, [onTimeChange]);
 
     return (
@@ -63,9 +62,9 @@ export default function PodcastControlBar({
                         previewTime={previewTime}
                         onPreviewTimeChange={setPreviewTime}
                         onScrubValueChange={(time) => {
-                            playerActions.seekTo({ time });
-                            playerActions.setAutoPause(false);
-                            playerActions.setSingleRepeat(false);
+                            usePlayer.getState().seekTo({ time });
+                            usePlayer.getState().setAutoPause(false);
+                            usePlayer.getState().setSingleRepeat(false);
                         }}
                         onScrubCommit={handleScrubCommit}
                         className="cursor-pointer py-1"
@@ -82,9 +81,9 @@ export default function PodcastControlBar({
                             icon={playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
                             onClick={() => {
                                 if (playing) {
-                                    playerActions.pause();
+                                    usePlayer.getState().pause();
                                 } else {
-                                    playerActions.play();
+                                    usePlayer.getState().play();
                                 }
                             }}
                         />
@@ -102,13 +101,13 @@ export default function PodcastControlBar({
                         <SpeedSlider
                             speed={playbackRate}
                             popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
-                            onSpeedChange={(speed) => playerActions.setPlaybackRate(speed)}
+                            onSpeedChange={(speed) => usePlayer.getState().setPlaybackRate(speed)}
                         />
                         <VolumeSlider
                             muted={muted}
-                            onMutedChange={(nextMuted) => playerActions.setMuted(nextMuted)}
+                            onMutedChange={(nextMuted) => usePlayer.getState().setMuted(nextMuted)}
                             volume={volume}
-                            onVolumeChange={(nextVolume) => playerActions.setVolume(nextVolume)}
+                            onVolumeChange={(nextVolume) => usePlayer.getState().setVolume(nextVolume)}
                         />
                         <span aria-hidden="true" className="h-4 w-px bg-border" />
                         {/* 播客模式会盖住视频条与学习台，这里必须留一个常显的出口，

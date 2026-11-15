@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Slider } from '@astryxdesign/core/Slider';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { MEDIA_SLIDER_STYLE } from '@/frontend/features/player/components/mediaSurface';
 import TimeUtil from '@/common/utils/TimeUtil';
 
@@ -35,8 +35,8 @@ export const PlaybackTimeReadout = memo(function PlaybackTimeReadout({
     className = 'h-full flex items-center font-mono text-sm text-media-fg/80 tabular-nums',
     durationWrapperClassName = 'hidden lg:inline-flex items-center',
 }: PlaybackTimeReadoutProps) {
-    const playTime = usePlayerState((s) => s.internal.exactPlayTime);
-    const duration = usePlayerState((s) => s.duration);
+    const playTime = usePlayer((s) => s.internal.exactPlayTime);
+    const duration = usePlayer((s) => s.duration);
     const shownTime = previewTime ?? playTime;
 
     return (
@@ -84,8 +84,8 @@ export const PlaybackProgressSlider = memo(function PlaybackProgressSlider({
     step = 0.1,
 }: PlaybackProgressSliderProps) {
     const { t } = useI18nTranslation('player');
-    const playTime = usePlayerState((s) => s.internal.exactPlayTime);
-    const duration = usePlayerState((s) => s.duration);
+    const playTime = usePlayer((s) => s.internal.exactPlayTime);
+    const duration = usePlayer((s) => s.duration);
     const [draggingTime, setDraggingTime] = useState<number | null>(null);
     const holdTimerRef = useRef<number | null>(null);
 

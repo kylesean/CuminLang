@@ -159,7 +159,7 @@ export default function TtsVoiceCard({ onVoiceChange }: TtsVoiceCardProps) {
                             {downloading && (
                                 <VStack gap={1}>
                                     <ProgressBar
-                                        label="Voice Download Progress"
+                                        label={t('resources.ttsVoice.progressLabel')}
                                         value={live.percent}
                                         max={100}
                                         isLabelHidden

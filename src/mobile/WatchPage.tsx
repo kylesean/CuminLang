@@ -51,7 +51,7 @@ const WatchPlayer = ({ detail }: { detail: MobileWatchDetail }) => {
         showFollow,
         videoError,
         paused,
-        position,
+        positionChannel,
         duration,
         settingsOpen,
         dict,
@@ -153,7 +153,7 @@ const WatchPlayer = ({ detail }: { detail: MobileWatchDetail }) => {
                 />
                 <VideoBar
                     paused={paused}
-                    position={position}
+                    positionChannel={positionChannel}
                     duration={duration}
                     disabled={videoError}
                     onTogglePlay={togglePlay}

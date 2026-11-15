@@ -23,6 +23,7 @@ import type {
     ChatSessionUpdatePresetParams,
     ChatTranscribeAudioParams,
     CompleteSentenceParams,
+    LearningMessageBlock,
     LearningPromptPresetResetParams,
     LearningPromptPresetSaveParams,
     SentenceStudyNoteGetParams,
@@ -198,6 +199,42 @@ export const youtubeImportSettingSaveSchema: z.ZodType<YoutubeImportSettingSaveV
     cookiesFilePath: z.string(),
 });
 
+const learningMessageBlockSchema: z.ZodType<LearningMessageBlock> = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('text'),
+        text: z.string(),
+    }),
+    z.object({
+        kind: z.literal('search'),
+        queries: z.array(z.string()),
+        hits: z.array(z.object({
+            index: z.number().int().min(0),
+            text: z.string(),
+        })),
+        total: z.number().int().min(0),
+        running: z.boolean(),
+    }),
+    z.object({
+        kind: z.literal('context'),
+        range: z.object({
+            start: z.number().int().min(0),
+            end: z.number().int().min(0),
+        }).nullable(),
+        running: z.boolean(),
+    }),
+    z.object({
+        kind: z.literal('error'),
+        text: z.string(),
+    }),
+]);
+
+const persistedChatMessageSchema = z.object({
+    id: nonEmptyStringSchema,
+    role: z.enum(['user', 'assistant']),
+    blocks: z.array(learningMessageBlockSchema),
+    plainText: z.string(),
+});
+
 /** 整句学习会话创建请求校验架构。 */
 export const chatSessionCreateSchema: z.ZodType<ChatSessionCreateParams> = z.object({
     videoId: nonEmptyStringSchema,
@@ -212,12 +249,7 @@ export const chatSessionCreateSchema: z.ZodType<ChatSessionCreateParams> = z.obj
         focusWords: z.array(z.string()),
         masteredWords: z.array(z.string()),
     }).optional(),
-    restoredMessages: z.array(z.object({
-        id: nonEmptyStringSchema,
-        role: z.enum(['user', 'assistant']),
-        blocks: z.array(z.any()),
-        plainText: z.string(),
-    })).optional(),
+    restoredMessages: z.array(persistedChatMessageSchema).optional(),
 }) as z.ZodType<ChatSessionCreateParams>;
 
 export const chatSessionUpdatePresetSchema: z.ZodType<ChatSessionUpdatePresetParams> = z.object({
@@ -239,12 +271,7 @@ export const sentenceStudyNoteSaveSchema: z.ZodType<SentenceStudyNoteSaveParams>
     originalText: z.string(),
     studyCard: SentenceStudyCardSchema.nullable().optional(),
     noteSummary: z.string().optional(),
-    messages: z.array(z.object({
-        id: nonEmptyStringSchema,
-        role: z.enum(['user', 'assistant']),
-        blocks: z.array(z.any()),
-        plainText: z.string(),
-    })).optional(),
+    messages: z.array(persistedChatMessageSchema).optional(),
     presetId: z.string().nullable().optional(),
 }) as z.ZodType<SentenceStudyNoteSaveParams>;
 

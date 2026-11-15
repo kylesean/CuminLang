@@ -1,9 +1,16 @@
 import { toast, type ToastOptions } from 'react-hot-toast';
+import { Button } from '@astryxdesign/core/Button';
 
 /** 全局提示的统一视觉与去重出口：所有"系统级通知"（后端推送、跨组件错误）都经由此处展示。 */
 
 /** 提示的语义类型。 */
 export type NotificationVariant = 'default' | 'success' | 'info' | 'warning' | 'error';
+
+/** 提示内可选的操作按钮。 */
+export interface NotificationAction {
+    label: string;
+    onClick: () => void;
+}
 
 /** 提示的展示参数。 */
 export interface NotificationOptions {
@@ -21,6 +28,8 @@ export interface NotificationOptions {
     id?: string;
     /** 是否使用带小尖角的气泡视觉，默认 true。 */
     bubble?: boolean;
+    /** 可选操作按钮：点击后先关闭通知再执行回调。 */
+    action?: NotificationAction;
 }
 
 /** 按提示 id 记录合并次数（存活窗口内）。 */
@@ -60,12 +69,14 @@ function resolveToastId(options: NotificationOptions): string {
  * 气泡视觉的提示内容：标题 + 正文 + 合并计数。
  */
 function BubbleToastContent(props: {
+    id: string;
     title?: string;
     message: string;
     variant: NotificationVariant;
     count: number;
+    action?: NotificationAction;
 }) {
-    const { title, message, variant, count } = props;
+    const { id, title, message, variant, count, action } = props;
     const toneClass = (() => {
         switch (variant) {
             case 'success':
@@ -84,7 +95,7 @@ function BubbleToastContent(props: {
 
     return (
         <div className={`relative rounded-lg border px-3.5 py-2.5 shadow-lg backdrop-blur-md transition-all ${toneClass}`}>
-            <div className="flex items-start gap-2.5">
+            <div className="flex items-center gap-2.5">
                 <div className="min-w-0">
                     {title ? <div className="text-sm font-semibold leading-5">{title}</div> : null}
                     <div className="text-sm leading-relaxed opacity-90 break-words">{message}</div>
@@ -92,6 +103,19 @@ function BubbleToastContent(props: {
                 {count > 1 ? (
                     <div className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-mono font-semibold leading-4 text-primary/80">
                         x{count}
+                    </div>
+                ) : null}
+                {action ? (
+                    <div className="shrink-0">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            label={action.label}
+                            onClick={() => {
+                                toast.dismiss(id);
+                                action.onClick();
+                            }}
+                        />
                     </div>
                 ) : null}
             </div>
@@ -128,10 +152,12 @@ export function showNotification(options: NotificationOptions): void {
         toast.custom(
             () => (
                 <BubbleToastContent
+                    id={id}
                     title={options.title}
                     message={options.message}
                     variant={variant}
                     count={nextCount}
+                    action={options.action}
                 />
             ),
             { id, duration }

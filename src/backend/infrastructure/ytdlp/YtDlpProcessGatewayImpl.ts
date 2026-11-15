@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { injectable } from 'inversify';
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import { OutputTail } from '@/backend/utils/output-tail';
 import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
@@ -99,6 +100,7 @@ export class YtDlpProcessGatewayImpl implements YtDlpGateway {
                 env: { ...process.env },
             });
             processRef = child;
+            trackActiveChildProcess(child);
 
             const producedPaths: string[] = [];
 

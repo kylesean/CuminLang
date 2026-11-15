@@ -6,7 +6,7 @@ import type { VideoClip } from '../types';
 import { AspectRatio } from '@astryxdesign/core/AspectRatio';
 import VideoPlayerShortcut from './VideoPlayerShortcut';
 import PlayerEngine from '@/frontend/features/player/components/PlayerEngine';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { clipLinesToSentences } from '@/common/utils/subtitle';
 import { useVocabularyState } from '@/frontend/features/player/vocabularyStore';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
@@ -107,25 +107,25 @@ export default function VideoPlayerPane({
 }: Props) {
   const { t } = useTranslation('pages');
   // 使用新的播放器状态管理 - 精确订阅避免频繁重渲染
-  const playing = usePlayerState((s) => s.playing);
-  const currentSentence = usePlayerState((s) => s.currentSentence);
-  const sentences = usePlayerState((s) => s.sentences);
-  const autoPause = usePlayerState((s) => s.autoPause);
-  const singleRepeat = usePlayerState((s) => s.singleRepeat);
+  const playing = usePlayer((s) => s.playing);
+  const currentSentence = usePlayer((s) => s.currentSentence);
+  const sentences = usePlayer((s) => s.sentences);
+  const autoPause = usePlayer((s) => s.autoPause);
+  const singleRepeat = usePlayer((s) => s.singleRepeat);
 
   // 播放控制方法
-  const play = usePlayerState((s) => s.play);
-  const togglePlay = usePlayerState((s) => s.togglePlay);
-  const seekToTarget = usePlayerState((s) => s.seekToTarget);
+  const play = usePlayer((s) => s.play);
+  const togglePlay = usePlayer((s) => s.togglePlay);
+  const seekToTarget = usePlayer((s) => s.seekToTarget);
 
   // 模式控制方法
-  const setAutoPause = usePlayerState((s) => s.setAutoPause);
-  const setSingleRepeat = usePlayerState((s) => s.setSingleRepeat);
+  const setAutoPause = usePlayer((s) => s.setAutoPause);
+  const setSingleRepeat = usePlayer((s) => s.setSingleRepeat);
 
   // 字幕相关方法
-  const setSource = usePlayerState((s) => s.setSource);
-  const loadSubtitles = usePlayerState((s) => s.loadSubtitles);
-  const clearSubtitles = usePlayerState((s) => s.clearSubtitles);
+  const setSource = usePlayer((s) => s.setSource);
+  const loadSubtitles = usePlayer((s) => s.loadSubtitles);
+  const clearSubtitles = usePlayer((s) => s.clearSubtitles);
   const setVocabularyWords = useVocabularyState((s) => s.setVocabularyWords);
   const setVocabularyForms = useVocabularyState((s) => s.setVocabularyForms);
   const clearVocabularyWords = useVocabularyState((s) => s.clearVocabularyWords);
@@ -185,13 +185,13 @@ export default function VideoPlayerPane({
   }, [applyPendingTarget, play]);
 
   // 高级API
-  const prevSentence = usePlayerState((s) => s.prevSentence);
-  const nextSentence = usePlayerState((s) => s.nextSentence);
-  const repeatCurrent = usePlayerState((s) => s.repeatCurrent);
+  const prevSentence = usePlayer((s) => s.prevSentence);
+  const nextSentence = usePlayer((s) => s.nextSentence);
+  const repeatCurrent = usePlayer((s) => s.repeatCurrent);
 
   // 只读选择器（用于边界检测）
-  const isAtFirstSentence = usePlayerState((s) => s.isAtFirstSentence);
-  const isAtLastSentence = usePlayerState((s) => s.isAtLastSentence);
+  const isAtFirstSentence = usePlayer((s) => s.isAtFirstSentence);
+  const isAtLastSentence = usePlayer((s) => s.isAtLastSentence);
 
   // 当clip或forcePlayKey发生变化时，加载新的视频和字幕
   useEffect(() => {

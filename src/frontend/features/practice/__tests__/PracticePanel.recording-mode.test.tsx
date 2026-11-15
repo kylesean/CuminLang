@@ -25,18 +25,6 @@ vi.mock('@/frontend/features/settings/settingsApi', () => ({
     },
 }));
 
-vi.mock('@/frontend/features/player/components/PlayerActions', () => ({
-    playerActions: {
-        pause: vi.fn(),
-        gotoSentence: vi.fn(),
-        play: vi.fn(),
-        playPracticeClip: vi.fn(),
-        clearPracticeClip: vi.fn(),
-        seekToTarget: vi.fn(),
-        setShadowing: vi.fn(),
-    },
-}));
-
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 
 vi.mock('react-i18next', async (importOriginal) => {

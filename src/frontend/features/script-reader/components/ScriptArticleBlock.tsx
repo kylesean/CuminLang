@@ -18,11 +18,9 @@ interface ScriptArticleBlockProps {
     isPlaying: boolean;
     showTranslation: boolean;
     searchQuery: string;
-    popEle: string | null;
     savedKeys: ReadonlySet<string>;
     savedByKey: ReadonlyMap<string, SavedSentenceVO>;
     openNoteKey: string | null;
-    onRequestPop: (key: string) => void;
     onPlaySentence: (sentence: Sentence) => void;
     onPauseAudio: () => void;
     onToggleSave: (sentence: Sentence) => void;
@@ -83,11 +81,9 @@ export function ScriptArticleBlock({
     isPlaying,
     showTranslation,
     searchQuery,
-    popEle,
     savedKeys,
     savedByKey,
     openNoteKey,
-    onRequestPop,
     onPlaySentence,
     onPauseAudio,
     onToggleSave,
@@ -246,8 +242,6 @@ export function ScriptArticleBlock({
                                     text: s.text || '',
                                     searchQuery,
                                     isActiveMatch: false,
-                                    popEle,
-                                    onRequestPop,
                                     alwaysDark: false,
                                     surface: 'transcript',
                                 })}

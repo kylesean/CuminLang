@@ -22,6 +22,7 @@ const SECRET_SETTING_KEYS: ReadonlySet<string> = new Set([
     'apiKeys.tencent.secretId',
     'apiKeys.tencent.secretKey',
     'apiKeys.openAi.key',
+    'apiKeys.openAi.providerKeys',
     'mobileAccess.token',
     'proxy.url',
 ]);
@@ -52,6 +53,9 @@ const isEncryptionAvailable = (): boolean => {
  * @returns 密文（带前缀）；不可用时原样返回明文。
  */
 const encryptSecret = (value: string): string => {
+    if (value.length === 0) {
+        return '';
+    }
     if (!isEncryptionAvailable()) {
         return value;
     }

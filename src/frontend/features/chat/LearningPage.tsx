@@ -12,9 +12,8 @@ import StudyWorkbenchShell from '@/frontend/features/chat/components/StudyWorkbe
 import SentenceStudyCanvas, { type StudyContextNeighbor } from '@/frontend/features/chat/components/SentenceStudyCanvas';
 import StudyCopilotPane from '@/frontend/features/chat/components/StudyCopilotPane';
 import PromptPresetDialog from '@/frontend/features/chat/components/PromptPresetDialog';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { setPlayerViewMode } from '@/frontend/features/player/lib/player-view-controller';
 import usePracticePanel from '@/frontend/features/practice/practiceStore';
 import { useVocabularyState } from '@/frontend/features/player/vocabularyStore';
@@ -63,7 +62,7 @@ export default function LearningPage() {
             loopTimerRef.current = null;
         }
         playTokenRef.current += 1;
-        playerActions.clearPracticeClip?.();
+        usePlayer.getState().clearPracticeClip?.();
     }, []);
 
     const stopLoopPlayback = useCallback(() => {
@@ -120,7 +119,7 @@ export default function LearningPage() {
             version: s.version,
         })),
     );
-    const sentences = usePlayerState((state) => state.sentences);
+    const sentences = usePlayer((state) => state.sentences);
     const videoId = usePlaybackSession((state) => state.videoId);
     const trimmedTopic = topicText.trim();
 
@@ -231,10 +230,10 @@ export default function LearningPage() {
             start: Math.max(0, target.adjustedStart ?? target.start),
             end: Math.max((target.adjustedStart ?? target.start) + 0.4, target.adjustedEnd ?? target.end),
         };
-        if (playerActions.playPracticeClip) {
+        if (usePlayer.getState().playPracticeClip) {
             const token = playTokenRef.current + 1;
             playTokenRef.current = token;
-            playerActions.playPracticeClip(range, target, {
+            usePlayer.getState().playPracticeClip(range, target, {
                 onEnded: () => {
                     if (!isLoopingRef.current || playTokenRef.current !== token) {
                         return;
@@ -254,8 +253,8 @@ export default function LearningPage() {
             });
             return;
         }
-        playerActions.gotoSentence(target);
-        playerActions.play();
+        usePlayer.getState().gotoSentence(target);
+        usePlayer.getState().play();
     }, [speak, topicText]);
 
     useEffect(() => {
@@ -307,19 +306,19 @@ export default function LearningPage() {
             start: Math.max(0, target.start - 0.2),
             end: Math.max(target.start + 3, target.end),
         };
-        if (playerActions.playPracticeClip) {
-            playerActions.playPracticeClip(range, target);
+        if (usePlayer.getState().playPracticeClip) {
+            usePlayer.getState().playPracticeClip(range, target);
         } else {
-            playerActions.gotoSentence(target);
-            playerActions.play();
+            usePlayer.getState().gotoSentence(target);
+            usePlayer.getState().play();
         }
     }, [sentences, t]);
 
     const handleReturnToAnchorClip = useCallback(() => {
         useChatPanel.getState().setPreviewingEvidenceIndex(null);
         if (topicLine) {
-            playerActions.clearPracticeClip?.();
-            playerActions.gotoSentence(topicLine);
+            usePlayer.getState().clearPracticeClip?.();
+            usePlayer.getState().gotoSentence(topicLine);
         }
     }, [topicLine]);
 
@@ -383,7 +382,7 @@ export default function LearningPage() {
     const handleJumpToPractice = useCallback(() => {
         stopLoopPlayback();
         if (topicLine) {
-            playerActions.gotoSentence(topicLine);
+            usePlayer.getState().gotoSentence(topicLine);
         }
         usePracticePanel.getState().setOpenedFromLearning(true);
         setPlayerViewMode('practice');

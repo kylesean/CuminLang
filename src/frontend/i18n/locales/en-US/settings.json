@@ -282,6 +282,7 @@
             "retry": "Retry",
             "newVersionFound": "New version available",
             "downloadNow": "Download New Release",
+            "releaseNotesLabel": "Release Notes",
             "upToDateTitle": "You're up to date",
             "failedDescription": "Unable to fetch release details right now. Please try again later.",
             "errors": {
@@ -400,6 +401,7 @@
     },
     "serviceCredentials": {
         "openai": {
+            "keyLabel": "API Key",
             "keyHint": "Stored locally; click Save after editing to avoid accidental overwrites",
             "keyPlaceholderSaved": "Saved ({{hint}}) — enter a new key and click Save to replace",
             "saveKey": "Save",
@@ -574,6 +576,7 @@
             "copyUrl": "Copy download link",
             "openInBrowser": "Open in browser",
             "copyPath": "Copy target path",
+            "progressLabel": "Download Progress",
             "step3Title": "3. Finish installation",
             "step3Hint": "Once the file is in place, come back and click \"Download all\" above — the app verifies and installs it for you."
         },
@@ -689,6 +692,7 @@
             "notInstalledShort": "not downloaded",
             "downloadHint": "This voice is not installed yet; playback temporarily uses another installed voice.",
             "downloadButton": "Download voice",
+            "progressLabel": "Voice Download Progress",
             "downloadingVoice": "Downloading {{percent}}%",
             "cancelDownload": "Cancel",
             "downloadedToast": "Voice model downloaded and ready",

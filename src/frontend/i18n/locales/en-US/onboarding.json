@@ -104,6 +104,7 @@
                 "apiKeyLabel": "API Key",
                 "apiKeyPlaceholder": "sk-...",
                 "apiKeyOptionalPlaceholder": "Optional for local servers",
+                "modelLabel": "Model",
                 "modelPlaceholder": "Enter model ID manually",
                 "saveButton": "Save & Enable AI API",
                 "saving": "Saving…",

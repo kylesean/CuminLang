@@ -568,7 +568,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
                                                 width="100%"
                                             />
                                             <TextInput
-                                                label="Model"
+                                                label={t('steps.download.cloud.modelLabel')}
                                                 value={cloudModelId}
                                                 onChange={setCloudModelId}
                                                 placeholder={t('steps.download.cloud.modelPlaceholder', { defaultValue: '手动输入模型 ID' })}

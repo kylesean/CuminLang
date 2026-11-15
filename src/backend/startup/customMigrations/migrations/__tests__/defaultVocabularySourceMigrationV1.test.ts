@@ -40,7 +40,7 @@ const settings = (persisted: Record<string, string>): CustomMigrationContext['se
 /**
  * 把播种标记写进 SQLite 的 dp_sys_conf。
  *
- * 播种标记的真实存放位置就是这里（SystemConfigService 走 SysConfRepository），
+ * 播种标记的真实存放位置就是这里（SysConfRepository），
  * 不是 electron-store；测试必须用同一通道，否则会重演"迁移读错地方"的 bug。
  *
  * @param memoryDb 内存数据库。

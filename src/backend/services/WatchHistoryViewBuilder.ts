@@ -3,6 +3,7 @@ import path from 'path';
 import type MediaService from '@/backend/services/MediaService';
 import type { WatchHistoryRecord } from '@/backend/services/repositories/WatchHistoryRepository';
 import type WatchHistoryExtRepository from '@/backend/services/repositories/WatchHistoryExtRepository';
+import type { WatchHistoryExtRecord } from '@/backend/services/repositories/WatchHistoryExtRepository';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import MatchSrt from '@/backend/utils/MatchSrt';
 import MediaUtil from '@/common/utils/MediaUtil';
@@ -41,7 +42,10 @@ export default class WatchHistoryViewBuilder {
      * @param history 观看历史数据库记录。
      * @returns 完整展示数据；视频文件不存在时返回 `null`。
      */
-    public async buildFull(history: WatchHistoryRecord): Promise<WatchHistoryVO | null> {
+    public async buildFull(
+        history: WatchHistoryRecord,
+        preloadedExt?: WatchHistoryExtRecord | null,
+    ): Promise<WatchHistoryVO | null> {
         const resolution = await this.resolveSubtitleForPlayback(history);
         if (resolution === null) {
             return null;
@@ -49,7 +53,7 @@ export default class WatchHistoryViewBuilder {
 
         const filePath = path.join(history.base_path, history.file_name);
         const duration = await this.mediaService.duration(filePath);
-        return this.buildBase(history, duration, resolution.subtitlePath);
+        return this.buildBase(history, duration, resolution.subtitlePath, preloadedExt);
     }
 
     /**
@@ -76,8 +80,11 @@ export default class WatchHistoryViewBuilder {
      * @param history 观看历史数据库记录。
      * @returns basic 展示数据。
      */
-    public async buildBasic(history: WatchHistoryRecord): Promise<WatchHistoryVO> {
-        return this.buildBase(history, 0, history.srt_file ?? '');
+    public async buildBasic(
+        history: WatchHistoryRecord,
+        preloadedExt?: WatchHistoryExtRecord | null,
+    ): Promise<WatchHistoryVO> {
+        return this.buildBase(history, 0, history.srt_file ?? '', preloadedExt);
     }
 
     /**
@@ -86,14 +93,18 @@ export default class WatchHistoryViewBuilder {
      * @param history 观看历史数据库记录。
      * @param duration 视频时长，basic 数据固定为 0。
      * @param srtFile 字幕文件路径。
+     * @param preloadedExt 可选预加载扩展字段，传入时跳过逐条 SQL 查询。
      * @returns renderer 使用的展示数据。
      */
     private async buildBase(
         history: WatchHistoryRecord,
         duration: number,
         srtFile: string,
+        preloadedExt?: WatchHistoryExtRecord | null,
     ): Promise<WatchHistoryVO> {
-        const ext = await this.watchHistoryExtRepository.findByWatchHistoryId(history.id);
+        const ext = preloadedExt !== undefined
+            ? preloadedExt
+            : await this.watchHistoryExtRepository.findByWatchHistoryId(history.id);
         return {
             id: history.id,
             basePath: history.base_path,

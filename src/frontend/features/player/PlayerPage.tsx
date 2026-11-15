@@ -12,14 +12,13 @@ import {SWR_KEY, swrMutate} from '@/frontend/lib/swr-util';
 import PathUtil from '@/common/utils/PathUtil';
 import MediaUtil from '@/common/utils/MediaUtil';
 import {getRendererLogger} from '@/frontend/log/simple-logger';
-import { toast, type Toast } from 'react-hot-toast';
-import {ModeSwitchToast} from '@/frontend/components/shared/toasts/ModeSwitchToast';
+import { showNotification } from '@/frontend/components/shared/toasts/notification';
+import i18n from '@/frontend/i18n';
 import useSystem from '@/frontend/app/stores/systemStore';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import useSubtitleTranslation from '@/frontend/features/player/translationStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { useDevPlayerEntry } from '@/frontend/features/player/dev/useDevPlayerEntry';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 import { setPlayerViewMode } from '@/frontend/features/player/lib/player-view-controller';
 
 const logger = getRendererLogger('PlayerWithControlsPage');
@@ -125,8 +124,8 @@ const PlayerWithControlsPage = () => {
                 // 否则返回同一个视频时路径和 videoId 不变，播放器不会重新触发 ready。
                 usePlaybackSession.getState().clear();
                 useSubtitleTranslation.getState().clearTranslations();
-                playerActions.clearSubtitles();
-                playerActions.setSource(null);
+                usePlayer.getState().clearSubtitles();
+                usePlayer.getState().setSource(null);
                 return;
             }
             const previousVideoId = usePlaybackSession.getState().videoId;
@@ -154,50 +153,24 @@ const PlayerWithControlsPage = () => {
                     useLayout.getState().setPodcastMode(video.podcastModeManual ?? false);
                 } else {
                     // 没有用户偏好：首次打开音频自动进播客模式，视频自动回普通模式
-                    if (mediaType === 'audio') {
-                        const currentMode = useLayout.getState().podcastMode;
-                        if (!currentMode) {
-                            useLayout.getState().setPodcastMode(true);
-                            toast(
-                                (t: Toast) => (
-                                    <ModeSwitchToast
-                                        mode="podcast"
-                                        onCancel={() => {
-                                            useLayout.getState().setPodcastMode(false);
-                                            void playerApi.setPodcastModePreference(video.id, false);
-                                            void swrMutate(SWR_KEY.PLAYER_P);
-                                            toast.dismiss(t.id);
-                                        }}
-                                    />
-                                ),
-                                {
-                                    id: MODE_SWITCH_TOAST_ID,
-                                    duration: 5000,
-                                }
-                            );
-                        }
-                    } else {
-                        const currentMode = useLayout.getState().podcastMode;
-                        if (currentMode) {
-                            useLayout.getState().setPodcastMode(false);
-                            toast(
-                                (t: Toast) => (
-                                    <ModeSwitchToast
-                                        mode="video"
-                                        onCancel={() => {
-                                            useLayout.getState().setPodcastMode(true);
-                                            void playerApi.setPodcastModePreference(video.id, true);
-                                            void swrMutate(SWR_KEY.PLAYER_P);
-                                            toast.dismiss(t.id);
-                                        }}
-                                    />
-                                ),
-                                {
-                                    id: MODE_SWITCH_TOAST_ID,
-                                    duration: 5000,
-                                }
-                            );
-                        }
+                    const targetPodcast = mediaType === 'audio';
+                    const currentMode = useLayout.getState().podcastMode;
+                    if (currentMode !== targetPodcast) {
+                        useLayout.getState().setPodcastMode(targetPodcast);
+                        const revertMode = !targetPodcast;
+                        showNotification({
+                            id: MODE_SWITCH_TOAST_ID,
+                            duration: 5000,
+                            message: `${targetPodcast ? '🎙️' : '📺'} ${i18n.t(targetPodcast ? 'modeSwitchedPodcast' : 'modeSwitchedVideo', { ns: 'toast' })}`,
+                            action: {
+                                label: i18n.t('restore', { ns: 'toast' }),
+                                onClick: () => {
+                                    useLayout.getState().setPodcastMode(revertMode);
+                                    void playerApi.setPodcastModePreference(video.id, revertMode);
+                                    void swrMutate(SWR_KEY.PLAYER_P);
+                                },
+                            },
+                        });
                     }
                 }
             }
@@ -209,13 +182,13 @@ const PlayerWithControlsPage = () => {
         if (devEntry.seekSeconds === null || !videoLoaded) {
             return;
         }
-        playerActions.seekTo({ time: devEntry.seekSeconds, play: false });
+        usePlayer.getState().seekTo({ time: devEntry.seekSeconds, play: false });
     }, [devEntry.seekSeconds, videoLoaded]);
 
     // 精读文稿 / 语境工坊深链跳转：`?t=<秒数>&practice=shadowing`
     const deepLinkTimeRaw = _searchParams.get('t');
     const deepLinkPractice = _searchParams.get('practice') === 'shadowing';
-    const sentenceCount = usePlayerState((s) => s.sentences.length);
+    const sentenceCount = usePlayer((s) => s.sentences.length);
     const pendingDeepSeekRef = useRef<{ time: number | null; practice: boolean } | null>(null);
     useEffect(() => {
         const parsedTime = deepLinkTimeRaw !== null ? Number(deepLinkTimeRaw) : NaN;
@@ -236,7 +209,7 @@ const PlayerWithControlsPage = () => {
         }
         pendingDeepSeekRef.current = null;
         if (pending.time !== null) {
-            playerActions.seekTo({ time: pending.time, play: !pending.practice });
+            usePlayer.getState().seekTo({ time: pending.time, play: !pending.practice });
         }
         if (pending.practice) {
             setPlayerViewMode('practice');
@@ -313,17 +286,6 @@ const PlayerWithControlsPage = () => {
             cancelled = true;
         };
     }, [video, videoLoaded]);
-    // 只补充 sideBarAnimation，保留 URL 上已有的参数（如 dev/qa 的 `?file=`）
-    useEffect(() => {
-        setSearchParams((prev) => {
-            if (prev.get('sideBarAnimation') === 'true') {
-                return prev;
-            }
-            const next = new URLSearchParams(prev);
-            next.set('sideBarAnimation', 'true');
-            return next;
-        });
-    }, [setSearchParams]);
 
     // 全屏是应用内的沉浸视图：Esc 必须能退出，否则隐藏两侧后只能靠控制条
     useEffect(() => {

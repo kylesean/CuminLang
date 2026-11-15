@@ -70,7 +70,7 @@ const SettingLayout: React.FC = () => {
     const currentKey = useMemo<SettingType>(() => {
         const segments = location.pathname.split('/');
         const matched = SETTING_ITEMS.find((item) => segments.includes(item.key));
-        return matched ? matched.key : 'shortcut';
+        return matched ? matched.key : 'appearance';
     }, [location.pathname]);
 
     return (

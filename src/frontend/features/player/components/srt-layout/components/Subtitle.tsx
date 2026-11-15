@@ -19,9 +19,8 @@ import ArticleBlock from './ArticleBlock';
 import { groupSentencesIntoBlocks, type SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
 import { selectSceneDividers, type SceneBoundary } from '@/common/learning/sceneSegmentation';
 import { useSceneBoundaries } from '@/frontend/features/player/hooks/useSceneBoundaries';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import useLayout from '@/frontend/app/stores/layoutStore';
 import { cn } from '@/frontend/lib/utils';
 import useSubtitleScroll, { useSubtitleScrollState } from '@/frontend/features/player/hooks/useSubtitleScroll';
@@ -67,7 +66,7 @@ export default function Subtitle() {
     const showSideTranslation = usePlayerUi((state) => state.showSideTranslation);
     const changeShowSideTranslation = usePlayerUi((state) => state.changeShowSideTranslation);
     const { t } = useI18nTranslation('player');
-    const { currentSentence, subtitle, singleRepeat, hoverRepeat, virtualGroup, srtTender } = usePlayerState(
+    const { currentSentence, subtitle, singleRepeat, hoverRepeat, virtualGroup, srtTender } = usePlayer(
         useShallow((s) => ({
             currentSentence: s.currentSentence,
             subtitle: s.sentences,
@@ -299,12 +298,20 @@ export default function Subtitle() {
         return -1;
     }, [safeMatchIndex, matchedSentenceIndices, displaySentences]);
 
+    const blockIndexBySentenceKey = useMemo(() => {
+        const indexMap = new Map<string, number>();
+        for (let blockIdx = 0; blockIdx < blocks.length; blockIdx++) {
+            for (const s of blocks[blockIdx].sentences) {
+                indexMap.set(`${s.fileHash}:${s.index}`, blockIdx);
+            }
+        }
+        return indexMap;
+    }, [blocks]);
+
     const currentBlockIndex = useMemo(() => {
         if (!currentSentence || blocks.length === 0) return -1;
-        return blocks.findIndex((b) =>
-            b.sentences.some((s) => s.index === currentSentence.index && s.fileHash === currentSentence.fileHash)
-        );
-    }, [currentSentence, blocks]);
+        return blockIndexBySentenceKey.get(`${currentSentence.fileHash}:${currentSentence.index}`) ?? -1;
+    }, [currentSentence, blocks.length, blockIndexBySentenceKey]);
 
     /**
      * article 模式的程序化滚动：先进入 AUTO_SCROLLING 再平滑滚动，
@@ -374,12 +381,10 @@ export default function Subtitle() {
         const targetSentence = displaySentences[targetListIndex];
         if (!targetSentence) return;
         if (shouldSeek) {
-            playerActions.gotoSentence(targetSentence);
+            usePlayer.getState().gotoSentence(targetSentence);
         }
         if (transcriptViewMode === 'article') {
-            const blockIdx = blocks.findIndex((b) =>
-                b.sentences.some((s) => s.index === targetSentence.index && s.fileHash === targetSentence.fileHash)
-            );
+            const blockIdx = blockIndexBySentenceKey.get(`${targetSentence.fileHash}:${targetSentence.index}`) ?? -1;
             if (blockIdx >= 0) {
                 scrollArticleTo(blockIdx);
             }
@@ -390,7 +395,7 @@ export default function Subtitle() {
                 behavior: 'smooth',
             });
         }
-    }, [displaySentences, transcriptViewMode, blocks, scrollArticleTo]);
+    }, [displaySentences, transcriptViewMode, blockIndexBySentenceKey, scrollArticleTo]);
 
     const handleSearchChange = (val: string) => {
         setSearchQuery(val);
@@ -529,10 +534,10 @@ export default function Subtitle() {
         if (normalizedEnd !== normalizedStart) {
             selectionRangeRef.current = { startPos: normalizedStart, endPos: normalizedEnd };
             const selectedSentences = displaySentences.slice(normalizedStart, normalizedEnd + 1);
-            playerActions.setVirtualGroupBySentences(selectedSentences);
+            usePlayer.getState().setVirtualGroupBySentences(selectedSentences);
         } else {
             selectionRangeRef.current = null;
-            playerActions.clearVirtualGroup();
+            usePlayer.getState().clearVirtualGroup();
         }
     }, [displaySentences]);
 
@@ -552,13 +557,13 @@ export default function Subtitle() {
         ) {
             applySelectionRange(startListPosition, lastListPosition);
         } else if (sentence) {
-            playerActions.clearVirtualGroup();
+            usePlayer.getState().clearVirtualGroup();
             // 学习页打开期间点击字幕视为正常跳转：先关闭学习页，再按常规跳转到该句
             if (useChatPanel.getState().learningVisible) {
                 // 走统一退出入口：音频文件原来在播客模式，必须回到播客而不是空白舞台。
                 exitOverlayView();
             }
-            playerActions.gotoSentence(sentence);
+            usePlayer.getState().gotoSentence(sentence);
             if (scrollState === 'USER_BROWSING') {
                 delaySetNormal();
             }
@@ -653,6 +658,43 @@ export default function Subtitle() {
         updateVisibleRange([startIndex, endIndex]);
     }, [updateVisibleRange]);
 
+    const handleResetTime = useCallback((target: Sentence) => {
+        void usePlayer.getState().clearAdjust(target);
+    }, []);
+
+    const handleSentenceClick = useCallback((targetSentence: Sentence) => {
+        usePlayer.getState().clearVirtualGroup();
+        if (useChatPanel.getState().learningVisible) {
+            exitOverlayView();
+        }
+        usePlayer.getState().gotoSentence(targetSentence);
+        if (useSubtitleScroll.getState().scrollState === 'USER_BROWSING') {
+            delaySetNormal();
+        }
+    }, [delaySetNormal]);
+
+    const handleSentenceReplay = useCallback((targetSentence: Sentence) => {
+        recordReplay(targetSentence);
+        usePlayer.getState().clearVirtualGroup();
+        if (useChatPanel.getState().learningVisible) {
+            exitOverlayView();
+        }
+        usePlayer.getState().gotoSentence(targetSentence);
+        if (useSubtitleScroll.getState().scrollState === 'USER_BROWSING') {
+            delaySetNormal();
+        }
+    }, [delaySetNormal, recordReplay]);
+
+    const handleToggleSingleRepeat = useCallback((targetSentence: Sentence) => {
+        const { currentSentence: curr, singleRepeat: isSingleRepeat } = usePlayer.getState();
+        if (curr && targetSentence.index === curr.index && targetSentence.fileHash === curr.fileHash) {
+            usePlayer.getState().setSingleRepeat(!isSingleRepeat);
+        } else {
+            usePlayer.getState().gotoSentence(targetSentence);
+            usePlayer.getState().setSingleRepeat(true);
+        }
+    }, []);
+
     const renderItem = useCallback((listPosition: number, item: Sentence) => {
         const isCurrent = !!currentSentence && item.index === currentSentence.index && item.fileHash === currentSentence.fileHash;
         const itemKey = `${item.fileHash}-${item.index}`;
@@ -694,14 +736,7 @@ export default function Subtitle() {
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                playerActions.clearVirtualGroup();
-                                if (useChatPanel.getState().learningVisible) {
-                                    exitOverlayView();
-                                }
-                                playerActions.gotoSentence(item);
-                                if (scrollState === 'USER_BROWSING') {
-                                    delaySetNormal();
-                                }
+                                handleSentenceClick(item);
                             }}
                             className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-metadata font-medium text-secondary transition-colors hover:bg-muted/70 hover:text-primary"
                         >
@@ -720,40 +755,14 @@ export default function Subtitle() {
                 <SideSentence
                     sentence={item}
                     isTimeAdjusted={srtTender?.adjusted(item) ?? false}
-                    onResetTime={(target) => { void playerActions.clearAdjust(target); }}
-                    onClick={(targetSentence) => {
-                        playerActions.clearVirtualGroup();
-                        if (useChatPanel.getState().learningVisible) {
-                            exitOverlayView();
-                        }
-                        playerActions.gotoSentence(targetSentence || item);
-                        if (scrollState === 'USER_BROWSING') {
-                            delaySetNormal();
-                        }
-                    }}
-                    onReplay={(targetSentence) => {
-                        recordReplay(targetSentence || item);
-                        playerActions.clearVirtualGroup();
-                        if (useChatPanel.getState().learningVisible) {
-                            exitOverlayView();
-                        }
-                        playerActions.gotoSentence(targetSentence || item);
-                        if (scrollState === 'USER_BROWSING') {
-                            delaySetNormal();
-                        }
-                    }}
+                    onResetTime={handleResetTime}
+                    onClick={handleSentenceClick}
+                    onReplay={handleSentenceReplay}
                     isCurrent={isCurrent}
                     isRepeat={singleRepeat || hoverRepeat}
                     searchQuery={searchQuery}
                     isActiveSearchMatch={activeMatchedSentenceIndex === item.index}
-                    onToggleSingleRepeat={(sentence) => {
-                        if (currentSentence && sentence.index === currentSentence.index && sentence.fileHash === currentSentence.fileHash) {
-                            playerActions.setSingleRepeat(!singleRepeat);
-                        } else {
-                            playerActions.gotoSentence(sentence);
-                            playerActions.setSingleRepeat(true);
-                        }
-                    }}
+                    onToggleSingleRepeat={handleToggleSingleRepeat}
                     selectionState={
                         isSelected
                             ? {
@@ -782,10 +791,11 @@ export default function Subtitle() {
         virtualGroupMeta,
         searchQuery,
         activeMatchedSentenceIndex,
-        scrollState,
-        delaySetNormal,
         srtTender,
-        recordReplay,
+        handleResetTime,
+        handleSentenceClick,
+        handleSentenceReplay,
+        handleToggleSingleRepeat,
         sceneDividersByIndex,
         t,
     ]);
@@ -822,7 +832,7 @@ export default function Subtitle() {
                             <Tooltip content={t('cancelLoop')} placement="below">
                                 <button
                                     type="button"
-                                    onClick={() => playerActions.clearVirtualGroup()}
+                                    onClick={() => usePlayer.getState().clearVirtualGroup()}
                                     className="p-0.5 rounded-full text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
                                     aria-label={t('cancelLoop')}
                                 >
@@ -1162,24 +1172,8 @@ export default function Subtitle() {
                                     activeMatchedSentenceIndex={activeMatchedSentenceIndex}
                                     showSideTranslation={showSideTranslation}
                                     fontSize={fontSize}
-                                    onSentenceClick={(sentence) => {
-                                        playerActions.clearVirtualGroup();
-                                        if (useChatPanel.getState().learningVisible) {
-                                            exitOverlayView();
-                                        }
-                                        playerActions.gotoSentence(sentence);
-                                        if (scrollState === 'USER_BROWSING') {
-                                            delaySetNormal();
-                                        }
-                                    }}
-                                    onToggleSingleRepeat={(sentence) => {
-                                        if (currentSentence && sentence.index === currentSentence.index && sentence.fileHash === currentSentence.fileHash) {
-                                            playerActions.setSingleRepeat(!singleRepeat);
-                                        } else {
-                                            playerActions.gotoSentence(sentence);
-                                            playerActions.setSingleRepeat(true);
-                                        }
-                                    }}
+                                    onSentenceClick={handleSentenceClick}
+                                    onToggleSingleRepeat={handleToggleSingleRepeat}
                                     isRepeat={singleRepeat || hoverRepeat}
                                 />
                             );

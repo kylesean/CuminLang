@@ -1,34 +1,19 @@
 import { createRoot } from 'react-dom/client';
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { HashRouter, Link as RouterLink, type LinkProps as RouterLinkProps, Navigate, Route, Routes } from 'react-router-dom';
 import { LinkProvider } from '@astryxdesign/core/Link';
-import HomePage from '@/frontend/features/file-browser/HomePage';
 import TitleBarLayout from '@/frontend/components/layout/TitleBarLayout';
-import YoutubeImportDialogHost from '@/frontend/features/youtube-import/YoutubeImportDialogHost';
-import PlayerPage from '@/frontend/features/player/PlayerPage';
 import AppShellLayout from '@/frontend/components/layout/AppShellLayout';
-import SettingLayout from '@/frontend/features/settings/SettingLayout';
-import ShortcutSetting from '@/frontend/features/settings/ShortcutSetting';
-import StorageSetting from '@/frontend/features/settings/StorageSetting';
-import AboutSetting from '@/frontend/features/settings/AboutSetting';
-import AppearanceSetting from '@/frontend/features/settings/AppearanceSetting';
-import ProxySetting from '@/frontend/features/settings/ProxySetting';
-import MobileAccessSetting from '@/frontend/features/settings/MobileAccessSetting';
-import YoutubeImportSetting from '@/frontend/features/settings/YoutubeImportSetting';
-import ServiceResourceSetting from '@/frontend/features/settings/ServiceResourceSetting';
-import { toast, Toaster as HotToaster, type Toast } from 'react-hot-toast';
+import { Toaster as HotToaster } from 'react-hot-toast';
+import { showNotification } from '@/frontend/components/shared/toasts/notification';
 
 import GlobalShortCut from '@/frontend/components/shared/shortcuts/GlobalShortCut';
+import { WordPopoverHost } from '@/frontend/features/player/components/translatable-line/WordPopoverHost';
 import Eb from '@/frontend/components/shared/common/Eb';
-import ContextStudioPage from '@/frontend/features/context-studio/ContextStudioPage';
-import ScriptReaderPage from '@/frontend/features/script-reader/ScriptReaderPage';
-import { OnboardingView } from '@/frontend/features/onboarding/OnboardingView';
 import { getOnboardingCompletedVersion } from '@/frontend/features/onboarding/onboardingApi';
-import { MigrationFailureGate } from '@/frontend/features/migration-failure/MigrationFailureGate';
-import { getMigrationFailureDetail } from '@/frontend/features/migration-failure/migrationFailureApi';
-import { Button } from '@astryxdesign/core/Button';
 import { backendClient } from '@/frontend/infrastructure/electron/backendClient';
+import { getMigrationFailureDetail } from '@/frontend/features/migration-failure/migrationFailureApi';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { applyLanguageSetting } from '@/frontend/i18n';
@@ -43,6 +28,23 @@ import {
     type MirroredTheme,
 } from '@/frontend/app/lib/startup-theme';
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
+import HomePage from '@/frontend/features/file-browser/HomePage';
+
+const YoutubeImportDialogHost = lazy(() => import('@/frontend/features/youtube-import/YoutubeImportDialogHost'));
+const PlayerPage = lazy(() => import('@/frontend/features/player/PlayerPage'));
+const ContextStudioPage = lazy(() => import('@/frontend/features/context-studio/ContextStudioPage'));
+const ScriptReaderPage = lazy(() => import('@/frontend/features/script-reader/ScriptReaderPage'));
+const SettingLayout = lazy(() => import('@/frontend/features/settings/SettingLayout'));
+const ShortcutSetting = lazy(() => import('@/frontend/features/settings/ShortcutSetting'));
+const StorageSetting = lazy(() => import('@/frontend/features/settings/StorageSetting'));
+const AboutSetting = lazy(() => import('@/frontend/features/settings/AboutSetting'));
+const AppearanceSetting = lazy(() => import('@/frontend/features/settings/AppearanceSetting'));
+const ProxySetting = lazy(() => import('@/frontend/features/settings/ProxySetting'));
+const MobileAccessSetting = lazy(() => import('@/frontend/features/settings/MobileAccessSetting'));
+const YoutubeImportSetting = lazy(() => import('@/frontend/features/settings/YoutubeImportSetting'));
+const ServiceResourceSetting = lazy(() => import('@/frontend/features/settings/ServiceResourceSetting'));
+const OnboardingView = lazy(() => import('@/frontend/features/onboarding/OnboardingView'));
+const MigrationFailureGate = lazy(() => import('@/frontend/features/migration-failure/MigrationFailureGate'));
 
 const UPDATE_CHECK_DELAY_MS = 6000;
 const UPDATE_TOAST_ID = 'update-available';
@@ -183,25 +185,17 @@ export const App = () => {
                 }
                 const latest = result.releases[0];
                 const versionTitle = t('updateAvailableTitle', { version: latest.version });
-                toast(
-                    (tState: Toast) => (
-                        <div className="flex items-center gap-3 text-sm">
-                            <span className="font-semibold">{versionTitle}</span>
-                            <Button
-                                size="sm"
-                                label={t('updateAvailableAction')}
-                                onClick={() => {
-                                    toast.dismiss(tState.id);
-                                    void backendClient.call('system/open-url', latest.url);
-                                }}
-                            />
-                        </div>
-                    ),
-                    {
-                        id: UPDATE_TOAST_ID,
-                        duration: 8000,
+                showNotification({
+                    id: UPDATE_TOAST_ID,
+                    duration: 8000,
+                    message: versionTitle,
+                    action: {
+                        label: t('updateAvailableAction'),
+                        onClick: () => {
+                            void backendClient.call('system/open-url', latest.url);
+                        },
                     },
-                );
+                });
             })().catch(() => {
                 // 启动自动检查更新失败时静默跳过
             });
@@ -222,15 +216,20 @@ export const App = () => {
         <Theme theme={activeTheme} mode={effectiveThemeMode}>
             <div className="w-full h-screen text-primary overflow-hidden select-none font-sans">
                 {gate?.kind === 'migration-failure' && (
-                    <MigrationFailureGate failure={gate.failure} />
+                    <Suspense fallback={<StartupLoading />}>
+                        <MigrationFailureGate failure={gate.failure} />
+                    </Suspense>
                 )}
                 {gate?.kind === 'onboarding' && (
-                    <OnboardingView onCompleted={() => setGate({ kind: 'main' })} />
+                    <Suspense fallback={<StartupLoading />}>
+                        <OnboardingView onCompleted={() => setGate({ kind: 'main' })} />
+                    </Suspense>
                 )}
                 {gate?.kind === 'main' && (
                     <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                         <LinkProvider component={RouterLinkAdapter}>
-                            <Routes>
+                            <Suspense fallback={<StartupLoading />}>
+                                <Routes>
                             <Route path="/" element={<Eb key="home-root"><HomePage /></Eb>} />
                             <Route path="home" element={<Eb key="home"><HomePage /></Eb>} />
                             <Route element={<TitleBarLayout />}>
@@ -266,8 +265,12 @@ export const App = () => {
                                         element={<SettingLayout />}
                                     >
                                         <Route
+                                            index
+                                            element={<Navigate to="appearance" replace />}
+                                        />
+                                        <Route
                                             path="*"
-                                            element={<Eb key="shortcut-default"><ShortcutSetting /></Eb>}
+                                            element={<Navigate to="/settings/appearance" replace />}
                                         />
                                         <Route
                                             path="shortcut"
@@ -308,8 +311,11 @@ export const App = () => {
                                     </Route>
                                 </Route>
                             </Route>
-                        </Routes>
-                        <YoutubeImportDialogHost />
+                                </Routes>
+                            </Suspense>
+                        <Suspense fallback={null}>
+                            <YoutubeImportDialogHost />
+                        </Suspense>
                     </LinkProvider>
                 </HashRouter>
                 )}
@@ -323,6 +329,7 @@ export const App = () => {
                 }}
             />
             <GlobalShortCut />
+            <WordPopoverHost />
         </Theme>
     );
 };

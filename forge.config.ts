@@ -123,7 +123,6 @@ const config: ForgeConfig = {
             // 仅保留 Vite externalized 的原生依赖与运行时网络代理传递依赖，其余由 Vite 打入 /.vite
             const keptNodeModulePrefixes = [
                 '/node_modules/better-sqlite3',
-                '/node_modules/node-addon-api',
                 '/node_modules/onnxruntime-node',
                 '/node_modules/onnxruntime-common',
                 '/node_modules/undici',

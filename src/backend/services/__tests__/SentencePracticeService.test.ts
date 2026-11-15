@@ -153,6 +153,18 @@ describe('句子练习服务', () => {
                 audio_file: null,
             });
         });
+
+        it('听写对同音异义错别字严格扣分，不按发音同音误判为满分', async () => {
+            const vo = await service.scoreDictation({
+                fileHash: FILE_HASH,
+                sentenceIndex: 6,
+                typedText: 'no there answer',
+                expectedText: 'know their answer',
+            });
+
+            expect(vo.words.map((w) => w.status)).toEqual(['sub', 'sub', 'match']);
+            expect(vo.score).toBeLessThan(100);
+        });
     });
 
     describe('录音清理', () => {
@@ -288,6 +300,41 @@ describe('句子练习服务', () => {
             expect(fsGateway.binaryFiles.size).toBe(0);
             const rows = await memoryDb.db.select().from(sentencePracticeRecord);
             expect(rows).toHaveLength(0);
+        });
+
+        it('韵律分析直接按时间范围抽 WAV，不再调用 trimVideo 重编码视频', async () => {
+            const mediaPath = '/videos/lesson.mp4';
+            const clipRange = { start: 10.5, end: 13.0 };
+            await fsGateway.writeBinaryFile(mediaPath, new Uint8Array([9, 9]));
+            const convertToWav = vi.fn().mockImplementation(async (_input: string, output: string) => {
+                await fsGateway.writeBinaryFile(output, buildWav(1.2, 6000));
+            });
+            const trimVideo = vi.fn().mockResolvedValue(undefined);
+            const prosodyService = new SentencePracticeServiceImpl(
+                new SentencePracticeRecordRepositoryImpl(memoryDb.db),
+                { convertToWav, trimVideo } as unknown as FfmpegService,
+                {
+                    provideDirectory: async (target: StorageDirectoryTarget) => path.join(STORAGE_ROOT, target),
+                    ensurePathAccessPermissionIfExists: async () => undefined,
+                } as unknown as StorageDirectoryProvider,
+                fsGateway,
+                new FakeTranscriptionEngineSelector(speechGateway),
+                { lookup: () => null } as never,
+            );
+
+            speechGateway.transcriptText = EXPECTED_TEXT;
+            const vo = await prosodyService.scoreShadowing({
+                fileHash: FILE_HASH,
+                sentenceIndex: 7,
+                audio: new Uint8Array([1, 2, 3]),
+                expectedText: EXPECTED_TEXT,
+                mediaPath,
+                clipRange,
+            });
+
+            expect(trimVideo).not.toHaveBeenCalled();
+            expect(convertToWav).toHaveBeenCalledWith(mediaPath, expect.any(String), clipRange);
+            expect(vo.prosody).not.toBeNull();
         });
     });
 

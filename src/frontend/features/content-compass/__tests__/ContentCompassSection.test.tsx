@@ -119,11 +119,13 @@ describe('ContentCompassSection', () => {
 
     it('有到期词时可直接请求复习，并记录 reviewed', async () => {
         useReviewDockStore.setState({ requestId: 0, consumedId: 0 });
-        render(<ContentCompassSection onSelected={() => undefined} />);
+        const onSelected = vi.fn();
+        render(<ContentCompassSection onSelected={onSelected} />);
 
         fireEvent.click(await screen.findByText('reviewDue'));
 
         expect(useReviewDockStore.getState().requestId).toBe(1);
+        expect(onSelected).toHaveBeenCalledWith('video-1');
         expect(contentCompassApi.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
             videoId: 'video-1',
             action: 'reviewed',

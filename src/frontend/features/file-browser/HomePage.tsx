@@ -69,7 +69,7 @@ const HomePage = () => {
             },
         }
     );
-    const vps = vpsFull ?? vpsBasic;
+    const vps = Array.isArray(vpsFull) ? vpsFull : Array.isArray(vpsBasic) ? vpsBasic : undefined;
     const clear = usePlaybackSession((s) => s.clear);
     const [num, setNum] = React.useState(4);
     // 从第四个开始截取num个
@@ -224,10 +224,13 @@ const HomePage = () => {
                             )}
                         </VStack>
                     ) : (
-                        /* 无播放历史时的专属初始场景：YouTube 优先动线 */
-                        <Center height="100%" minHeight={420}>
-                            <YoutubeImportHero />
-                        </Center>
+                        /* 无播放历史时的专属初始场景：保留学习脉冲与 YouTube 优先动线 */
+                        <VStack gap={4} width="100%" className="h-full">
+                            <DailyStudyPulse />
+                            <Center height="100%" minHeight={420}>
+                                <YoutubeImportHero />
+                            </Center>
+                        </VStack>
                     )}
                 </LayoutContent>
             }

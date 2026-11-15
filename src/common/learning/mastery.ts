@@ -108,14 +108,14 @@ export function effectiveWordMastery(
  * - 跟读/听写与复习评分才是强记忆证据；
  * - 手动“认识 / 忽略”是用户裁决，优先级最高。
  */
-const evidenceToObservation = (evidence: MasteryEvidence): {
+const evidenceToObservation = (evidence: MasteryEvidence, current: MasterySnapshot): {
     observation: number;
     weight: number;
     suggestedStatus?: WordStatus;
 } => {
     switch (evidence.kind) {
         case 'open':
-            return { observation: 0.35, weight: 0.08 };
+            return { observation: Math.min(current.mastery, 0.35), weight: 0.08 };
         case 'save':
             return { observation: 0.5, weight: 0.1 };
         case 'practice': {
@@ -156,7 +156,7 @@ const evidenceToObservation = (evidence: MasteryEvidence): {
  * @returns 更新后的掌握概率、置信度与可选的明确状态建议。
  */
 export function applyMasteryEvidence(current: MasterySnapshot, evidence: MasteryEvidence): MasteryUpdate {
-    const { observation, weight, suggestedStatus } = evidenceToObservation(evidence);
+    const { observation, weight, suggestedStatus } = evidenceToObservation(evidence, current);
     if (evidence.kind === 'known') {
         return { mastery: 1, confidence: 1, suggestedStatus: 'known' };
     }

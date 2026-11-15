@@ -299,6 +299,11 @@ function RolePlayTurnMessages({ turn }: { turn: RolePlayTurnVO }) {
                     />
                 </ChatMessageBubble>
             </ChatMessage>
+            {turn.partnerLine && (
+                <ChatMessage sender="assistant">
+                    <ChatMessageBubble>{turn.partnerLine}</ChatMessageBubble>
+                </ChatMessage>
+            )}
         </>
     );
 }

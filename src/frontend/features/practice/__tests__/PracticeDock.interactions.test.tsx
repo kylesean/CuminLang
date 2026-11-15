@@ -20,19 +20,6 @@ const mockFileSummaries = {
     ],
 };
 
-const { mockPlayerActions } = vi.hoisted(() => ({
-    mockPlayerActions: {
-        pause: vi.fn(),
-        play: vi.fn(),
-        gotoSentence: vi.fn(),
-        seekToTarget: vi.fn(),
-        playPracticeClip: vi.fn(),
-        clearPracticeClip: vi.fn(),
-        setShadowing: vi.fn(),
-        nextSentence: vi.fn(),
-    },
-}));
-
 vi.mock('@/frontend/log/simple-logger', () => ({
     getRendererLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
@@ -61,10 +48,6 @@ vi.mock('@/frontend/features/settings/settingsApi', () => ({
             Promise.resolve({ transcription: { ready: mockAsrReady.value } }),
         ),
     },
-}));
-
-vi.mock('@/frontend/features/player/components/PlayerActions', () => ({
-    playerActions: mockPlayerActions,
 }));
 
 vi.mock('@/frontend/features/player/components/translatable-line/word', () => ({
@@ -261,7 +244,7 @@ describe('PracticeDock 重构工坊核心交互', () => {
         render(<PracticePanel />);
 
         fireEvent.click(screen.getByText('节拍流'));
-        expect(mockPlayerActions.setShadowing).toHaveBeenCalledWith(true);
+        expect(usePlayer.getState().shadowing).toBe(true);
 
         fireEvent.click(screen.getByLabelText('延长停顿倍率'));
         expect(useTrainingModeStore.getState().config.shadowingRatio).toBe(1.7);

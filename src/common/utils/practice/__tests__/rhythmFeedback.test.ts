@@ -169,4 +169,84 @@ describe('buildRhythmFeedback', () => {
             pcm: { samples: new Int16Array(), sampleRate: SAMPLE_RATE },
         })).toBeNull();
     });
+
+    it('句子包含重复词时按出现次序各自对齐时段与能量，不被首个词吞并', () => {
+        const samples: number[] = [];
+        fill(samples, 0.25, 2000); // first 'go': quiet, 0.25s
+        fill(samples, 0.25, 8000); // 'and': loud, 0.25s
+        fill(samples, 0.45, 16000); // second 'go': loudest & longer, 0.45s
+        const pcm = decodePcm16Wav(buildWav(samples));
+
+        const feedback = buildRhythmFeedback({
+            expectedText: 'go and go',
+            transcript: 'go and go',
+            tokens: tokensFor([
+                { word: 'go', start: 0, end: 0.25 },
+                { word: 'and', start: 0.25, end: 0.5 },
+                { word: 'go', start: 0.5, end: 0.95 },
+            ]),
+            pcm: pcm!,
+        });
+
+        expect(feedback?.words).toHaveLength(3);
+        expect(feedback?.words[0]?.durationSec).toBeCloseTo(0.25, 2);
+        expect(feedback?.words[2]?.durationSec).toBeCloseTo(0.45, 2);
+        expect(feedback?.words[2]?.emphasis ?? 0).toBeGreaterThan(feedback?.words[0]?.emphasis ?? 0);
+    });
+
+    it('传入 CTC 强制对齐时间轴时优先采用 CTC 时段而非启发式分词边界', () => {
+        const samples: number[] = [];
+        fill(samples, 0.5, 4000);
+        const pcm = decodePcm16Wav(buildWav(samples));
+
+        const feedback = buildRhythmFeedback({
+            expectedText: 'bright morning',
+            transcript: 'bright morning',
+            tokens: tokensFor([
+                { word: 'bright', start: 0, end: 0.1 },
+                { word: 'morning', start: 0.1, end: 0.2 },
+            ]),
+            pcm: pcm!,
+            ctcWordTimings: new Map([
+                [0, { start: 0, end: 0.18 }],
+                [1, { start: 0.18, end: 0.5 }],
+            ]),
+        });
+
+        expect(feedback?.words[0]?.durationSec).toBeCloseTo(0.18, 2);
+        expect(feedback?.words[1]?.durationSec).toBeCloseTo(0.32, 2);
+    });
+
+    it('全部词均已准确匹配时，句间停顿或快速朗读不会误报漏读/多读音节提示', () => {
+        const samples: number[] = [];
+        fill(samples, 2.8, 6000);
+        const pcm = decodePcm16Wav(buildWav(samples));
+        const lookupPhonetic = (word: string) =>
+            word === 'tomorrow' ? '/təˈmɔːroʊ/' : word === 'morning' ? '/ˈmɔːrnɪŋ/' : null;
+
+        const withPause = buildRhythmFeedback({
+            expectedText: 'tomorrow morning',
+            transcript: 'tomorrow morning',
+            tokens: tokensFor([
+                { word: 'tomorrow', start: 0, end: 0.3 },
+                { word: 'morning', start: 2.5, end: 2.8 },
+            ]),
+            pcm: pcm!,
+            lookupPhonetic,
+        });
+
+        const fastClean = buildRhythmFeedback({
+            expectedText: 'tomorrow morning',
+            transcript: 'tomorrow morning',
+            tokens: tokensFor([
+                { word: 'tomorrow', start: 0, end: 0.15 },
+                { word: 'morning', start: 0.15, end: 0.3 },
+            ]),
+            pcm: pcm!,
+            lookupPhonetic,
+        });
+
+        expect(withPause?.notes).not.toContain('syllables-more');
+        expect(fastClean?.notes).not.toContain('syllables-fewer');
+    });
 });

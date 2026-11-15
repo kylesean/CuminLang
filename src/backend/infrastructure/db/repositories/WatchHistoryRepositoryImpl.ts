@@ -149,6 +149,23 @@ export default class WatchHistoryRepositoryImpl implements WatchHistoryRepositor
     }
 
     /**
+     * 查询指定类型的全部观看记录，并按更新时间倒序排列。
+     *
+     * @param type 记录所属类型。
+     * @returns 倒序排列的观看记录列表。
+     */
+    public async listByProjectTypeOrderedByUpdatedAtDesc(
+        type: WatchHistoryProjectType,
+    ): Promise<WatchHistoryRecord[]> {
+        const rows = await this.db
+            .select()
+            .from(watchHistory)
+            .where(eq(watchHistory.project_type, type))
+            .orderBy(desc(watchHistory.updated_at));
+        return this.toRecords(rows);
+    }
+
+    /**
      * 查询指定类型下去重后的目录列表。
      *
      * @param type 记录所属类型。

@@ -43,6 +43,7 @@ async function readSplitSizes(page: Page): Promise<SplitSizes> {
 }
 
 async function dragHandle(page: Page, testId: string, dx: number, dy: number): Promise<void> {
+    const before = await readSplitSizes(page);
     const handle = page.getByTestId(testId);
     await expect(handle).toBeVisible();
     const box = await handle.boundingBox();
@@ -55,7 +56,13 @@ async function dragHandle(page: Page, testId: string, dx: number, dy: number): P
     await page.mouse.down();
     await page.mouse.move(x + dx, y + dy, { steps: 12 });
     await page.mouse.up();
-    await page.waitForTimeout(300);
+    await expect
+        .poll(async () => {
+            const after = await readSplitSizes(page);
+            return Math.abs(after.video - before.video) > 0.1
+                || Math.abs(after.subtitle - before.subtitle) > 0.1;
+        })
+        .toBe(true);
 }
 
 async function doubleClickHandle(page: Page, testId: string): Promise<void> {
@@ -64,7 +71,12 @@ async function doubleClickHandle(page: Page, testId: string): Promise<void> {
         throw new Error(`${testId} 不可见，无法双击`);
     }
     await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
-    await page.waitForTimeout(400);
+    await expect
+        .poll(async () => {
+            const sizes = await readSplitSizes(page);
+            return sizes.subtitle >= 25 && sizes.subtitle <= 32;
+        })
+        .toBe(true);
 }
 
 /** 左右复位是固定值；上下复位会随字号与整句模式在 25%~32% 之间浮动。 */

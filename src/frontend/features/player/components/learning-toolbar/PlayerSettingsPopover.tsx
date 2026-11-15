@@ -17,7 +17,7 @@ import {
     CONTROL_POPOVER_PANEL,
 } from '@/frontend/features/player/components/ControlPopover';
 import { playerApi } from '@/frontend/features/player/playerApi';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import useLayout from '@/frontend/app/stores/layoutStore';
@@ -89,8 +89,8 @@ export default function PlayerSettingsPopover({
     const setSetting = useSetting((s) => s.setSetting);
 
     const autoPlayNext = useSetting((s) => s.values.get('player.autoPlayNext')) === 'true';
-    const currentSentence = usePlayerState((s) => s.currentSentence);
-    const srtTender = usePlayerState((s) => s.srtTender);
+    const currentSentence = usePlayer((s) => s.currentSentence);
+    const srtTender = usePlayer((s) => s.srtTender);
     const adjustDiff = currentSentence && srtTender && srtTender.adjusted(currentSentence)
         ? srtTender.timeDiff(currentSentence)
         : null;

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import ProxySetting from '@/frontend/features/settings/ProxySetting';
 
 const KEY = 'settings/proxy/detail';
+const originalElectron = typeof window !== 'undefined' ? window.electron : undefined;
 
 const originalPointerMethods = {
     hasPointerCapture: HTMLElement.prototype.hasPointerCapture,
@@ -30,7 +31,16 @@ afterAll(() => {
     }
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+    cleanup();
+    if (typeof window !== 'undefined') {
+        if (originalElectron === undefined) {
+            delete (window as { electron?: unknown }).electron;
+        } else {
+            window.electron = originalElectron;
+        }
+    }
+});
 
 /** 代理模式分段控件里的某个档位。 */
 const findModeRadio = async (name: string) => {
@@ -104,11 +114,15 @@ describe('ProxySetting（SWR 版本）', () => {
         expect(screen.queryByText('proxy.directConnectionWarning')).toBeNull();
     });
 
-    it('custom 模式地址为空时显示直连警告，填写地址后消失', async () => {
+    it('custom 模式地址为空时显示直连警告，填写地址后消失并提交保存', async () => {
+        const savedCalls: unknown[] = [];
         window.electron = {
-            call: vi.fn((path: string) => {
+            call: vi.fn((path: string, params: unknown) => {
                 if (path === KEY) {
                     return Promise.resolve({ mode: 'custom', url: '', bypassRules: '', systemProxy: { detected: false, url: null } });
+                }
+                if (path === 'settings/proxy/save') {
+                    savedCalls.push(params);
                 }
                 return Promise.resolve(undefined);
             }),
@@ -117,5 +131,21 @@ describe('ProxySetting（SWR 版本）', () => {
         renderPage();
         expect(await screen.findByRole('alert', {}, { timeout: 3000 })).toBeDefined();
         expect(screen.getByText('proxy.directConnectionWarning')).toBeDefined();
+
+        const urlInput = screen.getByPlaceholderText('http://127.0.0.1:7890');
+        fireEvent.change(urlInput, { target: { value: 'http://127.0.0.1:7890' } });
+
+        await waitFor(() => {
+            expect(screen.queryByText('proxy.directConnectionWarning')).toBeNull();
+        });
+
+        const form = urlInput.closest('form');
+        expect(form).not.toBeNull();
+        fireEvent.submit(form!);
+        await waitFor(() => {
+            expect(savedCalls).toEqual([
+                { mode: 'custom', url: 'http://127.0.0.1:7890', bypassRules: '' },
+            ]);
+        });
     });
 });

@@ -436,7 +436,7 @@ describe('OnboardingView Component', () => {
         fireEvent.change(screen.getByLabelText('steps.download.cloud.apiKeyLabel'), {
             target: { value: 'sk-test-9999' },
         });
-        fireEvent.change(screen.getByLabelText('Model'), {
+        fireEvent.change(screen.getByLabelText('steps.download.cloud.modelLabel'), {
             target: { value: 'deepseek-chat' },
         });
         fireEvent.click(screen.getByRole('button', { name: 'steps.download.cloud.saveButton' }));

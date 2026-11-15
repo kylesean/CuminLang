@@ -6,7 +6,6 @@ import useSetting from '@/frontend/features/settings/settingsStore';
 import { useSubtitleScrollState } from '@/frontend/features/player/hooks/useSubtitleScroll';
 import useChatPanel from '@/frontend/features/chat/chatStore';
 import usePracticePanel from '@/frontend/features/practice/practiceStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
 import { exitOverlayView } from '@/frontend/features/player/lib/player-view-controller';
@@ -77,7 +76,7 @@ export default function PlayerShortCut() {
         openControlPanel: s.values.get('shortcut.openControlPanel') ?? '',
     })));
 
-    // 模式开关的写入统一走 PlayerActions，此处只订阅展示用的值
+    // 模式开关的写入统一走 usePlayer.getState()，此处只订阅展示用的值
     const singleRepeat = usePlayer((s) => s.singleRepeat);
     const autoPause = usePlayer((s) => s.autoPause);
     const learningVisible = useChatPanel((s) => s.learningVisible);
@@ -94,15 +93,15 @@ export default function PlayerShortCut() {
     }, [changeSideBar, showSideBar]);
 
     const toggleSingleRepeat = () => {
-        playerActions.setSingleRepeat(!singleRepeat);
+        usePlayer.getState().setSingleRepeat(!singleRepeat);
     };
     const toggleAutoPause = () => {
-        playerActions.setAutoPause(!autoPause);
+        usePlayer.getState().setAutoPause(!autoPause);
     };
 
     useHotkeys(process(shortcuts.previousSentence), (e) => {
         e.preventDefault();
-        playerActions.prevSentence();
+        usePlayer.getState().prevSentence();
         if (scrollState === 'USER_BROWSING') {
             onUserFinishScrolling();
         }
@@ -110,7 +109,7 @@ export default function PlayerShortCut() {
 
     useHotkeys(process(shortcuts.nextSentence), (e) => {
         e.preventDefault();
-        playerActions.nextSentence();
+        usePlayer.getState().nextSentence();
         if (scrollState === 'USER_BROWSING') {
             onUserFinishScrolling();
         }
@@ -118,7 +117,7 @@ export default function PlayerShortCut() {
 
     useHotkeys(process(shortcuts.repeatSentence), (e) => {
         e.preventDefault();
-        playerActions.repeatCurrent({ loop: false });
+        usePlayer.getState().repeatCurrent({ loop: false });
         if (scrollState === 'USER_BROWSING') {
             onUserFinishScrolling();
         }
@@ -126,7 +125,7 @@ export default function PlayerShortCut() {
 
     useHotkeys(process(shortcuts.playPause), (e) => {
         e.preventDefault();
-        playerActions.togglePlay();
+        usePlayer.getState().togglePlay();
     }, { enabled: playbackKeysEnabled });
 
     useHotkeys(process(shortcuts.repeatSingleSentence), toggleSingleRepeat, { enabled: playbackKeysEnabled }, [toggleSingleRepeat]);
@@ -136,46 +135,48 @@ export default function PlayerShortCut() {
     useHotkeys(process(shortcuts.toggleBilingualDisplay), changeShowEnCn, { enabled: playbackKeysEnabled });
 
     useHotkeys(process(shortcuts.adjustBeginMinus), () => {
-        playerActions.adjustCurrentBegin(-0.2);
+        usePlayer.getState().adjustCurrentBegin(-0.2);
     }, { enabled: playbackKeysEnabled });
     useHotkeys(process(shortcuts.adjustBeginPlus), () => {
-        playerActions.adjustCurrentBegin(0.2);
+        usePlayer.getState().adjustCurrentBegin(0.2);
     }, { enabled: playbackKeysEnabled });
     useHotkeys(process(shortcuts.adjustEndMinus), () => {
-        playerActions.adjustCurrentEnd(-0.2);
+        usePlayer.getState().adjustCurrentEnd(-0.2);
     }, { enabled: playbackKeysEnabled });
     useHotkeys(process(shortcuts.adjustEndPlus), () => {
-        playerActions.adjustCurrentEnd(0.2);
+        usePlayer.getState().adjustCurrentEnd(0.2);
     }, { enabled: playbackKeysEnabled });
     useHotkeys(process(shortcuts.clearAdjust), () => {
-        void playerActions.clearAdjust();
+        void usePlayer.getState().clearAdjust();
     }, { enabled: playbackKeysEnabled });
     useHotkeys(process(shortcuts.toggleWordLevelDisplay), changeShowWordLevel, { enabled: playbackKeysEnabled });
-    useHotkeys(process(shortcuts.nextPlaybackRate), playerActions.cyclePlaybackRate.bind(playerActions), { enabled: playbackKeysEnabled });
+    useHotkeys(process(shortcuts.nextPlaybackRate), () => {
+        usePlayer.getState().cyclePlaybackRate();
+    }, { enabled: playbackKeysEnabled });
 
     useHotkeys(process(shortcuts.volumeUp), (e) => {
         e.preventDefault();
         const current = usePlayer.getState().volume;
-        playerActions.setVolume(Math.min(1, Math.round((current + 0.1) * 10) / 10));
+        usePlayer.getState().setVolume(Math.min(1, Math.round((current + 0.1) * 10) / 10));
     }, { enabled: playbackKeysEnabled });
 
     useHotkeys(process(shortcuts.volumeDown), (e) => {
         e.preventDefault();
         const current = usePlayer.getState().volume;
-        playerActions.setVolume(Math.max(0, Math.round((current - 0.1) * 10) / 10));
+        usePlayer.getState().setVolume(Math.max(0, Math.round((current - 0.1) * 10) / 10));
     }, { enabled: playbackKeysEnabled });
 
     useHotkeys(process(shortcuts.seekBackward), (e) => {
         e.preventDefault();
         const currentTime = usePlayer.getState().internal.exactPlayTime;
-        playerActions.seekTo({ time: Math.max(0, currentTime - 5) });
+        usePlayer.getState().seekTo({ time: Math.max(0, currentTime - 5) });
     }, { enabled: playbackKeysEnabled });
 
     useHotkeys(process(shortcuts.seekForward), (e) => {
         e.preventDefault();
         const currentTime = usePlayer.getState().internal.exactPlayTime;
         const duration = usePlayer.getState().duration;
-        playerActions.seekTo({ time: Math.min(duration, currentTime + 5) });
+        usePlayer.getState().seekTo({ time: Math.min(duration, currentTime + 5) });
     }, { enabled: playbackKeysEnabled });
 
     useHotkeys(process(shortcuts.aiChat), () => {

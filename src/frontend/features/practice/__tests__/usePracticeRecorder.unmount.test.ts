@@ -12,8 +12,8 @@ vi.mock('@/frontend/features/practice/practiceApi', () => ({
     practiceApi: { ensureMicrophone: vi.fn().mockResolvedValue('granted') },
 }));
 
-vi.mock('@/frontend/features/player/components/PlayerActions', () => ({
-    playerActions: { pause: vi.fn() },
+vi.mock('@/frontend/features/player/playerStore', () => ({
+    usePlayer: { getState: () => ({ pause: vi.fn() }) },
 }));
 
 // hook 现在统一走 showNotification；这里替身掉通知出口，避免测试依赖真实 toast。

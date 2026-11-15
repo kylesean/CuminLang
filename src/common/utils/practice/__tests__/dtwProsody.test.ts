@@ -41,4 +41,21 @@ describe('dtwProsody', () => {
         expect(downsampleEnvelope([], 24)).toEqual([]);
         expect(compareProsodyDtw(silent, silent)).toBeNull();
     });
+
+    it('完全平坦无起伏的录音对比有起伏原句时，energyCorrelation 为 0 而非 50', () => {
+        const ref = makeTonePcm(16000, [
+            { durationSec: 0.3, amp: 0.9 },
+            { durationSec: 0.2, amp: 0.02 },
+            { durationSec: 0.4, amp: 0.7 },
+        ]);
+        const flatSamples = new Int16Array(16000);
+        for (let i = 0; i < flatSamples.length; i += 1) {
+            flatSamples[i] = i % 2 === 0 ? 8000 : -8000;
+        }
+        const flatUser = { samples: flatSamples, sampleRate: 16000 };
+
+        const res = compareProsodyDtw(ref, flatUser);
+        expect(res).not.toBeNull();
+        expect(res!.energyCorrelation).toBe(0);
+    });
 });

@@ -31,8 +31,12 @@ export const QUIET_PATH_POLICIES: Partial<Record<string, { logParam: boolean; lo
     // 返回值里带手机访问令牌（lanUrls 的 ?t= 与裸 token），落日志等于把长期凭据写进磁盘
     'settings/mobile-access/detail': { logParam: true, logResult: false },
     'settings/mobile-access/regenerate-token': { logParam: true, logResult: false },
-    // 返回值是解密后的云端凭据（OpenAI key、腾讯 secretId/secretKey）
+    // 代理 URL 可能携带 user:pass@ 认证凭据，入参与返回值均禁止落盘日志
+    'settings/proxy/save': { logParam: false, logResult: false },
+    'settings/proxy/detail': { logParam: true, logResult: false },
+    // 返回值是解密后的云端凭据（OpenAI key、腾讯 secretId/secretKey）；保存路径同样静默
     'settings/service-credentials/detail': { logParam: true, logResult: false },
+    'settings/service-credentials/save': { logParam: false, logResult: false },
 };
 
 /**

@@ -1,4 +1,4 @@
-import { forwardRef, useState } from 'react';
+import { forwardRef, memo } from 'react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Repeat1 } from 'lucide-react';
 import type { SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
@@ -114,7 +114,6 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
         ref,
     ) => {
         const { t } = useI18nTranslation('player');
-        const [popEle, setPopEle] = useState<string | null>(null);
         // 仅搜索进行中才订阅整张译文表（段落级「命中才显示译文段」的判定需要）；
         // 平时退化为稳定空引用，译文批次到达不再触发全部已挂载段落重渲染。
         // 各句译文的展示由 ArticleSentenceZhSpan 按句订阅，不受此影响。
@@ -122,12 +121,6 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
         const translations = useTranslation((state) =>
             searchActive ? state.translations : EMPTY_TRANSLATIONS,
         );
-
-        const handleRequestPop = (k: string) => {
-            if (popEle !== k) {
-                setPopEle(k);
-            }
-        };
 
         const hasActiveCurrent = block.sentences.some(
             (s) => !!currentSentence && s.index === currentSentence.index && s.fileHash === currentSentence.fileHash,
@@ -139,8 +132,6 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                 text: sentence.text || '',
                 searchQuery,
                 isActiveMatch,
-                popEle,
-                onRequestPop: handleRequestPop,
             });
 
         const timeStr = block.start !== undefined && block.start !== null
@@ -297,4 +288,4 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
 
 ArticleBlock.displayName = 'ArticleBlock';
 
-export default ArticleBlock;
+export default memo(ArticleBlock);

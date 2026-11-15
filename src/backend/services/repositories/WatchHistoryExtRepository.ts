@@ -18,6 +18,7 @@ export type WatchHistoryExtPatch = Partial<Pick<WatchHistoryExtRecord, 'podcast_
 
 export default interface WatchHistoryExtRepository {
     findByWatchHistoryId(watchHistoryId: string): Promise<WatchHistoryExtRecord | null>;
+    findByWatchHistoryIds(watchHistoryIds: string[]): Promise<Map<string, WatchHistoryExtRecord>>;
     upsert(watchHistoryId: string, patch: WatchHistoryExtPatch): Promise<WatchHistoryExtRecord>;
     deleteByWatchHistoryId(watchHistoryId: string): Promise<void>;
 }

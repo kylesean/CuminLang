@@ -93,6 +93,29 @@ describe('reviewScheduler', () => {
         expect(normal.stability).toBeCloseTo(220, 5);
     });
 
+    it('提前复习处于 review 状态的卡片时按已过比例缩放稳定度增长', () => {
+        const lastReviewAt = new Date('2026-01-01T00:00:00.000Z');
+        const scheduledDueAt = new Date(lastReviewAt.getTime() + 10 * DAY_MS);
+        const earlyReviewAt = new Date(lastReviewAt.getTime() + 1 * DAY_MS);
+        const card = {
+            dueAt: scheduledDueAt.toISOString(),
+            state: 'review' as const,
+            reps: 4,
+            lapses: 0,
+            stability: 10,
+            difficulty: 5,
+            lastReviewAt: lastReviewAt.toISOString(),
+            lastRating: 'good' as const,
+        };
+
+        const earlyNext = scheduleReview(card, 'good', earlyReviewAt);
+        const dueNext = scheduleReview(card, 'good', scheduledDueAt);
+
+        expect(earlyNext.stability).toBeLessThan(dueNext.stability);
+        expect(earlyNext.stability).toBeCloseTo(11.2, 5);
+        expect(dueNext.stability).toBeCloseTo(22, 5);
+    });
+
     it('练习分数按四档映射', () => {
         expect(reviewRatingFromPracticeScore(90)).toBe('easy');
         expect(reviewRatingFromPracticeScore(89)).toBe('good');

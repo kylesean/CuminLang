@@ -56,11 +56,6 @@ export default function SentenceDetailCanvas({
     const [savingNote, setSavingNote] = useState(false);
     const [speaking, setSpeaking] = useState(false);
     const [removing, setRemoving] = useState(false);
-    const [popEle, setPopEle] = useState<string | null>(null);
-
-    const handleRequestPop = (nextKey: string) => {
-        setPopEle((prev) => (prev === nextKey ? null : nextKey));
-    };
 
     const hasNativeAudio = Boolean(sentence.videoPath && sentence.endTime > sentence.startTime);
     const speakLabel = hasNativeAudio
@@ -206,8 +201,6 @@ export default function SentenceDetailCanvas({
                         {renderSentenceTokens({
                             sentence: buildSavedSentenceObj(sentence),
                             text: sentence.text,
-                            popEle,
-                            onRequestPop: handleRequestPop,
                             alwaysDark: false,
                             surface: 'transcript',
                             sentenceHash: sentence.sentenceKey,

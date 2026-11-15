@@ -1,7 +1,29 @@
 import type { UIMessageChunk } from 'ai';
 import type { SentenceStudyCard } from '@/common/types/aiRes/AiUnifiedAnalysisRes';
 import type { SentenceMemoryHints } from '@/common/types/vo/SentenceVocabularyVO';
-import type { LearningMessageBlock } from '@/frontend/features/chat/types';
+
+/** 页面上一条对话消息里的一个块，按模型输出的先后顺序排列。 */
+export type LearningMessageBlock =
+    | { kind: 'text'; text: string }
+    | {
+        kind: 'search';
+        /** 本轮的检索关键词。 */
+        queries: string[];
+        /** 命中的字幕行，可点击跳转。 */
+        hits: { index: number; text: string }[];
+        /** 命中总条数（可能大于返回的 hits 数量）。 */
+        total: number;
+        /** 是否仍在检索中。 */
+        running: boolean;
+    }
+    | {
+        kind: 'context';
+        /** 已读取的字幕索引区间；未完成时为 null。 */
+        range: { start: number; end: number } | null;
+        /** 是否仍在读取中。 */
+        running: boolean;
+    }
+    | { kind: 'error'; text: string };
 
 /** 教学预设角色定位。 */
 export type LearningPromptRoleMode = 'study' | 'tutor' | 'listening' | 'custom';

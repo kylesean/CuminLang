@@ -9,7 +9,10 @@ import { usePlaybackSession } from '@/frontend/features/player/playbackSessionSt
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { videoLearningApi } from '@/frontend/features/video-learning/videoLearningApi';
 import { togglePlayerView } from '@/frontend/features/player/lib/player-view-controller';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
+
+const { mockPause } = vi.hoisted(() => ({
+    mockPause: vi.fn(),
+}));
 
 vi.mock('swr', () => ({
     default: vi.fn(),
@@ -32,8 +35,10 @@ vi.mock('@/frontend/features/player/learningSessionStore', () => ({
     }),
 }));
 
-vi.mock('@/frontend/features/player/playerState', () => ({
-    usePlayerState: () => false,
+vi.mock('@/frontend/features/player/playerStore', () => ({
+    usePlayer: Object.assign(() => false, {
+        getState: () => ({ pause: mockPause }),
+    }),
 }));
 
 vi.mock('@/frontend/features/video-learning/videoLearningApi', () => ({
@@ -49,10 +54,6 @@ vi.mock('@/frontend/features/video-learning/reviewQueue', () => ({
 
 vi.mock('@/frontend/features/player/lib/player-view-controller', () => ({
     togglePlayerView: vi.fn(() => 'practice'),
-}));
-
-vi.mock('@/frontend/features/player/components/PlayerActions', () => ({
-    playerActions: { pause: vi.fn() },
 }));
 
 const sentence = {
@@ -200,7 +201,7 @@ describe('SubtitleLearningHints', () => {
         fireEvent.click(screen.getByTestId('learning-moment-shadowing'));
 
         expect(togglePlayerView).toHaveBeenCalledWith('practice');
-        expect(playerActions.pause).toHaveBeenCalledTimes(1);
+        expect(mockPause).toHaveBeenCalledTimes(1);
     });
 
     it('教练档不提供口语入口', () => {

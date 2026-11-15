@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 
 import TYPES from '@/backend/ioc/types';
 import {
@@ -18,6 +18,8 @@ import type WordEncounterRepository from '@/backend/services/repositories/WordEn
 import type { EncounterContextRow } from '@/backend/services/repositories/WordEncounterRepository';
 import type WordsRepository from '@/backend/services/repositories/WordsRepository';
 import type { Word } from '@/backend/infrastructure/db/tables/words';
+import type { WordMatchService } from '@/backend/services/WordMatchService';
+import type SubtitleService from '@/backend/services/SubtitleService';
 import { lemmatizeWord } from '@/backend/utils/language/VocabularyMatcher';
 import type {
     ReviewCardContextVO,
@@ -77,6 +79,8 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         @inject(TYPES.WordEncounterRepository) private readonly repository: WordEncounterRepository,
         @inject(TYPES.WordsRepository) private readonly wordsRepository: WordsRepository,
         @inject(TYPES.ReviewCardRepository) private readonly reviewCardRepository: ReviewCardRepository,
+        @optional() @inject(TYPES.WordMatchService) private readonly wordMatchService?: WordMatchService,
+        @optional() @inject(TYPES.SubtitleService) private readonly subtitleService?: SubtitleService,
     ) {}
 
     public async record(params: WordEncounterInput): Promise<void> {
@@ -116,14 +120,17 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         // seen/hover/replay 只是曝光，不算学习证据（evidence 为 null）：掌握度不动，
         // 也不得刷新 last_seen_at——遗忘衰减完全由 last_seen_at 驱动，悬停/重播把
         // 时钟拨到当前会让 14 天半衰期对常查的词永不生效，掌握度虚高。
+        // 查词 (open) 仅表明用户需要查释义，若已有 last_seen_at 同样保留原遗忘时钟。
         // 纯曝光且无状态建议时整次 UPDATE 都可跳过，避免高频悬停造成写放大。
+        const shouldRefreshLastSeen = evidence !== null && (params.action !== 'open' || !existing.last_seen_at);
         if (evidence || nextStatus) {
             await this.wordsRepository.updateLearning(lemma, {
                 mastery: mastery.mastery,
                 confidence: mastery.confidence,
                 status: nextStatus,
-                ...(evidence ? { lastSeenAt: now.toISOString() } : {}),
+                ...(shouldRefreshLastSeen ? { lastSeenAt: now.toISOString() } : {}),
             });
+            this.invalidateDerivedVocabularyCachesIfChanged(existing.status, nextStatus);
         }
 
         await this.updateReviewCard(lemma, nextStatus ?? existing.status, params, now);
@@ -157,7 +164,7 @@ export class WordEncounterServiceImpl implements WordEncounterService {
                             this.wordsRepository.findByWord(lemma),
                             this.reviewCardRepository.findByWord(lemma),
                         ]);
-                        return word ? { word, card } : null;
+                        return word && isActiveWordStatus(word.status) ? { word, card } : null;
                     }),
                 ),
             ]);
@@ -249,6 +256,7 @@ export class WordEncounterServiceImpl implements WordEncounterService {
             status: nextStatus,
             lastSeenAt: now.toISOString(),
         });
+        this.invalidateDerivedVocabularyCachesIfChanged(word.status, nextStatus);
         await this.repository.record({
             word: word.word,
             lemma,
@@ -298,8 +306,11 @@ export class WordEncounterServiceImpl implements WordEncounterService {
     }): Promise<void> {
         // 产出型练习的分数与掌握度证据契约一致，都是 0–100。
         const score = this.normalizeScore(params.score) ?? 0;
+        const now = new Date();
         const unique = Array.from(new Set(
-            params.words.map((word) => word.trim().toLowerCase()).filter((word) => word.length > 0),
+            params.words
+                .map((word) => lemmatizeWord(word))
+                .filter((lemma) => lemma.length > 0),
         ));
         for (const lemma of unique) {
             // 只对已经在用户词表里的词更新掌握度：产出型练习不该把没学过的词
@@ -313,12 +324,14 @@ export class WordEncounterServiceImpl implements WordEncounterService {
                 score,
             });
             const nextStatus = this.resolveNextStatus(existing.status, mastery.suggestedStatus);
+            const effectiveStatus = nextStatus ?? existing.status;
             await this.wordsRepository.updateLearning(lemma, {
                 mastery: mastery.mastery,
                 confidence: mastery.confidence,
                 status: nextStatus,
-                lastSeenAt: new Date().toISOString(),
+                lastSeenAt: now.toISOString(),
             });
+            this.invalidateDerivedVocabularyCachesIfChanged(existing.status, nextStatus);
             await this.repository.record({
                 word: existing.word,
                 lemma,
@@ -331,6 +344,17 @@ export class WordEncounterServiceImpl implements WordEncounterService {
                 score: params.score,
                 rating: null,
             });
+            if (effectiveStatus === 'known' || effectiveStatus === 'ignored') {
+                await this.reviewCardRepository.deleteByWord(lemma);
+                continue;
+            }
+            if (score >= 60 && isActiveWordStatus(effectiveStatus)) {
+                const existingCard = await this.reviewCardRepository.findByWord(lemma);
+                if (existingCard && Date.parse(existingCard.due_at) <= now.getTime()) {
+                    const deferred = scheduleReview(this.scheduleFromCard(existingCard), 'good', now);
+                    await this.reviewCardRepository.upsert(this.toInsertCard(lemma, deferred));
+                }
+            }
         }
     }
 
@@ -377,13 +401,12 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         params: WordEncounterInput,
         now: Date,
     ): Promise<void> {
-        // 跟读与产出型练习只提供练习反馈与 mastery 证据，不参与复习调度：
-        // 口音或表达差异导致的低分不应把词推进复习队列，也不应提前/推迟 due。
-        if (params.action === 'shadow' || params.action === 'retell' || params.action === 'roleplay') {
-            return;
-        }
         if (status === 'known' || status === 'ignored') {
             await this.reviewCardRepository.deleteByWord(lemma);
+            return;
+        }
+        // 跟读与产出型练习不自动建卡，也不因低分惩罚性提前到期。
+        if (params.action === 'shadow' || params.action === 'retell' || params.action === 'roleplay') {
             return;
         }
         const existingCard = await this.reviewCardRepository.findByWord(lemma);
@@ -395,12 +418,28 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         const current = existingCard
             ? this.scheduleFromCard(existingCard)
             : createNewReviewSchedule(now);
-        const next = params.action === 'dictation'
-            ? scheduleReview(current, reviewRatingFromPracticeScore(params.score ?? 0), now)
-            : params.action === 'review' && params.rating
-                ? scheduleReview(current, params.rating, now)
-                : current;
+        let next = current;
+        if (params.action === 'dictation') {
+            if (!existingCard || Date.parse(existingCard.due_at) <= now.getTime()) {
+                next = scheduleReview(current, reviewRatingFromPracticeScore(params.score ?? 0), now);
+            } else {
+                return;
+            }
+        } else if (params.action === 'review' && params.rating) {
+            next = scheduleReview(current, params.rating, now);
+        }
         await this.reviewCardRepository.upsert(this.toInsertCard(lemma, next));
+    }
+
+    private invalidateDerivedVocabularyCachesIfChanged(
+        previousStatus: WordStatus,
+        nextStatus?: WordStatus,
+    ): void {
+        if (!nextStatus || nextStatus === previousStatus) {
+            return;
+        }
+        this.wordMatchService?.invalidateVocabularyCache();
+        this.subtitleService?.invalidateVocabularyAnalysisCache();
     }
 
     private async getRetentionSince(since: string): Promise<ReviewRetentionStats> {

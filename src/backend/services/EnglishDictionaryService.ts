@@ -4,7 +4,9 @@ import https from 'node:https';
 import type { ClientRequest } from 'node:http';
 import zlib from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { pipeline } from 'node:stream/promises';
+import { Worker } from 'node:worker_threads';
 import { extract as tarExtract } from 'tar-fs';
 import Database from 'better-sqlite3';
 import { inject, injectable } from 'inversify';
@@ -37,23 +39,6 @@ const DATA_FILES: ReadonlyArray<{ file: string; pos: string }> = [
     { file: 'data.adj', pos: 'adj' },
     { file: 'data.adv', pos: 'adv' },
 ];
-
-/** 单行 data.* 的解析结果。 */
-interface ParsedSynsetLine {
-    key: string;
-    pos: string;
-    gloss: string;
-    examples: string[];
-    lemmas: string[];
-}
-
-/** 待解析的反义词指针。 */
-interface PendingAntonym {
-    sourceKey: string;
-    sourceIndex: number;
-    targetKey: string;
-    targetIndex: number;
-}
 
 /** SQLite 查询行。 */
 interface SenseRow {
@@ -236,7 +221,7 @@ export default class EnglishDictionaryService {
             fs.mkdirSync(targetDir, { recursive: true });
             const dbPath = path.join(targetDir, DB_FILE);
             this.dpTaskService.process(taskId, { progress: '构建本地词典…' });
-            this.buildDatabase(taskId, dictDir, dbPath);
+            await this.buildDatabaseInWorker(taskId, dictDir, dbPath);
             fs.writeFileSync(path.join(targetDir, MARKER_FILE), new Date().toISOString(), 'utf8');
 
             this.dpTaskService.finish(taskId, { progress: '英英释义包安装完成', result: targetDir });
@@ -319,79 +304,78 @@ export default class EnglishDictionaryService {
     }
 
     /**
-     * 解析 WordNet data.* 文件并写入 SQLite。
+     * 在独立 Worker 线程中解析 WordNet data.* 文件并写入 SQLite，避免阻塞主进程事件循环。
      *
-     * @param taskId 后台任务 ID（用于取消检查）。
+     * @param taskId 后台任务 ID（用于取消检查与进度汇报）。
      * @param dictDir 解压后的 dict 目录。
      * @param dbPath 目标 SQLite 路径。
      */
-    private buildDatabase(taskId: number, dictDir: string, dbPath: string): void {
+    private async buildDatabaseInWorker(taskId: number, dictDir: string, dbPath: string): Promise<void> {
         fs.rmSync(dbPath, { force: true });
-        const db = new Database(dbPath);
-        const synsetWords = new Map<string, string[]>();
-        const pendingAntonyms: PendingAntonym[] = [];
-        try {
-            db.exec(`
-                CREATE TABLE synsets (
-                    synset_key TEXT PRIMARY KEY,
-                    pos TEXT NOT NULL,
-                    gloss TEXT NOT NULL,
-                    examples TEXT NOT NULL DEFAULT '[]'
-                );
-                CREATE TABLE senses (
-                    word_key TEXT NOT NULL,
-                    synset_key TEXT NOT NULL,
-                    lemma TEXT NOT NULL,
-                    PRIMARY KEY (word_key, synset_key)
-                );
-                CREATE INDEX idx_senses_word ON senses(word_key);
-                CREATE TABLE antonyms (
-                    word_key TEXT NOT NULL,
-                    antonym TEXT NOT NULL,
-                    PRIMARY KEY (word_key, antonym)
-                );
-                CREATE INDEX idx_antonyms_word ON antonyms(word_key);
-            `);
-            const insertSynset = db.prepare(
-                'INSERT OR REPLACE INTO synsets (synset_key, pos, gloss, examples) VALUES (?, ?, ?, ?)'
-            );
-            const insertSense = db.prepare(
-                'INSERT OR IGNORE INTO senses (word_key, synset_key, lemma) VALUES (?, ?, ?)'
-            );
-            const insertAntonym = db.prepare(
-                'INSERT OR IGNORE INTO antonyms (word_key, antonym) VALUES (?, ?)'
-            );
+        const requireFromCurrent = typeof require === 'function'
+            ? require
+            : createRequire(path.join(process.cwd(), 'package.json'));
+        const betterSqlitePath = requireFromCurrent.resolve('better-sqlite3');
 
-            db.exec('BEGIN');
-            for (const { file, pos } of DATA_FILES) {
-                const filePath = path.join(dictDir, file);
-                if (!fs.existsSync(filePath)) {
-                    throw new Error(`WordNet 数据文件缺失：${file}`);
+        await new Promise<void>((resolve, reject) => {
+            let settled = false;
+            const worker = new Worker(WORDNET_BUILD_WORKER_SCRIPT, {
+                eval: true,
+                workerData: {
+                    dictDir,
+                    dbPath,
+                    dataFiles: DATA_FILES,
+                    betterSqlitePath,
+                },
+            });
+
+            const finishWithError = (error: Error): void => {
+                if (settled) return;
+                settled = true;
+                fs.rmSync(dbPath, { force: true });
+                reject(error);
+            };
+
+            const cancelCheckTimer = setInterval(() => {
+                if (this.cancelledTasks.has(taskId)) {
+                    clearInterval(cancelCheckTimer);
+                    void worker.terminate();
+                    finishWithError(new CancelByUserError('任务已取消'));
                 }
-                const content = fs.readFileSync(filePath, 'utf8');
-                for (const line of content.split('\n')) {
-                    const parsed = parseSynsetLine(line, pos, synsetWords, pendingAntonyms);
-                    if (!parsed) continue;
-                    insertSynset.run(parsed.key, parsed.pos, parsed.gloss, JSON.stringify(parsed.examples));
-                    for (const lemma of parsed.lemmas) {
-                        insertSense.run(lemma.toLowerCase(), parsed.key, lemma);
+            }, 250);
+
+            worker.on('message', (msg: { type: 'progress'; file: string } | { type: 'done' }) => {
+                if (msg.type === 'progress') {
+                    try {
+                        this.dpTaskService.checkCancel(taskId);
+                    } catch (err) {
+                        clearInterval(cancelCheckTimer);
+                        void worker.terminate();
+                        finishWithError(err instanceof Error ? err : new CancelByUserError('任务已取消'));
+                        return;
+                    }
+                    this.dpTaskService.process(taskId, { progress: `解析 ${msg.file}…` });
+                } else if (msg.type === 'done') {
+                    clearInterval(cancelCheckTimer);
+                    if (!settled) {
+                        settled = true;
+                        resolve();
                     }
                 }
-                this.dpTaskService.checkCancel(taskId);
-                this.dpTaskService.process(taskId, { progress: `解析 ${file}…` });
-            }
+            });
 
-            for (const pointer of pendingAntonyms) {
-                const source = synsetWords.get(pointer.sourceKey)?.[pointer.sourceIndex];
-                const target = synsetWords.get(pointer.targetKey)?.[pointer.targetIndex];
-                if (source && target) {
-                    insertAntonym.run(source.toLowerCase(), target);
+            worker.on('error', (err) => {
+                clearInterval(cancelCheckTimer);
+                finishWithError(err instanceof Error ? err : new Error(String(err)));
+            });
+
+            worker.on('exit', (code) => {
+                clearInterval(cancelCheckTimer);
+                if (!settled) {
+                    finishWithError(new Error(`WordNet 构建线程异常退出（code=${code}）`));
                 }
-            }
-            db.exec('COMMIT');
-        } finally {
-            db.close();
-        }
+            });
+        });
     }
 
     /** 打开查询连接与预编译语句。 */
@@ -423,8 +407,14 @@ export default class EnglishDictionaryService {
     }
 }
 
-/** 把 WordNet 的 ss_type 映射为展示用词性。 */
-const mapPos = (ssType: string): string => {
+/** Worker 线程脚本：独立解析 WordNet data.* 并构建 SQLite 索引库。 */
+const WORDNET_BUILD_WORKER_SCRIPT = `
+const fs = require('node:fs');
+const path = require('node:path');
+const { parentPort, workerData } = require('node:worker_threads');
+const Database = require(workerData.betterSqlitePath);
+
+const mapPos = (ssType) => {
     if (ssType === 'n') return 'noun';
     if (ssType === 'v') return 'verb';
     if (ssType === 'a' || ssType === 's') return 'adj';
@@ -432,49 +422,32 @@ const mapPos = (ssType: string): string => {
     return ssType;
 };
 
-/**
- * 解析一条 WordNet data.* 记录。
- *
- * 行格式：offset lex_filenum ss_type w_cnt (word lex_id)* p_cnt
- *         (pointer_symbol target_offset target_pos source_target)* | gloss
- *
- * @param raw 原始行。
- * @param defaultPos 当前文件对应的词性。
- * @param synsetWords 全局 synset → lemma 映射（用于反义词解析）。
- * @param pendingAntonyms 收集待解析的反义词指针。
- * @returns 解析结果；表头/空行返回 null。
- */
-const parseSynsetLine = (
-    raw: string,
-    defaultPos: string,
-    synsetWords: Map<string, string[]>,
-    pendingAntonyms: PendingAntonym[],
-): ParsedSynsetLine | null => {
+const parseSynsetLine = (raw, defaultPos, synsetWords, pendingAntonyms) => {
     const line = raw.trim();
-    if (!/^\d{8}\s/u.test(line)) return null;
+    if (!/^\\d{8}\\s/u.test(line)) return null;
     const barIndex = line.indexOf(' | ');
     if (barIndex < 0) return null;
     const left = line.slice(0, barIndex).trim();
     const glossPart = line.slice(barIndex + 3).trim();
-    const tokens = left.split(/\s+/u);
+    const tokens = left.split(/\\s+/u);
 
     let cursor = 0;
     const offset = tokens[cursor++];
-    cursor += 1; // lex_filenum
+    cursor += 1;
     const ssType = tokens[cursor++];
     const wordCount = Number(tokens[cursor++]);
     if (!Number.isInteger(wordCount) || wordCount < 0) return null;
 
-    const lemmas: string[] = [];
+    const lemmas = [];
     for (let index = 0; index < wordCount; index++) {
         const word = tokens[cursor++];
-        cursor += 1; // lex_id
+        cursor += 1;
         if (!word) return null;
         lemmas.push(word.replaceAll('_', ' '));
     }
 
     const pos = mapPos(ssType) || defaultPos;
-    const key = `${pos}:${offset}`;
+    const key = pos + ':' + offset;
     synsetWords.set(key, lemmas);
 
     const pointerCount = Number(tokens[cursor++]);
@@ -490,7 +463,7 @@ const parseSynsetLine = (
         pendingAntonyms.push({
             sourceKey: key,
             sourceIndex,
-            targetKey: `${mapPos(targetPosToken)}:${targetOffset}`,
+            targetKey: mapPos(targetPosToken) + ':' + targetOffset,
             targetIndex,
         });
     }
@@ -499,6 +472,73 @@ const parseSynsetLine = (
     const definition = (firstExample >= 0 ? glossPart.slice(0, firstExample) : glossPart).trim();
     if (!definition) return null;
     const examples = [...glossPart.matchAll(/"([^"]*)"/gu)].map((match) => match[1]);
-
     return { key, pos, gloss: definition, examples, lemmas };
 };
+
+const { dictDir, dbPath, dataFiles } = workerData;
+const db = new Database(dbPath);
+const synsetWords = new Map();
+const pendingAntonyms = [];
+try {
+    db.exec(\`
+        CREATE TABLE synsets (
+            synset_key TEXT PRIMARY KEY,
+            pos TEXT NOT NULL,
+            gloss TEXT NOT NULL,
+            examples TEXT NOT NULL DEFAULT '[]'
+        );
+        CREATE TABLE senses (
+            word_key TEXT NOT NULL,
+            synset_key TEXT NOT NULL,
+            lemma TEXT NOT NULL,
+            PRIMARY KEY (word_key, synset_key)
+        );
+        CREATE INDEX idx_senses_word ON senses(word_key);
+        CREATE TABLE antonyms (
+            word_key TEXT NOT NULL,
+            antonym TEXT NOT NULL,
+            PRIMARY KEY (word_key, antonym)
+        );
+        CREATE INDEX idx_antonyms_word ON antonyms(word_key);
+    \`);
+    const insertSynset = db.prepare(
+        'INSERT OR REPLACE INTO synsets (synset_key, pos, gloss, examples) VALUES (?, ?, ?, ?)'
+    );
+    const insertSense = db.prepare(
+        'INSERT OR IGNORE INTO senses (word_key, synset_key, lemma) VALUES (?, ?, ?)'
+    );
+    const insertAntonym = db.prepare(
+        'INSERT OR IGNORE INTO antonyms (word_key, antonym) VALUES (?, ?)'
+    );
+
+    db.exec('BEGIN');
+    for (const { file, pos } of dataFiles) {
+        const filePath = path.join(dictDir, file);
+        if (!fs.existsSync(filePath)) {
+            throw new Error('WordNet 数据文件缺失：' + file);
+        }
+        const content = fs.readFileSync(filePath, 'utf8');
+        for (const line of content.split('\\n')) {
+            const parsed = parseSynsetLine(line, pos, synsetWords, pendingAntonyms);
+            if (!parsed) continue;
+            insertSynset.run(parsed.key, parsed.pos, parsed.gloss, JSON.stringify(parsed.examples));
+            for (const lemma of parsed.lemmas) {
+                insertSense.run(lemma.toLowerCase(), parsed.key, lemma);
+            }
+        }
+        parentPort.postMessage({ type: 'progress', file });
+    }
+
+    for (const pointer of pendingAntonyms) {
+        const source = synsetWords.get(pointer.sourceKey)?.[pointer.sourceIndex];
+        const target = synsetWords.get(pointer.targetKey)?.[pointer.targetIndex];
+        if (source && target) {
+            insertAntonym.run(source.toLowerCase(), target);
+        }
+    }
+    db.exec('COMMIT');
+    parentPort.postMessage({ type: 'done' });
+} finally {
+    db.close();
+}
+`;

@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/refs -- Astryx usePopover 把 triggerRef/triggerProps/render 作为渲染期 API 返回，会被 refs 规则误判 */
 import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
-import { BookOpenCheck, Check, Clapperboard, CornerUpLeft, Loader2, RotateCcw } from 'lucide-react';
+import { BookOpenCheck, Check, Clapperboard, CornerUpLeft, Loader2, RotateCcw, Volume2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-hot-toast';
 import useSWR from 'swr';
@@ -26,6 +26,8 @@ import { useReviewDockStore } from './reviewDockStore';
 import { selectReviewBatch } from './reviewBatch';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { usePlayer } from '@/frontend/features/player/playerStore';
+import { playContextAudio } from '@/frontend/infrastructure/audio/AudioPlayer';
+import { ClozeContextSentence } from '@/frontend/features/review/ClozeContextSentence';
 import { useNavigate } from 'react-router-dom';
 
 const RATING_STYLES: Record<ReviewRating, string> = {
@@ -126,11 +128,22 @@ const ReviewCardBody = ({
             </div>
 
             <div className="flex min-h-24 flex-col items-center justify-center py-3 text-center">
-                <div
-                    data-testid="review-card-word"
-                    className="max-w-full break-words text-2xl font-semibold tracking-tight text-primary"
-                >
-                    {card.word}
+                <div className="flex max-w-full items-center justify-center gap-1.5">
+                    <div
+                        data-testid="review-card-word"
+                        className="max-w-full break-words text-2xl font-semibold tracking-tight text-primary"
+                    >
+                        {card.word}
+                    </div>
+                    <button
+                        type="button"
+                        data-testid="review-speak-word"
+                        aria-label={t('reviewDock.speakWord', { defaultValue: '发音' })}
+                        onClick={() => { void playContextAudio({ text: card.word }); }}
+                        className="shrink-0 rounded-md p-1 text-secondary hover:bg-muted/70 hover:text-primary transition-colors cursor-pointer"
+                    >
+                        <Volume2 className="h-4 w-4" />
+                    </button>
                 </div>
                 {revealed ? (
                     <>
@@ -174,7 +187,7 @@ const ReviewCardBody = ({
                     className="mb-2 rounded-lg bg-muted/45 px-2.5 py-2 text-left"
                 >
                     <p className="text-sm leading-relaxed text-primary/85">
-                        “{card.context.text}”
+                        “<ClozeContextSentence text={card.context.text} targetWord={card.word} revealed={true} />”
                     </p>
                     {(card.context.videoFileName || card.context.sentenceIndex !== null) && (
                         <p className="mt-1 truncate text-metadata text-secondary">

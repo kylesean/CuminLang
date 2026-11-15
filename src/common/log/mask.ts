@@ -43,6 +43,8 @@ export function normalizeSensitiveKey(key: string): string {
 const SENSITIVE_VALUE_PATTERNS: Array<{ pattern: RegExp; replace: string }> = [
     { pattern: /sk-[A-Za-z0-9_-]{16,}/g, replace: 'sk-***' },
     { pattern: /Bearer\s+\S+/g, replace: 'Bearer ***' },
+    // URL Basic Auth 凭据：http(s)/socks://user:pass@host -> http(s)/socks://***@host
+    { pattern: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/\s@"'`]+@/g, replace: '$1***@' },
     // URL 查询串里的访问令牌：?t=... / &t=... / ?token=...
     { pattern: /([?&](?:t|token|access_token)=)[^&\s"'#]+/gi, replace: '$1***' },
 ];

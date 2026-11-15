@@ -282,6 +282,7 @@
             "retry": "重试",
             "newVersionFound": "发现新版本可用",
             "downloadNow": "前往下载新版本",
+            "releaseNotesLabel": "更新说明",
             "upToDateTitle": "当前已是最新版本",
             "failedDescription": "暂时无法获取更新信息，请稍后重试。",
             "errors": {
@@ -400,6 +401,7 @@
     },
     "serviceCredentials": {
         "openai": {
+            "keyLabel": "API Key",
             "keyHint": "仅保存在本机；输入后需点击「保存」生效，避免误触覆盖",
             "keyPlaceholderSaved": "已保存密钥（{{hint}}），输入新密钥后点保存替换",
             "saveKey": "保存",
@@ -574,6 +576,7 @@
             "copyUrl": "复制下载链接",
             "openInBrowser": "在浏览器中打开",
             "copyPath": "复制目标路径",
+            "progressLabel": "下载进度",
             "step3Title": "3. 完成安装",
             "step3Hint": "文件放好后，回到这里点击上方的「下载全部」，应用会自动完成校验与安装。"
         },
@@ -689,6 +692,7 @@
             "notInstalledShort": "未下载",
             "downloadHint": "当前音色尚未安装，朗读会暂用其它已安装音色。",
             "downloadButton": "下载音色",
+            "progressLabel": "音色下载进度",
             "downloadingVoice": "正在下载 {{percent}}%",
             "cancelDownload": "取消",
             "downloadedToast": "音色模型已下载并就绪",

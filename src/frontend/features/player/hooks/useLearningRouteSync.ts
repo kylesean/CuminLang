@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import useChatPanel from '@/frontend/features/chat/chatStore';
 import { exitOverlayView } from '@/frontend/features/player/lib/player-view-controller';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 
 /** 学习视图在播放地址后的固定后缀。 */
 const LEARN_SUFFIX = '/learn';
@@ -59,7 +59,7 @@ export function useLearningRouteSync(): void {
     }, [location]);
 
     const learningVisible = useChatPanel((s) => s.learningVisible);
-    const currentSentenceReady = usePlayerState((s) => !!s.currentSentence);
+    const currentSentenceReady = usePlayer((s) => !!s.currentSentence);
     const onLearningPath = isLearningPath(location.pathname);
     /** 当前进入学习视图的请求代数：后退离开 /learn 后递增，允许紧接着的前进重新发起，避免被在途旧请求锁死。 */
     const enterAttemptRef = useRef(false);

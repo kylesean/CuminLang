@@ -4,6 +4,7 @@ import * as path from 'path';
 import { injectable } from 'inversify';
 import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import { LOG_TAIL_LINES, tailLines } from '@/backend/utils/output-tail';
 import type { SpeechRecognitionToken } from '@/backend/services/gateways/media/SpeechRecognitionGateway';
@@ -229,6 +230,7 @@ export class WhisperCppCli {
                     ...(request.disableGpu ? { env: { ...process.env, GGML_VK_DISABLE: '1' } } : {}),
                 });
                 runningChild = child;
+                trackActiveChildProcess(child);
                 const processKey = request.job ?? '';
                 const procSet = this.activeProcesses.get(processKey) ?? new Set<ChildProcess>();
                 procSet.add(child);

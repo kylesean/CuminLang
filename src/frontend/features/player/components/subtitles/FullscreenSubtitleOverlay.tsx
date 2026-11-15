@@ -1,7 +1,7 @@
 import { cn } from '@/frontend/lib/utils';
 import MainSubtitle from '@/frontend/features/player/components/srt-layout/MainSubtitle';
 import OverlayControlBar from './OverlayControlBar';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 
 const FullscreenSubtitleOverlay = () => {
     return (
@@ -10,7 +10,7 @@ const FullscreenSubtitleOverlay = () => {
             <MainSubtitle variant="overlay" />
             {/* 全屏控制条：播放/上一句/下一句/训练模式/字幕轨道与普通视图同一套控件 */}
             <OverlayControlBar
-                onTimeChange={(time) => playerActions.seekTo({ time })}
+                onTimeChange={(time) => usePlayer.getState().seekTo({ time })}
             />
         </div>
     );

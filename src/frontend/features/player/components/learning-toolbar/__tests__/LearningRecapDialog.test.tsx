@@ -243,6 +243,7 @@ describe('LearningRecapContent', () => {
         expect(await screen.findByText('回应自然，而且接住了这个场景。')).toBeDefined();
         expect(screen.getByText('rolePlayLevelGreat')).toBeDefined();
         expect(screen.getByText('rolePlayUsedExpressions: long journey')).toBeDefined();
+        expect(screen.getByText('I bet you were exhausted after that drive.')).toBeDefined();
         expect(learningDataApi.evaluateRolePlayTurn).toHaveBeenCalledWith(expect.objectContaining({
             scenario: '和朋友聊回家的路。',
             partnerLine: 'I bet you were exhausted after that drive.',
@@ -292,6 +293,7 @@ describe('LearningRecapContent', () => {
 
         expect(await screen.findByText('上一轮的点评')).toBeDefined();
         expect(screen.getByText('I was, but I slept for twelve hours.')).toBeDefined();
+        expect(screen.getByText('I bet you were exhausted after that drive.')).toBeDefined();
     });
 
     it('语音复述把转写文本回填输入框，并展示系统听到的内容', async () => {

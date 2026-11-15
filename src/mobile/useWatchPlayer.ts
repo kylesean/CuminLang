@@ -4,6 +4,31 @@ import type { MobileSubtitleLine, MobileWatchDetail } from '@/common/contracts/m
 import type { OpenAIDictionaryResult } from '@/common/types/DictionaryResult';
 import { mobileApi } from './api';
 import SubtitleTender from './subtitleTender';
+import type { PositionChannel } from './VideoBar';
+
+const createPositionStore = () => {
+    let value = 0;
+    const listeners = new Set<() => void>();
+    const channel: PositionChannel = {
+        subscribe: (listener) => {
+            listeners.add(listener);
+            return () => {
+                listeners.delete(listener);
+            };
+        },
+        getSnapshot: () => value,
+    };
+    return {
+        channel,
+        set: (next: number) => {
+            if (value === next) return;
+            value = next;
+            for (const listener of listeners) {
+                listener();
+            }
+        },
+    };
+};
 import { type AppTheme, applyTheme, readTheme, saveTheme } from './theme';
 import {
     PREF_KEYS,
@@ -36,8 +61,8 @@ export interface WatchPlayerApi {
     currentIndex: number;
     currentLine: MobileSubtitleLine | null;
     currentTranslation: string;
-    /** 当前播放位置，单位秒；没拿到元数据时为 0。 */
-    position: number;
+    /** 播放位置外部订阅通道，隔离 timeupdate 高频状态免于重渲染页面与字幕列表。 */
+    positionChannel: PositionChannel;
     /** 视频总时长，单位秒；未知时为 0。 */
     duration: number;
     showEnglish: boolean;
@@ -128,6 +153,12 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
     const [showEnglish, setShowEnglish] = React.useState(() => loadBoolPref(PREF_KEYS.showEnglish, true));
     const [showTranslation, setShowTranslation] = React.useState(() => loadBoolPref(PREF_KEYS.showTranslation, true));
     const [showFollow, setShowFollow] = React.useState(false);
+    const showFollowRef = React.useRef(false);
+    const updateShowFollow = React.useCallback((next: boolean): void => {
+        if (showFollowRef.current === next) return;
+        showFollowRef.current = next;
+        setShowFollow(next);
+    }, []);
     const showTranslationRef = React.useRef(showTranslation);
     const [translationsState, setTranslationsState] = React.useState<{
         detailId: string;
@@ -158,8 +189,8 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
     const [settingsOpen, setSettingsOpen] = React.useState(false);
     const [videoError, setVideoError] = React.useState(false);
     const [paused, setPaused] = React.useState(true);
-    /** 自绘进度条用的位置与总时长；时间轴的当前句另有 tender 负责，不靠它们。 */
-    const [position, setPosition] = React.useState(0);
+    /** 自绘进度条用的位置外部订阅通道与总时长；timeupdate 只通知 VideoBar，不重渲染页面与字幕列表。 */
+    const positionStore = React.useMemo(() => createPositionStore(), []);
     const [duration, setDuration] = React.useState(0);
 
     const resumeDoneRef = React.useRef(detail.currentPosition <= 3);
@@ -305,12 +336,12 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             const index = currentIndexRef.current;
             if (index >= 0 && isRowVisible(index)) {
                 scrollPhaseRef.current = 'idle';
-                setShowFollow(false);
+                updateShowFollow(false);
                 return;
             }
-            setShowFollow(true);
+            updateShowFollow(true);
         }, BROWSE_SETTLE_MS);
-    }, [isRowVisible]);
+    }, [isRowVisible, updateShowFollow]);
 
     /**
      * 用户开始拖动列表：程序滚动立刻让位。
@@ -441,13 +472,13 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             // 没在滚（判定已经跑完）且当前句回到视口，就恢复跟随
             if (browseSettleTimerRef.current === null && isRowVisible(index)) {
                 scrollPhaseRef.current = 'idle';
-                setShowFollow(false);
+                updateShowFollow(false);
             }
             return;
         }
-        setShowFollow(false);
+        updateShowFollow(false);
         ensureRowVisible(index);
-    }, [detail.subtitles, ensureRowVisible, requestTranslationWindow, isRowVisible]);
+    }, [detail.subtitles, ensureRowVisible, requestTranslationWindow, isRowVisible, updateShowFollow]);
 
     /**
      * 计算时间点对应的当前句。
@@ -476,7 +507,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         if (!video) {
             return;
         }
-        setPosition(video.currentTime);
+        positionStore.set(video.currentTime);
         if (!resumeDoneRef.current) {
             return;
         }
@@ -506,7 +537,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
 
         applyIndex(resolveCurrentIndex(video.currentTime));
         saveProgress(false);
-    }, [detail.subtitles, applyIndex, saveProgress, resolveCurrentIndex]);
+    }, [detail.subtitles, applyIndex, saveProgress, resolveCurrentIndex, positionStore]);
 
     /** 原生进度条开始 seek 时暂停循环/自动暂停判定。 */
     const handleSeeking = React.useCallback((): void => {
@@ -576,8 +607,8 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         if (resumeDoneRef.current) {
             applyIndex(resolveCurrentIndex(video.currentTime));
         }
-        setPosition(video.currentTime);
-    }, [detail.currentPosition, applyIndex, resolveCurrentIndex]);
+        positionStore.set(video.currentTime);
+    }, [detail.currentPosition, applyIndex, resolveCurrentIndex, positionStore]);
 
     /** 暂停时写回进度，并让暂停菜单出现。 */
     const handlePause = React.useCallback((): void => {
@@ -638,7 +669,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             return;
         }
         scrollPhaseRef.current = virtuosoRef.current ? 'auto-scrolling' : 'idle';
-        setShowFollow(false);
+        updateShowFollow(false);
         if (browseSettleTimerRef.current !== null) {
             window.clearTimeout(browseSettleTimerRef.current);
             browseSettleTimerRef.current = null;
@@ -648,7 +679,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             virtuosoRef.current.scrollToIndex({ index, align: 'start', behavior: 'smooth' });
         }
         tapFeedback();
-    }, [settleAutoScroll]);
+    }, [settleAutoScroll, updateShowFollow]);
 
     /**
      * 关闭查词条并清理定时器。
@@ -753,7 +784,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             return;
         }
         scrollPhaseRef.current = 'idle';
-        setShowFollow(false);
+        updateShowFollow(false);
         if (browseSettleTimerRef.current !== null) {
             window.clearTimeout(browseSettleTimerRef.current);
             browseSettleTimerRef.current = null;
@@ -768,7 +799,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             void video.play().catch(() => undefined);
         }
         tapFeedback();
-    }, [detail.subtitles, applyIndex, closeDict]);
+    }, [detail.subtitles, applyIndex, closeDict, updateShowFollow]);
 
     /**
      * 按句前后跳。
@@ -842,10 +873,10 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             programmaticSeekRef.current = false;
             return;
         }
-        setPosition(target);
+        positionStore.set(target);
         applyIndex(resolveCurrentIndex(target));
         autoPauseArmedRef.current = true;
-    }, [applyIndex, resolveCurrentIndex, closeDict]);
+    }, [applyIndex, resolveCurrentIndex, closeDict, positionStore]);
 
     /**
      * 进入全屏。
@@ -1051,7 +1082,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         currentIndex,
         currentLine,
         currentTranslation,
-        position,
+        positionChannel: positionStore.channel,
         duration,
         showEnglish,
         showTranslation,

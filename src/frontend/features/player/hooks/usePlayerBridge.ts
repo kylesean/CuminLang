@@ -2,7 +2,6 @@
  * 负责把文件状态、字幕解析、播放历史和播放器 store 串起来。
  */
 import { useCallback, useEffect, useRef } from 'react';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import StrUtil from '@/common/utils/str-util';
@@ -52,11 +51,11 @@ export function usePlayerBridge(navigate: (path: string) => void) {
 
     useEffect(() => {
         if (StrUtil.isBlank(videoPath)) {
-            playerActions.setSource(null);
+            usePlayer.getState().setSource(null);
             return;
         }
         const fileUrl = UrlUtil.toUrl(videoPath!);
-        playerActions.setSource(fileUrl);
+        usePlayer.getState().setSource(fileUrl);
     }, [videoPath]);
 
     useEffect(() => {
@@ -80,7 +79,7 @@ export function usePlayerBridge(navigate: (path: string) => void) {
                 subtitleSessionId: null,
             });
             useTranslation.getState().setActiveFileHash(null);
-            playerActions.clearSubtitles();
+            usePlayer.getState().clearSubtitles();
             const currentPath = StrUtil.isBlank(subtitlePath) ? null : subtitlePath!;
             const playbackSessionId = crypto.randomUUID();
             logger.info('subtitle parsing started', {
@@ -104,7 +103,7 @@ export function usePlayerBridge(navigate: (path: string) => void) {
                 if (!result) {
                     usePlaybackSession.setState({ subtitlePath: null });
                     useTranslation.getState().setActiveFileHash(null);
-                    playerActions.clearSubtitles();
+                    usePlayer.getState().clearSubtitles();
                     return;
                 }
                 usePlaybackSession.setState({
@@ -112,7 +111,7 @@ export function usePlayerBridge(navigate: (path: string) => void) {
                     subtitleSessionId: playbackSessionId,
                 });
                 useTranslation.getState().setActiveFileHash(result.fileHash);
-                playerActions.loadSubtitles(result.sentences);
+                usePlayer.getState().loadSubtitles(result.sentences);
                 logger.info('subtitle parsing completed', {
                     videoId: currentVideoId,
                     subtitlePath: currentPath,
@@ -289,7 +288,7 @@ export function usePlayerBridge(navigate: (path: string) => void) {
 
             // 首次加载要把播放头定位到上次进度并起播；seekTo 默认保持播放态，
             // 所以这里必须显式 play: true，否则新打开的会话会停在暂停。
-            playerActions.seekTo({ time: resumeTime, play: true });
+            usePlayer.getState().seekTo({ time: resumeTime, play: true });
             lastLoadedFileRef.current = file;
         } catch (error) {
             logger.error('failed to jump to history progress', { error: error instanceof Error ? error.message : String(error) });

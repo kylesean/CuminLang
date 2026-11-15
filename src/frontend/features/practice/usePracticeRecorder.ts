@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { showNotification } from '@/frontend/components/shared/toasts/notification';
 import { useTranslation } from 'react-i18next';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { describeAsrFailure } from '@/common/utils/practice/asr-error';
 import { practiceApi } from './practiceApi';
 import usePracticePanel from './practiceStore';
@@ -418,7 +418,7 @@ export function usePracticeRecorder({
             return;
         }
 
-        playerActions.pause();
+        usePlayer.getState().pause();
         chunksRef.current = [];
         const mimeType = pickMimeType();
         const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);

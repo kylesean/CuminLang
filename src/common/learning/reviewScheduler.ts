@@ -42,24 +42,34 @@ export function createNewReviewSchedule(now: Date = new Date()): ReviewSchedule 
  * 等真实复习数据足够后，再把完整 FSRS 参数拟合接入同一调度接口。
  */
 const nextStability = (
-    state: ReviewCardState,
-    stability: number,
+    current: Pick<ReviewSchedule, 'state' | 'stability' | 'lapses' | 'dueAt' | 'lastReviewAt'>,
     rating: ReviewRating,
-    lapses: number,
+    now: Date,
 ): number => {
-    const base = Math.max(stability, 0.5);
+    const base = Math.max(current.stability, 0.5);
     // lapses 真正参与决策：反复遗忘的词稳定度增长封顶，避免越忘越久才复习。
-    const maxStability = lapses >= LEECH_LAPSES ? LEECH_MAX_STABILITY_DAYS : MAX_STABILITY_DAYS;
+    const maxStability = current.lapses >= LEECH_LAPSES ? LEECH_MAX_STABILITY_DAYS : MAX_STABILITY_DAYS;
     if (rating === 'again') {
         return clamp(base * 0.35, 0.15, maxStability);
     }
     if (rating === 'hard') {
-        return clamp(base * (state === 'new' ? 0.8 : 1.2), 0.25, maxStability);
+        return clamp(base * (current.state === 'new' ? 0.8 : 1.2), 0.25, maxStability);
     }
-    if (rating === 'good') {
-        return clamp(base * (state === 'new' ? 1.8 : 2.2), 0.5, maxStability);
+    const rawMultiplier = rating === 'good'
+        ? (current.state === 'new' ? 1.8 : 2.2)
+        : (current.state === 'new' ? 3 : 3.2);
+    let effectiveMultiplier = rawMultiplier;
+    if (current.state === 'review' && current.lastReviewAt !== null) {
+        const dueMs = Date.parse(current.dueAt);
+        const lastMs = Date.parse(current.lastReviewAt);
+        if (Number.isFinite(dueMs) && Number.isFinite(lastMs) && dueMs > now.getTime()) {
+            const scheduledMs = Math.max(1, dueMs - lastMs);
+            const elapsedMs = Math.max(0, now.getTime() - lastMs);
+            const earlyRatio = clamp(elapsedMs / scheduledMs, 0.1, 1);
+            effectiveMultiplier = 1 + (rawMultiplier - 1) * earlyRatio;
+        }
     }
-    return clamp(base * (state === 'new' ? 3 : 3.2), 0.5, maxStability);
+    return clamp(base * effectiveMultiplier, 0.5, maxStability);
 };
 
 /**
@@ -77,7 +87,7 @@ export function scheduleReview(
 ): ReviewSchedule {
     const firstReview = current.state === 'new' || current.reps === 0;
     const previousState = current.state;
-    const stability = nextStability(previousState, current.stability, rating, current.lapses);
+    const stability = nextStability(current, rating, now);
     const difficultyBase = current.difficulty > 0 ? current.difficulty : 5;
     const difficulty = clamp(
         difficultyBase + (rating === 'again' ? 0.8 : rating === 'hard' ? 0.25 : rating === 'good' ? -0.15 : -0.45),

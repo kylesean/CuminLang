@@ -936,7 +936,7 @@ export default function ContextStudioPage() {
                     </section>
 
                     {/* 右栏：沉浸式语境画布 */}
-                    <main className="flex-1 min-w-0 h-full bg-body/60 flex flex-col">
+                    <section aria-label={t('contextStudio.canvasLabel', { defaultValue: '语境学习画布' })} className="flex-1 min-w-0 h-full bg-body/60 flex flex-col">
                         {selection?.kind === 'word' ? (
                             <WordDetailCanvas
                                 key={selection.word.word}
@@ -982,7 +982,7 @@ export default function ContextStudioPage() {
                                 </Text>
                             </div>
                         )}
-                    </main>
+                    </section>
                 </Card>
                 )}
             </div>

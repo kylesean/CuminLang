@@ -34,8 +34,6 @@ import type AiFuncService from '@/backend/services/AiFuncService';
 import { AiFuncServiceImpl } from '@/backend/services/AiFuncService';
 import type MainWindowRegistry from '@/backend/infrastructure/system/MainWindowRegistry';
 import MainWindowRegistryImpl from '@/backend/infrastructure/system/MainWindowRegistryImpl';
-import type SystemConfigService from '@/backend/services/SystemConfigService';
-import { SystemConfigServiceImpl } from '@/backend/services/SystemConfigService';
 import type SettingService from '@/backend/services/SettingService';
 import { SettingServiceImpl } from '@/backend/services/SettingService';
 import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
@@ -217,8 +215,6 @@ import FileSystemGatewayImpl from '@/backend/infrastructure/storage/FileSystemGa
 import AccessRecoveringFileSystemGateway from '@/backend/infrastructure/storage/AccessRecoveringFileSystemGateway';
 import db from '@/backend/infrastructure/db';
 import type { Db } from '@/backend/infrastructure/db/createDb';
-import type DatabaseMaintenance from '@/backend/services/gateways/db/DatabaseMaintenance';
-import DatabaseMaintenanceImpl from '@/backend/infrastructure/db/DatabaseMaintenanceImpl';
 import type StorageService from '@/backend/services/StorageService';
 import { StorageServiceImpl } from '@/backend/services/StorageService';
 import type SystemService from '@/backend/services/SystemService';
@@ -230,7 +226,6 @@ import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
 const container = new Container();
 // 数据库单例：仓储层统一从这里注入，测试可用内存库替换。
 container.bind<Db>(TYPES.Database).toConstantValue(db);
-container.bind<DatabaseMaintenance>(TYPES.DatabaseMaintenance).to(DatabaseMaintenanceImpl).inSingletonScope();
 container.bind<StorageService>(TYPES.StorageService).to(StorageServiceImpl).inSingletonScope();
 container.bind<SystemService>(TYPES.SystemService).to(SystemServiceImpl).inSingletonScope();
 // Clients
@@ -363,7 +358,6 @@ container.bind<EnglishDictionaryService>(TYPES.EnglishDictionaryService)
 container.bind<SubtitleVocabularyAnalysisService>(TYPES.SubtitleVocabularyAnalysisService)
     .to(SubtitleVocabularyAnalysisServiceImpl)
     .inSingletonScope();
-container.bind<SystemConfigService>(TYPES.SystemConfigService).to(SystemConfigServiceImpl).inSingletonScope();
 container.bind<CacheService>(TYPES.CacheService).to(CacheServiceImpl).inSingletonScope();
 container.bind<SettingService>(TYPES.SettingService).to(SettingServiceImpl).inSingletonScope();
 container.bind<StorageDirectoryProvider>(TYPES.StorageDirectoryProvider).to(StorageDirectoryProviderImpl).inSingletonScope();

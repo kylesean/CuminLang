@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SentencePracticeResultVO, SentencePracticeWordResult } from '@/common/contracts/sentence-practice';
 import {
@@ -54,7 +54,6 @@ function summarizeSlotAlignment(
  */
 export default function PracticeDiffSentence({ unit, result, className }: PracticeDiffSentenceProps) {
     const { t } = useTranslation('practice');
-    const [popKey, setPopKey] = useState<string | null>(null);
 
     const tokens = useMemo(() => parsePracticePromptTokens(unit.text), [unit.text]);
 
@@ -118,8 +117,7 @@ export default function PracticeDiffSentence({ unit, result, className }: Practi
                                 sentenceText={unit.text}
                                 sentenceIndex={unit.index}
                                 sentenceHash={sentenceHash}
-                                pop={popKey === tokenKey}
-                                requestPop={() => setPopKey((prev) => (prev === tokenKey ? null : tokenKey))}
+                                popKey={tokenKey}
                                 show={true}
                                 alwaysDark={true}
                                 classNames={{

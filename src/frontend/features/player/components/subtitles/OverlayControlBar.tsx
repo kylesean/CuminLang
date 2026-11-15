@@ -9,9 +9,8 @@ import ControlBarPinButton from './ControlBarPinButton';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { cn } from '@/frontend/lib/utils';
 import PlaybackBarShell from '@/frontend/features/player/components/PlaybackBarShell';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
 import {
     DARK_BAR_BUTTON_HOVER,
     MEDIA_BAR_DIVIDER,
@@ -56,7 +55,7 @@ export default function OverlayControlBar({
         volume,
         playbackRate,
         muted
-    } = usePlayerState(
+    } = usePlayer(
         useShallow((state) => ({
             volume: state.volume,
             playbackRate: state.playbackRate,
@@ -110,8 +109,8 @@ export default function OverlayControlBar({
     const handleScrubCommit = useCallback((time: number) => {
         logger.debug('Time slider scrub committed', { value: time });
         onTimeChange?.(time);
-        playerActions.setAutoPause(false);
-        playerActions.setSingleRepeat(false);
+        usePlayer.getState().setAutoPause(false);
+        usePlayer.getState().setSingleRepeat(false);
     }, [onTimeChange]);
 
     return (
@@ -150,7 +149,7 @@ export default function OverlayControlBar({
                         tone="media"
                         previewTime={previewTime}
                         onPreviewTimeChange={setPreviewTime}
-                        onScrubValueChange={() => playerActions.pause()}
+                        onScrubValueChange={() => usePlayer.getState().pause()}
                         onScrubCommit={handleScrubCommit}
                     />
                 )}
@@ -183,7 +182,7 @@ export default function OverlayControlBar({
                                 speed={playbackRate}
                                 popoverOffset={CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
-                                onSpeedChange={(speed) => playerActions.setPlaybackRate(speed)}
+                                onSpeedChange={(speed) => usePlayer.getState().setPlaybackRate(speed)}
                                 onSelectFinish={() => {
                                     setMouseOver(false);
                                 }}
@@ -191,9 +190,9 @@ export default function OverlayControlBar({
                             <VolumeSlider
                                 tone="media"
                                 muted={muted}
-                                onMutedChange={(nextMuted) => playerActions.setMuted(nextMuted)}
+                                onMutedChange={(nextMuted) => usePlayer.getState().setMuted(nextMuted)}
                                 volume={volume}
-                                onVolumeChange={(nextVolume) => playerActions.setVolume(nextVolume)}
+                                onVolumeChange={(nextVolume) => usePlayer.getState().setVolume(nextVolume)}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
                                 collapseSliderBelowXl
                             />

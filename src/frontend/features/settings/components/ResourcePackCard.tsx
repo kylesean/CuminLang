@@ -448,7 +448,7 @@ export const ResourcePackCard: React.FC<ResourcePackCardProps> = ({
             {downloading && (
                 <VStack gap={2}>
                     <ProgressBar
-                        label="Download Progress"
+                        label={t('resources.pack.progressLabel')}
                         value={overallPercent}
                         max={100}
                         isLabelHidden

@@ -1,9 +1,8 @@
 import { type ReactElement, useCallback, useRef, useState } from 'react';
 import { AudioLines } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import PlayerEngine from '@/frontend/features/player/components/PlayerEngine';
-import { usePlayerState } from '@/frontend/features/player/playerState';
 import useLayout from '@/frontend/app/stores/layoutStore';
 import usePracticePanel from '@/frontend/features/practice/practiceStore';
 import { getBaseViewBeforeOverlay } from '@/frontend/features/player/lib/player-view-sync';
@@ -31,7 +30,7 @@ export interface PlaybackStageProps {
  */
 export default function PlaybackStage({ className = '', compact = false, onReady, onEnded }: PlaybackStageProps): ReactElement {
     const { t } = useTranslation('practice');
-    const hasSource = usePlayerState((state) => !!state.src);
+    const hasSource = usePlayer((state) => !!state.src);
 
     // 视频元素本身（不只是 ref）也要交给遮挡带：它要读 videoWidth / videoHeight 对齐真实画面
     const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
@@ -103,7 +102,7 @@ export default function PlaybackStage({ className = '', compact = false, onReady
 
                 {!compact && (!fullScreen || practiceVisible) && !podcastMode && (
                     <PlaybackControlBar
-                        onTimeChange={(time) => playerActions.seekTo({ time })}
+                        onTimeChange={(time) => usePlayer.getState().seekTo({ time })}
                         className="absolute left-0"
                     />
                 )}

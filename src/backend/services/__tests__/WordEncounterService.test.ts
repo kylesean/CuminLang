@@ -69,7 +69,11 @@ describe('WordEncounterService', () => {
                 findByWord: async () => existing,
                 updateLearning,
             } as unknown as WordsRepository,
-            {} as unknown as ReviewCardRepository,
+            {
+                findByWord: async () => null,
+                deleteByWord: async () => false,
+                upsert: vi.fn(),
+            } as unknown as ReviewCardRepository,
         );
 
         await service.recordProductionEvidence({ words: ['grasp'], score: 90, action: 'retell' });
@@ -82,5 +86,35 @@ describe('WordEncounterService', () => {
             action: 'retell',
             score: 90,
         }));
+    });
+
+    it('学习状态发生实质变化时主动失效词表与字幕生词分析派生缓存', async () => {
+        const invalidateVocabularyCache = vi.fn();
+        const invalidateVocabularyAnalysisCache = vi.fn();
+        const service = new WordEncounterServiceImpl(
+            { record: vi.fn(async () => undefined) } as unknown as WordEncounterRepository,
+            {
+                findByWord: async () => ({
+                    word: 'grasp',
+                    lemma: 'grasp',
+                    status: 'learning',
+                    source: 'manual',
+                    mastery: 0.4,
+                    confidence: 0.4,
+                    last_seen_at: null,
+                } as unknown as Word),
+                updateLearning: vi.fn(async () => undefined),
+            } as unknown as WordsRepository,
+            {
+                deleteByWord: vi.fn(async () => true),
+            } as unknown as ReviewCardRepository,
+            { invalidateVocabularyCache } as never,
+            { invalidateVocabularyAnalysisCache } as never,
+        );
+
+        await service.record({ word: 'grasp', action: 'known' });
+
+        expect(invalidateVocabularyCache).toHaveBeenCalledTimes(1);
+        expect(invalidateVocabularyAnalysisCache).toHaveBeenCalledTimes(1);
     });
 });

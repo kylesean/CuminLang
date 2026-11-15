@@ -3,8 +3,7 @@ import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 
 import { cn } from '@/frontend/lib/utils';
-import { playerActions } from '@/frontend/features/player/components/PlayerActions';
-import { usePlayerState } from '@/frontend/features/player/playerState';
+import { usePlayer } from '@/frontend/features/player/playerStore';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { formatShortcut } from '@/frontend/features/player/components/formatShortcut';
 
@@ -48,7 +47,7 @@ const ICON_BUTTON_CLASS = cn(
  */
 export function PlaybackNavControls() {
     const { t } = useI18nTranslation('player');
-    const playing = usePlayerState((s) => s.playing);
+    const playing = usePlayer((s) => s.playing);
     const prevShortcut = useSetting((s) => s.setting('shortcut.previousSentence'));
     const nextShortcut = useSetting((s) => s.setting('shortcut.nextSentence'));
     const playPauseShortcut = useSetting((s) => s.setting('shortcut.playPause'));
@@ -57,7 +56,7 @@ export function PlaybackNavControls() {
         <div className="flex items-center gap-1 shrink-0">
             <Tooltip content={`${t('controlBar.prevSentence')}${formatShortcut(prevShortcut)}`} placement="above">
                 <button
-                    onClick={() => { void playerActions.prevSentence(); }}
+                    onClick={() => { void usePlayer.getState().prevSentence(); }}
                     className={ICON_BUTTON_CLASS}
                 >
                     <SkipBack className="w-3.5 h-3.5" />
@@ -66,7 +65,7 @@ export function PlaybackNavControls() {
 
             <Tooltip content={`${playing ? t('controlBar.pause') : t('controlBar.play')}${formatShortcut(playPauseShortcut)}`} placement="above">
                 <button
-                    onClick={() => playerActions.togglePlay()}
+                    onClick={() => usePlayer.getState().togglePlay()}
                     className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-media-fg/10 hover:bg-media-fg/20 text-media-fg/95 active:scale-95 transition-all"
                 >
                     {playing ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
@@ -75,7 +74,7 @@ export function PlaybackNavControls() {
 
             <Tooltip content={`${t('controlBar.nextSentence')}${formatShortcut(nextShortcut)}`} placement="above">
                 <button
-                    onClick={() => { void playerActions.nextSentence(); }}
+                    onClick={() => { void usePlayer.getState().nextSentence(); }}
                     className={ICON_BUTTON_CLASS}
                 >
                     <SkipForward className="w-3.5 h-3.5" />

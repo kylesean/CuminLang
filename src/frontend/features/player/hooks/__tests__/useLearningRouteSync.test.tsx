@@ -32,8 +32,8 @@ vi.mock('@/frontend/features/chat/chatStore', () => ({
     ),
 }));
 
-vi.mock('@/frontend/features/player/playerState', () => ({
-    usePlayerState: (selector: (s: { currentSentence: object | null }) => unknown) =>
+vi.mock('@/frontend/features/player/playerStore', () => ({
+    usePlayer: (selector: (s: { currentSentence: object | null }) => unknown) =>
         selector({ currentSentence: mockState.currentSentenceReady ? { text: 'hi' } : null }),
 }));
 
