@@ -76,10 +76,7 @@ pnpm run test:run          # 运行 Vitest 单元测试
 pnpm run test:e2e:smoke    # 运行 Playwright 核心冒烟测试
 ```
 
-更多研发流程、提交规范、安全边界与测试说明见：
-- [贡献指南（CONTRIBUTING.md）](CONTRIBUTING.md)
-- [安全策略（SECURITY.md）](SECURITY.md)
-- [QA 端到端测试文档（qa/README.md）](qa/README.md)
+更多端到端测试约定与用例文档见 [QA 端到端测试文档（qa/README.md）](qa/README.md)。
 
 ---
 

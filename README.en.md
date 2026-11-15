@@ -76,10 +76,7 @@ pnpm run test:run          # Run Vitest unit tests
 pnpm run test:e2e:smoke    # Run Playwright @smoke E2E checks
 ```
 
-For development guidelines, security disclosure, and E2E testing conventions:
-- [Contributing Guide](CONTRIBUTING.md)
-- [Security Policy](SECURITY.md)
-- [E2E QA Guide](qa/README.md)
+For E2E testing conventions and test suites, see the [E2E QA Guide](qa/README.md).
 
 ---
 
