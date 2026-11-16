@@ -8,7 +8,6 @@ import type { WindowState } from '@/common/types/Types';
 import { Minus, X } from 'lucide-react';
 import { TitleBarNavigation } from './TitleBarNavigation';
 import { TitleBarTitle } from './TitleBarTitle';
-import { TitleBarRightNavigation } from './TitleBarRightNavigation';
 
 /**
  * Windows / Linux 标题栏控制属性。
@@ -82,7 +81,6 @@ const TitleBarWindows = ({ maximizable = true, className = '' }: TitleBarWindows
 
             {/* 右侧窗口控制按钮组 */}
             <div className="no-drag flex items-center h-full shrink-0">
-                <TitleBarRightNavigation />
                 <button
                     onClick={handleMinimize}
                     className="inline-flex items-center justify-center w-[44px] h-full text-secondary/80 hover:text-primary hover:bg-muted/80 active:bg-muted transition-colors cursor-pointer"

@@ -4,7 +4,6 @@ import { backendClient } from '@/frontend/infrastructure/electron/backendClient'
 import { SWR_KEY, swrMutate } from '@/frontend/lib/swr-util';
 import { TitleBarNavigation } from './TitleBarNavigation';
 import { TitleBarTitle } from './TitleBarTitle';
-import { TitleBarRightNavigation } from './TitleBarRightNavigation';
 
 /**
  * macOS 标题栏容器。
@@ -38,10 +37,8 @@ const TitleBarMac = () => {
             >
                 <TitleBarTitle />
             </div>
-            {/* 右侧面板控制及与交通灯平衡的占位 */}
-            <div className="flex items-center justify-end w-[80px] h-full pr-[8px] shrink-0">
-                <TitleBarRightNavigation />
-            </div>
+            {/* 与左侧交通灯预留宽度对称的右侧占位，保持标题居中 */}
+            <div className="w-[80px] h-full shrink-0" />
         </div>
     );
 };
