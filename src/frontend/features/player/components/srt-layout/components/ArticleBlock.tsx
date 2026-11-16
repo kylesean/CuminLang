@@ -1,7 +1,10 @@
 import { forwardRef, memo, useEffect, useRef, useState } from 'react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Repeat1 } from 'lucide-react';
-import type { SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
+import {
+    needsBilingualCueSpace,
+    type SentenceBlock,
+} from '@/frontend/features/player/lib/sentence-grouping';
 import type { Sentence } from '@/common/types/SentenceC';
 import { cn } from '@/frontend/lib/utils';
 import TimeUtil from '@/common/utils/TimeUtil';
@@ -44,6 +47,8 @@ export interface ArticleBlockProps {
 interface ArticleSentenceZhSpanProps {
     /** 译文所属句子。 */
     sentence: Sentence;
+    /** 同段内下一句（用于判断是否需要补英文词间空格）。 */
+    nextSentence?: Sentence;
     /** 是否为当前播放中的句子。 */
     isCurrent: boolean;
     /** 是否为当前选中的搜索匹配项。 */
@@ -120,15 +125,22 @@ const ArticleInlineEditor = ({
  */
 const ArticleSentenceZhSpan = ({
     sentence,
+    nextSentence,
     isCurrent,
     isActiveMatch,
     searchQuery,
     onSentenceClick,
 }: ArticleSentenceZhSpanProps) => {
     const translationKey = sentence.translationKey || '';
+    const nextTranslationKey = nextSentence?.translationKey || '';
     const translation = useTranslation((state) => state.translations.get(translationKey));
+    const nextTranslation = useTranslation((state) => (
+        nextTranslationKey ? state.translations.get(nextTranslationKey) : undefined
+    ));
     const zhText = sentence.textZH || translation || '';
     if (!zhText) return null;
+    const nextZhText = nextSentence ? (nextSentence.textZH || nextTranslation || '') : '';
+    const addSpace = needsBilingualCueSpace(zhText, nextZhText);
 
     return (
         <span
@@ -154,7 +166,7 @@ const ArticleSentenceZhSpan = ({
                 isActiveMatch && 'rounded px-0.5 ring-1 ring-amber-500/80 bg-amber-500/15 text-primary',
             )}
         >
-            {highlightSlice(zhText, zhText, 0, searchQuery, isActiveMatch)}{' '}
+            {highlightSlice(zhText, zhText, 0, searchQuery, isActiveMatch)}{addSpace ? ' ' : ''}
         </span>
     );
 };
@@ -360,7 +372,7 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                                 fontSize === 'fontSizeLarge' && 'text-side-zh-large',
                             )}
                         >
-                            {block.sentences.map((s) => {
+                            {block.sentences.map((s, sIdx) => {
                                 const isCurrent = !!currentSentence && s.index === currentSentence.index && s.fileHash === currentSentence.fileHash;
                                 const isActiveMatch = activeMatchedSentenceIndex === s.index;
 
@@ -368,6 +380,7 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                                     <ArticleSentenceZhSpan
                                         key={`zh-${s.fileHash}:${s.index}`}
                                         sentence={s}
+                                        nextSentence={block.sentences[sIdx + 1]}
                                         isCurrent={isCurrent}
                                         isActiveMatch={isActiveMatch}
                                         searchQuery={searchQuery}

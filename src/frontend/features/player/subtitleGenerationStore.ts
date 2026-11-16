@@ -13,6 +13,8 @@ export type SubtitleGenerationMessages = {
 export type SubtitleGenerationStartOptions = {
     /** 是否以 `.local.srt` 独立轨重生成（不覆盖原有外挂或平台字幕）。 */
     regenerate?: boolean;
+    /** 任务成功完成后的附加回调（供精读文稿等非播放器页面自动热刷新文档）。 */
+    onDone?: (videoId: string) => void;
 };
 
 type SubtitleGenerationState = {
@@ -75,6 +77,7 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
 
                         if (task.status === DpTaskState.DONE) {
                             toast.success(messages.done);
+                            options?.onDone?.(videoId);
                             // 只有用户仍停留在该视频上时才解析路径并重载字幕；切去别的视频绝不能覆盖新会话。
                             if (usePlaybackSession.getState().videoId !== videoId) {
                                 return;

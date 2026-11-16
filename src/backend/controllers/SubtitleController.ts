@@ -10,7 +10,10 @@ import type Controller from '@/backend/controllers/Controller';
 import type SubtitleService from '@/backend/services/SubtitleService';
 import { type SubtitleVocabularyMatchResult } from '@/backend/services/SubtitleService';
 import type SubtitleComprehensionService from '@/backend/services/SubtitleComprehensionService';
-import type { SubtitleComprehensionParams } from '@/common/types/subtitleComprehension';
+import type {
+    DocumentDifficultWordsParams,
+    SubtitleComprehensionParams,
+} from '@/common/types/subtitleComprehension';
 import type SceneIndexService from '@/backend/services/SceneIndexService';
 import type WatchHistoryService from '@/backend/services/WatchHistoryService';
 import type { SceneBoundary, SceneSentence } from '@/common/learning/sceneSegmentation';
@@ -94,6 +97,13 @@ export default class SubtitleController implements Controller {
     }
 
     /**
+     * 扫描整篇文稿中达到考纲/进阶难度的候选词，解决冷启动下筛选为空的问题。
+     */
+    public async extractDocumentDifficultWords(params: DocumentDifficultWordsParams) {
+        return this.subtitleComprehensionService.extractDocumentDifficultWords(params);
+    }
+
+    /**
      * 读取或计算字幕的场景边界。
      *
      * 切分是纯本地的确定性启发式，后端缓存结果，前端不必每次进入播放页都
@@ -158,6 +168,11 @@ export default class SubtitleController implements Controller {
                 text: z.string().min(1).max(2000),
                 fileHash: z.string().min(1).optional(),
                 sentenceIndex: z.number().int().nonnegative().optional(),
+            }),
+        });
+        registerRoute('subtitle/document-difficult-words', (p) => this.extractDocumentDifficultWords(p), {
+            schema: z.object({
+                texts: z.array(z.string()).max(20000),
             }),
         });
         registerRoute('subtitle/scene-boundaries', (p) => this.getSceneBoundaries(p), {

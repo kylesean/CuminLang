@@ -83,4 +83,32 @@ describe('readerProgress & filterReaderSentences', () => {
             { word: 'resilient', count: 1, firstSentenceIndex: 1 },
         ]);
     });
+
+    it('falls back to dictionary difficulty candidates for cold-start learning filter & summary', () => {
+        const list = [
+            sentence(0, 'Simple daily chat.'),
+            sentence(1, 'Ubiquitous connectivity reshapes work.'),
+        ];
+        const candidates = new Set(['ubiquitous']);
+
+        const filtered = filterReaderSentences({
+            sentences: list,
+            filter: 'learning',
+            query: '',
+            countOf: () => EMPTY_SENTENCE_VOCABULARY_COUNT,
+            savedKeys: new Set(),
+            candidateWords: candidates,
+        });
+        expect(filtered.map((s) => s.index)).toEqual([1]);
+
+        const summary = collectReaderVocabularySummary(
+            list,
+            () => undefined,
+            5,
+            candidates,
+        );
+        expect(summary).toEqual([
+            { word: 'ubiquitous', count: 1, firstSentenceIndex: 1 },
+        ]);
+    });
 });

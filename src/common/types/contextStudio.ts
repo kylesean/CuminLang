@@ -72,6 +72,9 @@ export interface WordContextOccurrence {
     source: 'encounter' | 'clip';
 }
 
+/** 精读文稿媒体类型（视频 / 纯音频播客）。 */
+export type ReaderMediaType = 'video' | 'audio';
+
 /** 精读文稿文档摘要。 */
 export interface ReaderDocumentSummary {
     videoId: string;
@@ -79,4 +82,22 @@ export interface ReaderDocumentSummary {
     srtFile: string;
     videoPath: string;
     updatedAt: string;
+    /** 媒体类型；旧端缺省时按视频处理。 */
+    mediaType?: ReaderMediaType;
+    /** 是否已经关联可读字幕（纯音频导入初期可为 false，转写完成后变 true）。 */
+    hasSubtitle?: boolean;
+}
+
+/** 导出精读文稿 Markdown 讲义的入参。 */
+export interface ExportReaderMarkdownInput {
+    defaultFileName: string;
+    markdown: string;
+}
+
+/** 导出精读文稿 Markdown 讲义的返回结果。 */
+export interface ExportReaderMarkdownResult {
+    success: boolean;
+    canceled?: boolean;
+    path?: string;
+    error?: string;
 }

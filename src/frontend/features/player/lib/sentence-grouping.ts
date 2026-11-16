@@ -121,15 +121,15 @@ export const groupSentencesIntoParagraphs = (
 
     for (const sentence of sentences) {
         const startsNewScene = sceneDividerIndices?.has(sentence.index) ?? false;
+        const prevEndedSentence = current !== null
+            && endsWithTerminalPunctuation(current.sentences[current.sentences.length - 1].text);
+        const reachesBudget = current !== null
+            && (current.sentences.length >= maxSentences || current.charCount >= softChars);
         const canContinue = current !== null
             && !startsNewScene
             && sentence.start - current.end < pauseBreak
-            && current.sentences.length < maxSentences
             && current.charCount + sentence.text.length <= hardChars
-            && !(
-                current.charCount >= softChars
-                && endsWithTerminalPunctuation(current.sentences[current.sentences.length - 1].text)
-            );
+            && !(prevEndedSentence && reachesBudget);
 
         if (current !== null && canContinue) {
             current.sentences.push(sentence);
@@ -199,4 +199,20 @@ export const selectVisibleSentences = (
         return [current];
     }
     return sentences.slice(Math.max(0, at - 1), Math.min(sentences.length, at + 2));
+};
+
+const TRAILING_ASCII_ALNUM = /[A-Za-z0-9]$/;
+const LEADING_ASCII_ALNUM = /^[A-Za-z0-9]/;
+
+/**
+ * 判断相邻两条双语字幕译文拼接时是否需要插入空格：
+ * 仅当左右两段在边界处均为英文/数字字符时补空格，中文字符与中文标点之间不插多余空格。
+ */
+export const needsBilingualCueSpace = (currentText: string, nextText?: string): boolean => {
+    const left = currentText.trimEnd();
+    const right = (nextText ?? '').trimStart();
+    if (!left || !right) {
+        return false;
+    }
+    return TRAILING_ASCII_ALNUM.test(left) && LEADING_ASCII_ALNUM.test(right);
 };

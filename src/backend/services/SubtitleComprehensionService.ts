@@ -11,11 +11,51 @@ import { isContentLemma } from '@/common/learning/contentWords';
 import type { OpenAIDictionaryResult } from '@/common/types/DictionaryResult';
 import type {
     ComprehensionWordInput,
+    DocumentDifficultWordsParams,
+    DocumentDifficultWordsResult,
     SubtitleComprehensionParams,
     SubtitleComprehensionVO,
 } from '@/common/types/subtitleComprehension';
 
 const CLAUSE_PATTERN = /[,;:—–]|\b(?:because|although|though|while|whereas|unless|if|which|whose)\b/gi;
+
+interface ContentTokenEntry {
+    surface: string;
+    lemma: string;
+}
+
+const scanSentenceTokens = (text: string): {
+    wordCount: number;
+    longWordCount: number;
+    tokens: ContentTokenEntry[];
+} => {
+    const analyzed = analyzeWords(text);
+    const tokens: ContentTokenEntry[] = [];
+    let wordCount = 0;
+    let longWordCount = 0;
+
+    analyzed.forEach((token, order) => {
+        if (token.type !== 'word') {
+            return;
+        }
+        wordCount += 1;
+        const surface = token.text.toLowerCase();
+        const lemma = token.lemma.toLowerCase();
+        if (!isContentLemma(lemma) || surface.includes('\'') || surface.includes('’')) {
+            return;
+        }
+        // 句首之外的大写词按专名处理，不把作品名、人名误判为学习者不认识的生词。
+        if (order > 0 && /^[A-Z]/.test(token.text)) {
+            return;
+        }
+        if (lemma.length >= 9) {
+            longWordCount += 1;
+        }
+        tokens.push({ surface, lemma });
+    });
+
+    return { wordCount, longWordCount, tokens };
+};
 
 /**
  * 句子理解度服务契约。
@@ -28,6 +68,12 @@ export default interface SubtitleComprehensionService {
      * @returns 可解释的理解度快照。
      */
     build(params: SubtitleComprehensionParams): Promise<SubtitleComprehensionVO>;
+
+    /**
+     * 扫描整篇文稿中达到进阶/考纲难度（cet6/考研/toefl/ielts/gre）且未被标熟/忽略的候选词。
+     * 用于个人生词本尚未收录词条时的冷启动诊断与「生词」筛选。
+     */
+    extractDocumentDifficultWords(params: DocumentDifficultWordsParams): Promise<DocumentDifficultWordsResult>;
 }
 
 /**
@@ -49,37 +95,16 @@ export class SubtitleComprehensionServiceImpl implements SubtitleComprehensionSe
         }
 
         const userWordMap = await this.loadUserWordMap();
-        const analyzed = analyzeWords(text);
-        const contentWords: ComprehensionWordInput[] = [];
-        let wordCount = 0;
-        let longWordCount = 0;
-
-        analyzed.forEach((token, order) => {
-            if (token.type !== 'word') {
-                return;
-            }
-            wordCount += 1;
-            const surface = token.text.toLowerCase();
-            const lemma = token.lemma.toLowerCase();
-            if (!isContentLemma(lemma) || surface.includes('\'') || surface.includes('’')) {
-                return;
-            }
-            // 句首之外的大写词按专名处理，不把作品名、人名误判为学习者不认识的生词。
-            if (order > 0 && /^[A-Z]/.test(token.text)) {
-                return;
-            }
-
+        const { wordCount, longWordCount, tokens } = scanSentenceTokens(text);
+        const contentWords: ComprehensionWordInput[] = tokens.map(({ surface, lemma }) => {
             const entry = this.lookup(lemma, surface);
             const userWord = userWordMap.get(lemma) ?? userWordMap.get(surface);
-            if (lemma.length >= 9) {
-                longWordCount += 1;
-            }
-            contentWords.push({
+            return {
                 lemma,
                 difficulty: resolveDictionaryDifficulty(entry),
                 userStatus: userWord?.status,
                 mastery: userWord?.mastery,
-            });
+            };
         });
 
         const clauseCount = (text.match(CLAUSE_PATTERN) ?? []).length;
@@ -94,6 +119,51 @@ export class SubtitleComprehensionServiceImpl implements SubtitleComprehensionSe
             fileHash: params.fileHash,
             sentenceIndex: params.sentenceIndex,
         };
+    }
+
+    public async extractDocumentDifficultWords(
+        params: DocumentDifficultWordsParams,
+    ): Promise<DocumentDifficultWordsResult> {
+        const texts = Array.isArray(params.texts) ? params.texts : [];
+        if (texts.length === 0) {
+            return { words: [] };
+        }
+
+        const userWordMap = await this.loadUserWordMap();
+        const seenDifficult = new Set<string>();
+        const checkedDiff = new Map<string, boolean>();
+
+        for (const rawText of texts) {
+            const text = rawText?.trim();
+            if (!text) continue;
+            const { tokens } = scanSentenceTokens(text);
+            for (const { surface, lemma } of tokens) {
+                if (seenDifficult.has(lemma)) continue;
+                const userWord = userWordMap.get(lemma) ?? userWordMap.get(surface);
+                if (
+                    userWord?.status === 'known'
+                    || userWord?.status === 'ignored'
+                    || userWord?.status === 'familiar'
+                ) {
+                    continue;
+                }
+                if (userWord?.status === 'learning') {
+                    seenDifficult.add(lemma);
+                    continue;
+                }
+                let isDifficult = checkedDiff.get(lemma);
+                if (isDifficult === undefined) {
+                    const difficulty = resolveDictionaryDifficulty(this.lookup(lemma, surface));
+                    isDifficult = difficulty === 'exam' || difficulty === 'advanced';
+                    checkedDiff.set(lemma, isDifficult);
+                }
+                if (isDifficult) {
+                    seenDifficult.add(lemma);
+                }
+            }
+        }
+
+        return { words: [...seenDifficult] };
     }
 
     /**

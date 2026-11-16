@@ -1,5 +1,7 @@
 import { backendClient } from '@/frontend/infrastructure/electron/backendClient';
 import type {
+    ExportReaderMarkdownInput,
+    ExportReaderMarkdownResult,
     ReaderDocumentSummary,
     SavedSentenceVO,
     SaveSentenceInput,
@@ -34,5 +36,9 @@ export const contextStudioApi = {
 
     async listReaderDocuments(): Promise<ReaderDocumentSummary[]> {
         return backendClient.call('context-studio/list-reader-documents', undefined);
+    },
+
+    async exportReaderMarkdown(input: ExportReaderMarkdownInput): Promise<ExportReaderMarkdownResult> {
+        return backendClient.call('context-studio/export-reader-markdown', input);
     },
 };

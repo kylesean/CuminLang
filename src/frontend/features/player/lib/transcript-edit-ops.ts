@@ -36,6 +36,47 @@ export function replaceSentenceText(
 }
 
 /**
+ * 替换一段连续字幕行（如跨 cue 归并出的一整句话）为单条精校行；未变化或为空时返回 `null`。
+ */
+export function replaceSentenceRangeText(
+    sentences: readonly Sentence[],
+    startIndex: number,
+    endIndex: number,
+    nextText: string,
+): EditedSubtitleLineInput[] | null {
+    if (startIndex === endIndex) {
+        return replaceSentenceText(sentences, startIndex, nextText);
+    }
+    const startPos = sentences.findIndex((item) => item.index === startIndex);
+    const endPos = sentences.findIndex((item) => item.index === endIndex);
+    if (startPos < 0 || endPos < startPos) {
+        return null;
+    }
+    const normalized = nextText.replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+        return null;
+    }
+    const slice = sentences.slice(startPos, endPos + 1);
+    const combinedOriginal = slice.map((item) => item.text.trim()).filter(Boolean).join(' ');
+    if (normalized === combinedOriginal) {
+        return null;
+    }
+    const base = toEditedSubtitleLines(sentences);
+    const mergedZh = slice.map((item) => item.textZH?.trim() || '').filter(Boolean).join(' ');
+    const mergedLine: EditedSubtitleLineInput = {
+        start: base[startPos].start,
+        end: Math.max(base[endPos].end, base[startPos].start + 0.05),
+        contentEn: normalized,
+        ...(mergedZh ? { contentZh: mergedZh } : {}),
+    };
+    return [
+        ...base.slice(0, startPos),
+        mergedLine,
+        ...base.slice(endPos + 1),
+    ];
+}
+
+/**
  * 在光标偏移处把一句话拆成两句，并按左右音节权重比例切分时间轴。
  * 若光标两侧任一端为空白或总时长过短，返回 `null`。
  */

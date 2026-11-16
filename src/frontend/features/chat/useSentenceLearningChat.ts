@@ -76,7 +76,7 @@ export const toMessageViews = (messages: UIMessage[], isBusy: boolean): Learning
         return toMessageView(message, streamActive);
     });
 
-const persistedToUiMessages = (persisted: PersistedChatMessage[]): UIMessage[] => {
+export const persistedToUiMessages = (persisted: PersistedChatMessage[]): UIMessage[] => {
     return persisted.map((item) => {
         const parts: UIMessage['parts'] = [];
         item.blocks.forEach((block, idx) => {

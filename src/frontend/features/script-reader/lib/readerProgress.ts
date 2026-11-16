@@ -80,8 +80,22 @@ export const saveReaderProgress = (videoId: string, sentenceIndex: number): void
     }
 };
 
+const extractNormalizedSentenceWords = (sentence: Sentence): string[] => {
+    const parts = sentence.struct?.blocks?.flatMap((b) => b.blockParts) ?? [];
+    if (parts.length > 0) {
+        return parts
+            .filter((p) => p.isWord && p.content.trim().length > 0)
+            .map((p) => (p.lemma || cleanWord(p.content) || p.content).toLowerCase().trim())
+            .filter(Boolean);
+    }
+    return splitWords(sentence.text ?? '')
+        .filter(isWordToken)
+        .map((token) => (cleanWord(token) || token).toLowerCase().trim())
+        .filter(Boolean);
+};
+
 /**
- * 综合状态筛选（全部 / 含生词 / 有印象 / 已收藏金句）与关键词搜索。
+ * 综合状态筛选（全部 / 生词（个人待学 + 本地词典考纲难点候选） / 已收藏金句）与关键词搜索。
  */
 export const filterReaderSentences = (params: {
     sentences: Sentence[];
@@ -90,12 +104,20 @@ export const filterReaderSentences = (params: {
     countOf: (sentence: Sentence) => SentenceVocabularyCount;
     savedKeys: ReadonlySet<string>;
     translations?: ReadonlyMap<string, string>;
+    candidateWords?: ReadonlySet<string>;
 }): Sentence[] => {
-    const { sentences, filter, query, countOf, savedKeys, translations } = params;
+    const { sentences, filter, query, countOf, savedKeys, translations, candidateWords } = params;
 
     let stage: Sentence[];
     if (filter === 'saved') {
         stage = sentences.filter((s) => savedKeys.has(sentenceVocabularyKey(s)));
+    } else if (filter === 'learning' && candidateWords && candidateWords.size > 0) {
+        stage = sentences.filter((s) => {
+            if (countOf(s).learning > 0) {
+                return true;
+            }
+            return extractNormalizedSentenceWords(s).some((w) => candidateWords.has(w));
+        });
     } else {
         stage = filterTranscriptSentences(sentences, filter, countOf, undefined);
     }
@@ -115,14 +137,15 @@ export const filterReaderSentences = (params: {
 };
 
 /**
- * 提取本篇文稿中的重点生词雷达（按出现频次降序），供听前快速扫盲。
+ * 提取本篇文稿中的重点生词雷达（个人待学词优先，冷启动时融合考纲/进阶候选难词，按频次降序）。
  */
 export const collectReaderVocabularySummary = (
     sentences: readonly Sentence[],
     resolveStatus: (word: string, lemma?: string) => WordStatus | undefined,
     limit = 12,
+    candidateWords?: ReadonlySet<string>,
 ): ScriptVocabPreviewItem[] => {
-    const map = new Map<string, ScriptVocabPreviewItem>();
+    const map = new Map<string, ScriptVocabPreviewItem & { personal: boolean }>();
 
     for (const sentence of sentences) {
         const parts = sentence.struct?.blocks?.flatMap((b) => b.blockParts) ?? [];
@@ -136,25 +159,38 @@ export const collectReaderVocabularySummary = (
 
         for (const token of tokens) {
             const status = resolveStatus(token.word, token.lemma);
-            if (status !== 'learning') {
-                continue;
-            }
             const normalized = (token.lemma || cleanWord(token.word) || token.word).toLowerCase().trim();
             if (!normalized) continue;
+            const isPersonalLearning = status === 'learning';
+            const isDismissed = status === 'known' || status === 'ignored' || status === 'familiar';
+            const isCandidate = !isDismissed && Boolean(candidateWords?.has(normalized));
+            if (!isPersonalLearning && !isCandidate) {
+                continue;
+            }
             const existing = map.get(normalized);
             if (existing) {
                 existing.count += 1;
+                if (isPersonalLearning) {
+                    existing.personal = true;
+                }
             } else {
                 map.set(normalized, {
                     word: normalized,
                     count: 1,
                     firstSentenceIndex: sentence.index,
+                    personal: isPersonalLearning,
                 });
             }
         }
     }
 
     return [...map.values()]
-        .sort((a, b) => b.count - a.count || a.firstSentenceIndex - b.firstSentenceIndex)
-        .slice(0, limit);
+        .sort((a, b) => {
+            if (a.personal !== b.personal) {
+                return a.personal ? -1 : 1;
+            }
+            return b.count - a.count || a.firstSentenceIndex - b.firstSentenceIndex;
+        })
+        .slice(0, limit)
+        .map(({ word, count, firstSentenceIndex }) => ({ word, count, firstSentenceIndex }));
 };

@@ -287,6 +287,15 @@ export const playerApi = {
         ),
 
     /**
+     * 打开系统文件选择对话框选取指定扩展名文件。
+     *
+     * @param extensions 允许选择的扩展名数组（如 `['mp3', 'm4a']`）。
+     * @returns 选中的绝对路径列表。
+     */
+    selectFiles: (extensions: string[]) =>
+        backendClient.call('system/select-file', extensions),
+
+    /**
      * 取消字幕生成任务。
      *
      * @param taskId 后台任务 ID。
@@ -294,5 +303,11 @@ export const playerApi = {
      */
     cancelSubtitleGeneration: (taskId: number) =>
         backendClient.call('subtitle-generation/cancel', { taskId }),
+
+    /**
+     * 提取文稿中的考纲/进阶难度候选生词，辅助无个人词表记录时的冷启动筛选。
+     */
+    getDocumentDifficultWords: (texts: string[]) =>
+        backendClient.call('subtitle/document-difficult-words', { texts }),
 
 };

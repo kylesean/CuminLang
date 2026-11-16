@@ -62,3 +62,17 @@ export interface SubtitleComprehensionVO extends ComprehensionEstimate {
     fileHash?: string;
     sentenceIndex?: number;
 }
+
+/**
+ * 整篇文稿候选进阶/高频难点词提取请求。
+ */
+export interface DocumentDifficultWordsParams {
+    texts: string[];
+}
+
+/**
+ * 整篇文稿候选难点词结果（用于无个人生词时的冷启动诊断与筛选）。
+ */
+export interface DocumentDifficultWordsResult {
+    words: string[];
+}

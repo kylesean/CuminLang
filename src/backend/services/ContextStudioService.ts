@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { desc, eq, inArray, isNotNull, or } from 'drizzle-orm';
+import { desc, eq, inArray, or } from 'drizzle-orm';
 import { inject, injectable, optional } from 'inversify';
 import type { Db } from '@/backend/infrastructure/db/createDb';
 import { wordEncounter } from '@/backend/infrastructure/db/tables/wordEncounter';
-import { watchHistory } from '@/backend/infrastructure/db/tables/watchHistory';
+import { watchHistory, WatchHistoryType } from '@/backend/infrastructure/db/tables/watchHistory';
 import { sentenceTranslates } from '@/backend/infrastructure/db/tables/sentenceTranslates';
 import TYPES from '@/backend/ioc/types';
 import type SavedSentenceRepository from '@/backend/services/repositories/SavedSentenceRepository';
@@ -295,28 +295,39 @@ export default class ContextStudioService {
     }
 
     /**
-     * 列出带有字幕文件的视频文档，供「精读文稿（Script Reader）」选择阅读。
+     * 列出带有字幕文件的视频文档以及全部纯音频播客记录，供「精读文稿（Script Reader）」选择阅读与转写。
      */
     public async listReaderDocuments(): Promise<ReaderDocumentSummary[]> {
         const rows = await this.db
             .select()
             .from(watchHistory)
-            .where(isNotNull(watchHistory.srt_file))
+            .where(eq(watchHistory.project_type, WatchHistoryType.FILE))
             .orderBy(desc(watchHistory.updated_at))
-            .limit(100);
+            .limit(150);
 
-        return rows
-            .filter((row) => Boolean(row.srt_file && row.srt_file.trim().length > 0))
-            .map((row) => {
-                const videoPath = path.join(row.base_path, row.file_name);
-                this.mediaPathRegistry?.allowFile(videoPath);
-                return {
-                    videoId: row.id,
-                    title: MediaUtil.formatDisplayTitle(row.file_name),
-                    srtFile: row.srt_file ?? '',
-                    videoPath,
-                    updatedAt: row.updated_at,
-                };
+        const docs: ReaderDocumentSummary[] = [];
+        for (const row of rows) {
+            const srtFile = row.srt_file?.trim() ?? '';
+            const isAudio = MediaUtil.isAudio(row.file_name);
+            const hasSubtitle = Boolean(srtFile);
+            if (!hasSubtitle && !isAudio) {
+                continue;
+            }
+            const videoPath = path.join(row.base_path, row.file_name);
+            this.mediaPathRegistry?.allowFile(videoPath);
+            docs.push({
+                videoId: row.id,
+                title: MediaUtil.formatDisplayTitle(row.file_name),
+                srtFile,
+                videoPath,
+                updatedAt: row.updated_at,
+                mediaType: isAudio ? 'audio' : 'video',
+                hasSubtitle,
             });
+            if (docs.length >= 100) {
+                break;
+            }
+        }
+        return docs;
     }
 }

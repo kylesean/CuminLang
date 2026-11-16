@@ -244,4 +244,66 @@ describe('ContextStudioService & SavedSentenceRepository', () => {
             await fs.rm(tmpDir, { recursive: true, force: true });
         }
     });
+
+    it('listReaderDocuments 同时返回有字幕的视频与全部纯音频播客（含尚待转写条目）并过滤无字幕视频与目录', async () => {
+        memoryDb = createMemoryDb();
+        const repo = new SavedSentenceRepositoryImpl(memoryDb.db);
+        const registry = new MediaPathRegistry();
+        const service = new ContextStudioService(repo, memoryDb.db, registry);
+
+        await memoryDb.db.insert(watchHistory).values([
+            {
+                id: 'vid-sub',
+                base_path: '/media',
+                file_name: 'keynote.mp4',
+                project_type: 1,
+                srt_file: '/media/keynote.srt',
+                updated_at: '2026-11-17T01:00:00Z',
+            },
+            {
+                id: 'vid-nosub',
+                base_path: '/media',
+                file_name: 'raw-video.mp4',
+                project_type: 1,
+                srt_file: null,
+                updated_at: '2026-11-17T02:00:00Z',
+            },
+            {
+                id: 'pod-pending',
+                base_path: '/podcasts',
+                file_name: 'episode-01.mp3',
+                project_type: 1,
+                srt_file: null,
+                updated_at: '2026-11-17T03:00:00Z',
+            },
+            {
+                id: 'pod-ready',
+                base_path: '/podcasts',
+                file_name: 'episode-02.m4a',
+                project_type: 1,
+                srt_file: '/podcasts/episode-02.local.srt',
+                updated_at: '2026-11-17T04:00:00Z',
+            },
+            {
+                id: 'dir-entry',
+                base_path: '/podcasts',
+                file_name: 'series-dir',
+                project_type: 2,
+                srt_file: null,
+                updated_at: '2026-11-17T05:00:00Z',
+            },
+        ]);
+
+        const docs = await service.listReaderDocuments();
+        expect(docs.map((d) => ({
+            videoId: d.videoId,
+            mediaType: d.mediaType,
+            hasSubtitle: d.hasSubtitle,
+        }))).toEqual([
+            { videoId: 'pod-ready', mediaType: 'audio', hasSubtitle: true },
+            { videoId: 'pod-pending', mediaType: 'audio', hasSubtitle: false },
+            { videoId: 'vid-sub', mediaType: 'video', hasSubtitle: true },
+        ]);
+        expect(registry.isAllowed('/podcasts/episode-01.mp3')).toBe(true);
+    });
 });

@@ -112,4 +112,28 @@ describe('SubtitleComprehensionService', () => {
 
         await expect(service.build({ text: '   ' })).rejects.toThrow('句子不能为空');
     });
+
+    it('提取文稿考纲/进阶候选生词，并自动剔除已标熟、忽略或基础词', async () => {
+        const service = createHarness({
+            entries: {
+                journey: dictionaryEntry('journey', { oxford: 1, bnc: 1200 }),
+                serendipity: dictionaryEntry('serendipity', { tags: ['gre'] }),
+                ubiquitous: dictionaryEntry('ubiquitous', { tags: ['toefl'] }),
+                meticulous: dictionaryEntry('meticulous', { tags: ['ielts'] }),
+            },
+            userWords: [
+                userWord('serendipity', 'known', 1),
+                userWord('meticulous', 'ignored', 0),
+            ],
+        });
+
+        const res = await service.extractDocumentDifficultWords({
+            texts: [
+                'My journey was filled with serendipity and ubiquitous kindness.',
+                'Her meticulous preparation paid off.',
+            ],
+        });
+
+        expect(res.words).toEqual(['ubiquitous']);
+    });
 });

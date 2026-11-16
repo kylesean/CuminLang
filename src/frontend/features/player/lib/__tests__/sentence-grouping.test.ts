@@ -5,6 +5,7 @@ import {
     findSentenceBlock,
     groupSentencesIntoBlocks,
     groupSentencesIntoParagraphs,
+    needsBilingualCueSpace,
     selectVisibleSentences,
 } from '@/frontend/features/player/lib/sentence-grouping';
 
@@ -145,5 +146,31 @@ describe('字幕意群归并', () => {
         expect(paragraphs[0].sentences.map((s) => s.index)).toEqual([0, 1, 2]);
         expect(paragraphs[1].sentences.map((s) => s.index)).toEqual([3]);
         expect(paragraphs[2].sentences.map((s) => s.index)).toEqual([4]);
+    });
+
+    it('讲稿自然段达到默认句数上限时若当前句尚未结束（无句末标点），继续归并直至完整句收束', () => {
+        const list = [
+            line(0, 'Sentence one.', 0, 1.5),
+            line(1, 'Sentence two.', 1.7, 3.0),
+            line(2, 'Sentence three.', 3.2, 4.5),
+            line(3, 'And you have a four-part', 4.7, 6.0),
+            line(4, 'framework that helps us communicate.', 6.3, 8.5),
+            line(5, 'Next paragraph starts here.', 8.7, 10.0),
+        ];
+
+        const paragraphs = groupSentencesIntoParagraphs(list);
+
+        expect(paragraphs).toHaveLength(2);
+        expect(paragraphs[0].sentences.map((s) => s.index)).toEqual([0, 1, 2, 3, 4]);
+        expect(paragraphs[1].sentences.map((s) => s.index)).toEqual([5]);
+    });
+
+    it.each([
+        { prev: '我们有一个四部分的', next: '框架，可以帮助我们更有效地沟通。', expected: false },
+        { prev: '第一句结束。', next: '第二句开始。', expected: false },
+        { prev: '使用 AI', next: 'agent 来辅助。', expected: true },
+        { prev: 'hello', next: undefined, expected: false },
+    ])('双语跨行译文空格判定 ($prev + $next -> $expected)', ({ prev, next, expected }) => {
+        expect(needsBilingualCueSpace(prev, next)).toBe(expected);
     });
 });

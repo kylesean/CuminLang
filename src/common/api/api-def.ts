@@ -35,6 +35,8 @@ import type { SentenceVocabularyVO } from '@/common/types/vo/SentenceVocabularyV
 import type { ContextPackParams, ContextPackVO } from '@/common/types/contextPack';
 import type { WordMemoryVO } from '@/common/types/wordMemory';
 import type {
+    DocumentDifficultWordsParams,
+    DocumentDifficultWordsResult,
     SubtitleComprehensionParams,
     SubtitleComprehensionVO,
 } from '@/common/types/subtitleComprehension';
@@ -126,6 +128,8 @@ import type { SentencePracticeDictationParams, SentencePracticeRecordVO, Sentenc
 import type { RhythmTrendVO } from '@/common/learning/rhythmTrend';
 import type { AttributionVO } from '@/common/learning/compassAttribution';
 import type {
+    ExportReaderMarkdownInput,
+    ExportReaderMarkdownResult,
     ReaderDocumentSummary,
     SavedSentenceVO,
     SaveSentenceInput,
@@ -359,6 +363,10 @@ interface SubtitleControllerDef {
     'subtitle/comprehension': {
         params: SubtitleComprehensionParams;
         return: SubtitleComprehensionVO;
+    };
+    'subtitle/document-difficult-words': {
+        params: DocumentDifficultWordsParams;
+        return: DocumentDifficultWordsResult;
     };
     /** 读取或计算字幕场景边界；结果按字幕哈希与算法版本持久化。 */
     'subtitle/scene-boundaries': {
@@ -735,6 +743,10 @@ interface ContextStudioDef {
     'context-studio/update-saved-sentence': { params: UpdateSavedSentenceInput; return: SavedSentenceVO | null };
     'context-studio/get-word-contexts': { params: { word: string }; return: WordContextOccurrence[] };
     'context-studio/list-reader-documents': { params: void; return: ReaderDocumentSummary[] };
+    'context-studio/export-reader-markdown': {
+        params: ExportReaderMarkdownInput;
+        return: ExportReaderMarkdownResult;
+    };
 }
 
 // 使用交叉类型合并 ApiDefinitions 和 ExtraApiDefinition
@@ -819,6 +831,7 @@ export const API_ROUTE_KEYS = [
     'content-compass/list',
     'content-compass/stats',
     'content-compass/attribution',
+    'context-studio/export-reader-markdown',
     'context-studio/get-word-contexts',
     'context-studio/list-reader-documents',
     'context-studio/list-saved-keys',
@@ -924,6 +937,7 @@ export const API_ROUTE_KEYS = [
     'subtitle-timestamp/delete/by-key',
     'subtitle-timestamp/update',
     'subtitle/comprehension',
+    'subtitle/document-difficult-words',
     'subtitle/scene-boundaries',
     'subtitle/srt/match-vocabulary',
     'subtitle/srt/parse-to-sentences',

@@ -70,6 +70,8 @@ export interface StudyCopilotPaneProps {
         isTranscribing?: boolean;
         isRequesting?: boolean;
     };
+    /** 窄案头紧凑布局（隐藏重复主句标题并单列展示引导卡片）。 */
+    compact?: boolean;
 }
 
 interface SlashCommandItem {
@@ -107,6 +109,7 @@ export default function StudyCopilotPane({
     onClearFocusExpr,
     onOpenPresetDialog,
     dictation,
+    compact = false,
 }: StudyCopilotPaneProps) {
     const { t } = useTranslation('common');
     const composerInputRef = useRef<ChatComposerInputHandle | null>(null);
@@ -226,24 +229,24 @@ export default function StudyCopilotPane({
 
     // 借鉴 Astryx ai-chat-landing 模板：ClickableCard 栅格 + 舒适间距，彻底摆脱一排挤压的椭圆胶囊
     const emptyState = (
-        <div className="mx-auto flex w-full max-w-lg flex-col justify-center px-6 py-10">
-            <VStack gap={5}>
-                <VStack gap={1.5}>
+        <div className={compact ? 'mx-auto flex w-full flex-col justify-center px-1 py-1.5' : 'mx-auto flex w-full max-w-lg flex-col justify-center px-6 py-10'}>
+            <VStack gap={compact ? 2 : 5}>
+                <VStack gap={1}>
                     <HStack gap={2} vAlign="center">
                         <Bot className="h-4 w-4 text-accent" />
                         <Text type="supporting" color="secondary">{t('learning.copilotName')}</Text>
                     </HStack>
-                    {sentenceText ? (
+                    {!compact && sentenceText ? (
                         <>
                             <Heading level={3}>{sentenceText}</Heading>
                             <Text type="body" color="secondary">{t('learning.copilotWelcomeShort')}</Text>
                         </>
                     ) : (
-                        <Heading level={3}>{t('learning.copilotWelcomeShort')}</Heading>
+                        <Text type="supporting" color="secondary">{t('learning.copilotWelcomeShort')}</Text>
                     )}
                 </VStack>
 
-                <Grid columns={2} gap={3}>
+                <Grid columns={2} gap={compact ? 2 : 3}>
                     {starters.map((starter) => {
                         const Icon = starter.icon;
                         return (
@@ -251,18 +254,22 @@ export default function StudyCopilotPane({
                                 key={starter.id}
                                 label={starter.title}
                                 variant="muted"
-                                padding={3}
+                                padding={compact ? 2 : 3}
                                 isDisabled={composerDisabled || isBusy}
                                 onClick={() => onSubmit(starter.prompt)}
                             >
-                                <VStack gap={1}>
+                                <VStack gap={compact ? 0 : 1}>
                                     <HStack gap={1.5} vAlign="center">
                                         <Icon className="h-3.5 w-3.5 text-accent shrink-0" />
-                                        <Text type="body" weight="semibold">{starter.title}</Text>
+                                        <Text type={compact ? 'supporting' : 'body'} weight="semibold" className="truncate">
+                                            {starter.title}
+                                        </Text>
                                     </HStack>
-                                    <Text type="supporting" color="secondary" className="line-clamp-1">
-                                        {starter.hint}
-                                    </Text>
+                                    {!compact && (
+                                        <Text type="supporting" color="secondary" className="line-clamp-1">
+                                            {starter.hint}
+                                        </Text>
+                                    )}
                                 </VStack>
                             </ClickableCard>
                         );

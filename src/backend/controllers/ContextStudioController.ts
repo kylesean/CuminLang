@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { app, dialog } from 'electron';
 import { z } from 'zod';
 import { inject, injectable } from 'inversify';
 import type Controller from '@/backend/controllers/Controller';
@@ -5,6 +8,10 @@ import registerRoute from '@/backend/controllers/ipc/registerRoute';
 import { nonEmptyStringSchema } from '@/backend/controllers/ipc/routeSchemas';
 import TYPES from '@/backend/ioc/types';
 import type ContextStudioService from '@/backend/services/ContextStudioService';
+import type {
+    ExportReaderMarkdownInput,
+    ExportReaderMarkdownResult,
+} from '@/common/types/contextStudio';
 const savedSentenceTagSchema = z.enum(['expression', 'pronunciation', 'grammar', 'general']);
 
 /**
@@ -70,5 +77,46 @@ export default class ContextStudioController implements Controller {
         registerRoute('context-studio/list-reader-documents', () => this.contextStudioService.listReaderDocuments(), {
             broadcastError: false,
         });
+
+        registerRoute(
+            'context-studio/export-reader-markdown',
+            (params) => this.exportReaderMarkdown(params),
+            {
+                schema: z.object({
+                    defaultFileName: nonEmptyStringSchema,
+                    markdown: nonEmptyStringSchema,
+                }),
+                broadcastError: false,
+            },
+        );
+    }
+
+    /**
+     * 打开桌面保存对话框，把当前精读讲义导出为 Markdown 文件。
+     */
+    private async exportReaderMarkdown(
+        params: ExportReaderMarkdownInput,
+    ): Promise<ExportReaderMarkdownResult> {
+        const sanitized = params.defaultFileName
+            .replace(/[<>:"/\\|?*]+/g, '-')
+            .trim() || 'cuminlang-script-notes';
+        const fileName = sanitized.endsWith('.md') ? sanitized : `${sanitized}.md`;
+        const result = await dialog.showSaveDialog({
+            title: '导出精读讲义',
+            defaultPath: path.join(app.getPath('documents'), fileName),
+            filters: [{ name: 'Markdown', extensions: ['md'] }],
+        });
+        if (result.canceled || !result.filePath) {
+            return { success: false, canceled: true };
+        }
+        try {
+            await fs.writeFile(result.filePath, params.markdown, 'utf-8');
+            return { success: true, path: result.filePath };
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
     }
 }
