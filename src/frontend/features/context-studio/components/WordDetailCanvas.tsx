@@ -7,7 +7,7 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { Text } from '@astryxdesign/core/Text';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { Badge } from '@astryxdesign/core/Badge';
-import { BookOpenText, ExternalLink, Languages, Pencil, Trash2, Volume2 } from 'lucide-react';
+import { BookOpenText, ExternalLink, Headphones, Languages, Pencil, Trash2, Volume2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { WordItem } from '@/frontend/features/video-learning/components/WordSidebar';
 import type { WordContextOccurrence } from '@/common/types/contextStudio';
@@ -16,6 +16,8 @@ import type { WordStatus } from '@/common/types/vocabulary';
 import type { ReviewRating } from '@/common/types/review';
 import type { Sentence } from '@/common/types/SentenceC';
 import type { SentenceStruct } from '@/common/types/SentenceStruct';
+import { splitClozeSegments } from '@/common/learning/cloze';
+import MediaUtil from '@/common/utils/MediaUtil';
 import TimeUtil from '@/common/utils/TimeUtil';
 import { contextStudioApi } from '../contextStudioApi';
 import { renderSentenceTokens } from '@/frontend/features/player/components/srt-layout/sentence-token-renderer';
@@ -52,7 +54,8 @@ export interface WordDetailCanvasProps {
     onEdit: (word: WordItem) => void;
     onDeleted: (wordText: string) => void;
     onStatusUpdated: (wordText: string, nextStatus: WordStatus) => void;
-    onReviewRated: (wordText: string) => void;
+    onReviewRated: (wordText: string, nextStatus?: WordStatus) => void;
+    onPlayStarted?: () => void;
 }
 
 const STATUS_OPTIONS: readonly WordStatus[] = ['learning', 'familiar', 'known', 'ignored'];
@@ -64,6 +67,7 @@ export default function WordDetailCanvas({
     onDeleted,
     onStatusUpdated,
     onReviewRated,
+    onPlayStarted,
 }: WordDetailCanvasProps) {
     const { t } = useTranslation('pages');
     const navigate = useNavigate();
@@ -112,6 +116,7 @@ export default function WordDetailCanvas({
         id: string,
         media?: { videoPath?: string; startTime?: number; endTime?: number },
     ) => {
+        onPlayStarted?.();
         setPlayingId(id);
         try {
             await playContextAudio({
@@ -140,9 +145,12 @@ export default function WordDetailCanvas({
     const handleRateReview = async (rating: ReviewRating) => {
         setRatingBusy(true);
         try {
-            await videoLearningApi.rateReview(word.word, rating);
+            const res = await videoLearningApi.rateReview(word.word, rating);
+            if (res?.status) {
+                setCurrentStatus(res.status);
+            }
             toast.success(t('contextStudio.reviewRated', { defaultValue: '已记录本次复习反馈' }));
-            onReviewRated(word.word);
+            onReviewRated(word.word, res?.status);
         } catch {
             toast.error(t('contextStudio.reviewRateFailed', { defaultValue: '提交复习结果失败' }));
         } finally {
@@ -185,7 +193,7 @@ export default function WordDetailCanvas({
     };
 
     return (
-        <div className="flex flex-col h-full min-h-0 overflow-y-auto p-6 gap-5">
+        <div className="flex flex-col h-full min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full p-6 gap-5">
             {/* 词头与核心控制区 */}
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/40 pb-5">
                 <div className="flex flex-col gap-2 min-w-0">
@@ -367,19 +375,28 @@ export default function WordDetailCanvas({
                 ) : (
                     <div className="flex flex-col gap-3">
                         {contexts.map((occ) => {
+                            const isAudio = Boolean(occ.videoPath && MediaUtil.isAudio(occ.videoPath));
                             const hasNativeAudio = Boolean(occ.videoPath && typeof occ.startTime === 'number');
                             const speakLabel = hasNativeAudio
                                 ? t('contextStudio.playNativeAudio', { defaultValue: '播放原声' })
                                 : t('contextStudio.speakSentence', { defaultValue: '朗读' });
+                            const openPlayerLabel = isAudio
+                                ? t('contextStudio.openAudioInPlayer', { defaultValue: '播放室精听' })
+                                : t('contextStudio.openInPlayer', { defaultValue: '定位播放' });
                             const playerUrl =
                                 typeof occ.startTime === 'number' && occ.startTime > 0
                                     ? `/player/${occ.videoId}?t=${Math.floor(occ.startTime)}`
                                     : `/player/${occ.videoId}`;
+                            const occSentence = buildOccurrenceSentence(occ);
+                            const highlightSegments = splitClozeSegments(occ.context, word.word);
                             return (
                             <Card key={occ.id} variant="muted" padding={3}>
                                 <div className="flex flex-col gap-2">
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2 min-w-0">
+                                            {isAudio && (
+                                                <Headphones className="w-3.5 h-3.5 text-secondary shrink-0" />
+                                            )}
                                             <span className="text-metadata font-medium text-accent truncate">
                                                 {occ.videoTitle}
                                             </span>
@@ -428,12 +445,12 @@ export default function WordDetailCanvas({
                                                             <BookOpenText className="w-3.5 h-3.5" />
                                                         </button>
                                                     </Tooltip>
-                                                    <Tooltip content={t('contextStudio.openInPlayer', { defaultValue: '定位播放' })} placement="below">
+                                                    <Tooltip content={openPlayerLabel} placement="below">
                                                         <button
                                                             type="button"
                                                             onClick={() => navigate(playerUrl)}
                                                             className="p-1 rounded-md text-secondary hover:text-primary hover:bg-body/60 transition-colors cursor-pointer"
-                                                            aria-label={t('contextStudio.openInPlayer', { defaultValue: '定位播放' })}
+                                                            aria-label={openPlayerLabel}
                                                         >
                                                             <ExternalLink className="w-3.5 h-3.5" />
                                                         </button>
@@ -444,12 +461,26 @@ export default function WordDetailCanvas({
                                     </div>
 
                                     <p className="text-sm text-primary leading-relaxed select-text break-words">
-                                        {renderSentenceTokens({
-                                            sentence: buildOccurrenceSentence(occ),
-                                            text: occ.context,
-                                            alwaysDark: false,
-                                            surface: 'transcript',
-                                            sentenceHash: occ.id,
+                                        {highlightSegments.map((seg, segIdx) => {
+                                            const segNodes = renderSentenceTokens({
+                                                sentence: occSentence,
+                                                text: seg.text,
+                                                alwaysDark: false,
+                                                surface: 'transcript',
+                                                sentenceHash: `${occ.id}:${segIdx}`,
+                                            });
+                                            if (seg.matched) {
+                                                return (
+                                                    <span
+                                                        key={`match-${occ.id}-${segIdx}`}
+                                                        data-testid="word-context-highlight"
+                                                        className="font-semibold text-accent underline decoration-accent/55 underline-offset-4 bg-accent-bg/10 rounded px-0.5"
+                                                    >
+                                                        {segNodes}
+                                                    </span>
+                                                );
+                                            }
+                                            return <span key={`seg-${occ.id}-${segIdx}`}>{segNodes}</span>;
                                         })}
                                     </p>
                                     {occ.contextZh && (

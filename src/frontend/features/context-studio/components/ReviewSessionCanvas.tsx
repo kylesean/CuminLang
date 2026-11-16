@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '@astryxdesign/core/Badge';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { Text } from '@astryxdesign/core/Text';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import {
@@ -12,13 +13,16 @@ import {
     CheckCircle2,
     ExternalLink,
     Eye,
+    Headphones,
+    NotebookPen,
     Volume2,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
-import type { WordContextOccurrence } from '@/common/types/contextStudio';
+import type { SavedSentenceVO, WordContextOccurrence } from '@/common/types/contextStudio';
 import type { ReviewCardVO, ReviewRateResultVO, ReviewRating } from '@/common/types/review';
 import type { WordItem } from '@/frontend/features/video-learning/components/WordSidebar';
+import MediaUtil from '@/common/utils/MediaUtil';
 import { contextStudioApi } from '@/frontend/features/context-studio/contextStudioApi';
 import { videoLearningApi } from '@/frontend/features/video-learning/videoLearningApi';
 import { playContextAudio, stopActiveAudio } from '@/frontend/infrastructure/audio/AudioPlayer';
@@ -28,6 +32,7 @@ import { cn } from '@/frontend/lib/utils';
 interface ReviewSessionCanvasProps {
     cards: ReviewCardVO[];
     allWords: WordItem[];
+    sentences?: SavedSentenceVO[];
     topicLabel?: string | null;
     onSwitchToDueQueue?: () => void;
     onRated: (word: string, result: ReviewRateResultVO) => void;
@@ -56,6 +61,7 @@ const RATING_OPTIONS: ReadonlyArray<{
 export function ReviewSessionCanvas({
     cards,
     allWords,
+    sentences = [],
     topicLabel,
     onSwitchToDueQueue,
     onRated,
@@ -67,8 +73,15 @@ export function ReviewSessionCanvas({
 
     // 锁定本轮复习队列，避免父组件因单卡评分移除到期列表而造成下标跳变
     const [sessionCards] = useState<ReviewCardVO[]>(() => cards);
+    const [sessionSentences] = useState<SavedSentenceVO[]>(() =>
+        sentences.filter((s) => Boolean(s.textZh?.trim() || s.note?.trim())),
+    );
+    const [reviewMode, setReviewMode] = useState<'words' | 'sentences'>('words');
     const [currentIndex, setCurrentIndex] = useState(0);
     const [revealed, setRevealed] = useState(false);
+    const [sentenceIndex, setSentenceIndex] = useState(0);
+    const [sentenceRevealed, setSentenceRevealed] = useState(false);
+    const [sentenceRecalled, setSentenceRecalled] = useState(0);
     const [submitting, setSubmitting] = useState(false);
     const [playingAudio, setPlayingAudio] = useState(false);
     const [recalledCount, setRecalledCount] = useState(0);
@@ -80,6 +93,8 @@ export function ReviewSessionCanvas({
 
     const currentCard = sessionCards[currentIndex] ?? null;
     const isCompleted = sessionCards.length > 0 && currentIndex >= sessionCards.length;
+    const currentReviewSentence = sessionSentences[sentenceIndex] ?? null;
+    const isSentenceCompleted = sessionSentences.length > 0 && sentenceIndex >= sessionSentences.length;
 
     const matchedWordItem = useMemo(() => {
         if (!currentCard) return null;
@@ -221,6 +236,25 @@ export function ReviewSessionCanvas({
 
     // 键盘快捷键：Space 显示答案；1-4 直接评分
     useEffect(() => {
+        if (reviewMode === 'sentences') {
+            if (!currentReviewSentence || isSentenceCompleted) return;
+            const onSentenceKeyDown = (event: KeyboardEvent) => {
+                const target = event.target as HTMLElement | null;
+                if (
+                    target &&
+                    (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+                ) {
+                    return;
+                }
+                if (event.code === 'Space' && !sentenceRevealed) {
+                    event.preventDefault();
+                    setSentenceRevealed(true);
+                }
+            };
+            window.addEventListener('keydown', onSentenceKeyDown);
+            return () => window.removeEventListener('keydown', onSentenceKeyDown);
+        }
+
         if (!currentCard || isCompleted) return;
         const onKeyDown = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
@@ -253,7 +287,241 @@ export function ReviewSessionCanvas({
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [currentCard, isCompleted, revealed, handleRate]);
+    }, [
+        reviewMode,
+        currentReviewSentence,
+        isSentenceCompleted,
+        sentenceRevealed,
+        currentCard,
+        isCompleted,
+        revealed,
+        handleRate,
+    ]);
+
+    const handleAdvanceSentence = (success: boolean) => {
+        stopActiveAudio();
+        if (success) {
+            setSentenceRecalled((prev) => prev + 1);
+        }
+        setSentenceRevealed(false);
+        setSentenceIndex((prev) => prev + 1);
+    };
+
+    const handlePlayReviewSentence = async (item: SavedSentenceVO) => {
+        setPlayingAudio(true);
+        try {
+            await playContextAudio({
+                text: item.text,
+                videoPath: item.videoPath,
+                startTime: item.startTime,
+                endTime: item.endTime,
+            });
+        } finally {
+            setPlayingAudio(false);
+        }
+    };
+
+    if (reviewMode === 'sentences') {
+        if (isSentenceCompleted || !currentReviewSentence) {
+            const total = sessionSentences.length;
+            return (
+                <Card padding={6} height="100%" className="h-full min-h-0 flex flex-col items-center justify-center">
+                    <div className="max-w-md w-full flex flex-col items-center text-center gap-5">
+                        <div className="w-12 h-12 rounded-xl bg-accent-bg/15 text-accent flex items-center justify-center">
+                            <CheckCircle2 className="w-6 h-6" />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <h2 className="text-xl font-semibold text-primary">
+                                {t('contextStudio.sentenceReviewCompleteTitle', { defaultValue: '本轮金句表达回忆完成' })}
+                            </h2>
+                            <Text type="body" color="secondary">
+                                {t('contextStudio.sentenceReviewCompleteDesc', {
+                                    total,
+                                    recalled: sentenceRecalled,
+                                    defaultValue: `共回想 ${total} 句收藏表达，流畅回忆 ${sentenceRecalled} 句。`,
+                                })}
+                            </Text>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                size="md"
+                                variant="secondary"
+                                label={t('contextStudio.backToWorkspace', { defaultValue: '返回工作台' })}
+                                onClick={onExit}
+                            />
+                            <Button
+                                size="md"
+                                variant="primary"
+                                label={t('contextStudio.restartSentenceReview', { defaultValue: '再练一遍' })}
+                                onClick={() => {
+                                    setSentenceIndex(0);
+                                    setSentenceRecalled(0);
+                                    setSentenceRevealed(false);
+                                }}
+                            />
+                        </div>
+                    </div>
+                </Card>
+            );
+        }
+
+        const sentenceProgress = Math.round(((sentenceIndex + 1) / sessionSentences.length) * 100);
+        const isAudio = Boolean(currentReviewSentence.videoPath && MediaUtil.isAudio(currentReviewSentence.videoPath));
+
+        return (
+            <Card padding={0} height="100%" className="h-full min-h-0 flex flex-col overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-border/40 bg-surface/40 flex items-center justify-between gap-4 shrink-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={<ArrowLeft className="w-3.5 h-3.5" />}
+                            label={t('contextStudio.exitReview', { defaultValue: '退出复习' })}
+                            onClick={onExit}
+                        />
+                        {sessionCards.length > 0 && (
+                            <div className="shrink-0">
+                                <SegmentedControl
+                                    size="sm"
+                                    value={reviewMode}
+                                    onChange={(val) => setReviewMode(val as 'words' | 'sentences')}
+                                    label={t('contextStudio.reviewModeLabel', { defaultValue: '训练类型' })}
+                                >
+                                    <SegmentedControlItem
+                                        value="words"
+                                        label={t('contextStudio.reviewModeWords', {
+                                            count: sessionCards.length,
+                                            defaultValue: `生词 (${sessionCards.length})`,
+                                        })}
+                                    />
+                                    <SegmentedControlItem
+                                        value="sentences"
+                                        label={t('contextStudio.reviewModeSentences', {
+                                            count: sessionSentences.length,
+                                            defaultValue: `金句 (${sessionSentences.length})`,
+                                        })}
+                                    />
+                                </SegmentedControl>
+                            </div>
+                        )}
+                        <span className="text-sm font-medium text-primary tabular-nums shrink-0">
+                            {t('contextStudio.reviewProgress', {
+                                current: sentenceIndex + 1,
+                                total: sessionSentences.length,
+                                defaultValue: `第 ${sentenceIndex + 1} / ${sessionSentences.length} 张`,
+                            })}
+                        </span>
+                    </div>
+                    <div className="w-36 h-1.5 rounded-full bg-border/40 overflow-hidden shrink-0">
+                        <div className="h-full bg-accent transition-all duration-300" style={{ width: `${sentenceProgress}%` }} />
+                    </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full p-6 flex flex-col items-center justify-center">
+                    <div className="w-full max-w-2xl rounded-xl border border-border/50 bg-surface p-6 shadow-xs flex flex-col gap-5">
+                        <div className="flex items-center justify-between gap-2 text-metadata text-secondary border-b border-border/40 pb-3">
+                            <span className="inline-flex items-center gap-1.5 truncate">
+                                {isAudio && <Headphones className="w-3.5 h-3.5 shrink-0" />}
+                                <span>{currentReviewSentence.videoTitle || t('contextStudio.unknownVideo', { defaultValue: '未知来源' })}</span>
+                            </span>
+                            {currentReviewSentence.tag && currentReviewSentence.tag !== 'general' && (
+                                <Badge
+                                    variant="info"
+                                    label={t(`contextStudio.tag.${currentReviewSentence.tag}`, {
+                                        defaultValue: currentReviewSentence.tag,
+                                    })}
+                                />
+                            )}
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            <span className="text-metadata font-medium text-secondary">
+                                {t('contextStudio.sentenceReviewCueLabel', { defaultValue: '中文语境与笔记线索' })}
+                            </span>
+                            {currentReviewSentence.textZh && (
+                                <p className="text-lg font-medium text-primary leading-relaxed">
+                                    {currentReviewSentence.textZh}
+                                </p>
+                            )}
+                            {currentReviewSentence.note?.trim() && (
+                                <div className="rounded-lg bg-muted/50 px-3 py-2 flex items-start gap-2 text-sm text-secondary">
+                                    <NotebookPen className="w-3.5 h-3.5 text-accent mt-0.5 shrink-0" />
+                                    <span className="whitespace-pre-wrap">{currentReviewSentence.note}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {!sentenceRevealed ? (
+                            <div className="rounded-lg border border-border/40 bg-muted/40 p-5 flex flex-col items-center justify-center gap-3 text-center">
+                                <p className="text-sm text-secondary">
+                                    {t('contextStudio.sentenceReviewInstruction', {
+                                        defaultValue: '先试着用英文说出这句话的表达，再点击揭示原文核对。',
+                                    })}
+                                </p>
+                                <Button
+                                    size="md"
+                                    variant="primary"
+                                    icon={<Eye className="w-4 h-4" />}
+                                    label={t('contextStudio.sentenceReviewReveal', { defaultValue: '显示英文表达 (Space)' })}
+                                    onClick={() => setSentenceRevealed(true)}
+                                />
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-4">
+                                <div className="rounded-lg border border-accent-bg/30 bg-accent-bg/8 p-4 flex flex-col gap-3">
+                                    <p className="text-lg font-semibold text-primary leading-relaxed select-text">
+                                        {currentReviewSentence.text}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            icon={<Volume2 className="w-3.5 h-3.5" />}
+                                            isDisabled={playingAudio}
+                                            label={t('contextStudio.playNativeAudio', { defaultValue: '播放原声' })}
+                                            onClick={() => void handlePlayReviewSentence(currentReviewSentence)}
+                                        />
+                                        {currentReviewSentence.videoId && (
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                icon={<BookOpenText className="w-3.5 h-3.5" />}
+                                                label={t('contextStudio.openInReader', { defaultValue: '精读全文' })}
+                                                onClick={() => navigate(`/reader/${currentReviewSentence.videoId}?sentence=${currentReviewSentence.sentenceIndex}`)}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <Button
+                                        size="md"
+                                        variant="destructive"
+                                        className="justify-center"
+                                        label={t('contextStudio.sentenceRateMiss', { defaultValue: '没想起' })}
+                                        onClick={() => handleAdvanceSentence(false)}
+                                    />
+                                    <Button
+                                        size="md"
+                                        variant="secondary"
+                                        className="justify-center"
+                                        label={t('contextStudio.sentenceRateHesitated', { defaultValue: '有点卡壳' })}
+                                        onClick={() => handleAdvanceSentence(false)}
+                                    />
+                                    <Button
+                                        size="md"
+                                        variant="primary"
+                                        className="justify-center"
+                                        label={t('contextStudio.sentenceRateFluent', { defaultValue: '脱口而出' })}
+                                        onClick={() => handleAdvanceSentence(true)}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </Card>
+        );
+    }
 
     if (sessionCards.length === 0) {
         return (
@@ -272,13 +540,26 @@ export function ReviewSessionCanvas({
                             })}
                         </Text>
                     </div>
-                    <Button
-                        size="md"
-                        variant="primary"
-                        icon={<ArrowLeft className="w-4 h-4" />}
-                        label={t('contextStudio.backToWorkspace', { defaultValue: '返回工作台' })}
-                        onClick={onExit}
-                    />
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                        {sessionSentences.length > 0 && (
+                            <Button
+                                size="md"
+                                variant="secondary"
+                                label={t('contextStudio.practiceSavedSentencesCta', {
+                                    count: sessionSentences.length,
+                                    defaultValue: `练练收藏金句 (${sessionSentences.length})`,
+                                })}
+                                onClick={() => setReviewMode('sentences')}
+                            />
+                        )}
+                        <Button
+                            size="md"
+                            variant="primary"
+                            icon={<ArrowLeft className="w-4 h-4" />}
+                            label={t('contextStudio.backToWorkspace', { defaultValue: '返回工作台' })}
+                            onClick={onExit}
+                        />
+                    </div>
                 </div>
             </Card>
         );
@@ -365,6 +646,31 @@ export function ReviewSessionCanvas({
                         label={t('contextStudio.exitReview', { defaultValue: '退出复习' })}
                         onClick={onExit}
                     />
+                    {sessionSentences.length > 0 && !topicLabel && (
+                        <div className="shrink-0">
+                            <SegmentedControl
+                                size="sm"
+                                value={reviewMode}
+                                onChange={(val) => setReviewMode(val as 'words' | 'sentences')}
+                                label={t('contextStudio.reviewModeLabel', { defaultValue: '训练类型' })}
+                            >
+                                <SegmentedControlItem
+                                    value="words"
+                                    label={t('contextStudio.reviewModeWords', {
+                                        count: sessionCards.length,
+                                        defaultValue: `生词 (${sessionCards.length})`,
+                                    })}
+                                />
+                                <SegmentedControlItem
+                                    value="sentences"
+                                    label={t('contextStudio.reviewModeSentences', {
+                                        count: sessionSentences.length,
+                                        defaultValue: `金句 (${sessionSentences.length})`,
+                                    })}
+                                />
+                            </SegmentedControl>
+                        </div>
+                    )}
                     {topicLabel && (
                         <div className="flex items-center gap-1.5 min-w-0">
                             <Badge
@@ -417,7 +723,7 @@ export function ReviewSessionCanvas({
             </div>
 
             {/* 中央主动回忆闪卡 */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col items-center justify-center">
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full p-6 flex flex-col items-center justify-center">
                 <div className="w-full max-w-2xl flex flex-col gap-5">
                     <div className="rounded-xl border border-border/50 bg-surface p-6 shadow-xs flex flex-col gap-5">
                         {/* 词头与调度元数据 */}

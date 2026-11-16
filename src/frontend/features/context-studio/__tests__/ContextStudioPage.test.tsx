@@ -143,24 +143,46 @@ describe('ContextStudioPage - Three-column workspace (Words & Sentences)', () =>
             </MemoryRouter>,
         );
 
-        // 等待加载完成，默认选中第一个生词 serendipity 及其真实语境
+        // 等待加载完成，默认选中第一个生词 serendipity 及其真实语境（并高亮目标词本身）
         await waitFor(() => {
             expect(screen.getByRole('heading', { name: 'serendipity' })).toBeDefined();
         });
         expect(mockGetReviewQueue).toHaveBeenCalledWith(50);
+        expect(screen.queryByRole('radio', { name: '金句' })).toBeNull();
         await waitFor(() => {
             expect(
                 screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'It was pure serendipity.'),
             ).toBeDefined();
+            expect(screen.getByTestId('word-context-highlight').textContent).toBe('serendipity');
         });
 
-        // 点击中栏的金句卡片，右侧切换为金句详情画布
+        // 在右侧单词详情卡片直接提交今日复习评分，同步更新词条状态并消去待复习标记
+        const canvas = screen.getByLabelText('语境学习画布');
+        fireEvent.click(within(canvas).getByRole('button', { name: '想起来了' }));
+        await waitFor(() => {
+            expect(mockRateReview).toHaveBeenCalledWith('serendipity', 'good');
+            expect(within(canvas).queryByText('今日待复习')).toBeNull();
+            expect(screen.getAllByText('有印象').length).toBeGreaterThanOrEqual(2);
+        });
+
+        // 点击中栏的金句卡片，右侧切换为金句详情画布；验证列表直接呈现笔记预览，详情页为可选标签芯片
         const sentenceCard = screen.getByText('Stay hungry, stay foolish.');
+        expect(screen.getAllByText('经典结语').length).toBeGreaterThanOrEqual(1);
         fireEvent.click(sentenceCard);
 
         await waitFor(() => {
             expect(screen.getByDisplayValue('经典结语')).toBeDefined();
             expect(screen.getAllByText('Steve Jobs Stanford').length).toBeGreaterThanOrEqual(2);
+        });
+        expect(screen.queryByRole('radio', { name: '通用' })).toBeNull();
+        const exprChip = screen.getByRole('button', { name: '地道表达' });
+        expect(exprChip.getAttribute('aria-pressed')).toBe('true');
+        fireEvent.click(exprChip);
+        await waitFor(() => {
+            expect(mockUpdateSavedSentence).toHaveBeenCalledWith({
+                sentenceKey: 'hash-1:12',
+                tag: 'general',
+            });
         });
     });
 
@@ -389,5 +411,75 @@ describe('ContextStudioPage - Three-column workspace (Words & Sentences)', () =>
             createSpy.mockRestore();
             vi.unstubAllGlobals();
         }
+    });
+
+    it('filters saved sentences by media source and supports sentence expression recall in Today Training', async () => {
+        mockListSavedSentences.mockResolvedValue([
+            {
+                id: 10,
+                sentenceKey: 'hash-1:12',
+                videoId: 'vid-1',
+                videoTitle: 'Steve Jobs Stanford',
+                fileHash: 'hash-1',
+                sentenceIndex: 12,
+                startTime: 45,
+                endTime: 50,
+                text: 'Stay hungry, stay foolish.',
+                textZh: '求知若饥，虚心若愚。',
+                note: '经典结语',
+                tag: 'expression',
+                createdAt: '2026-11-12T00:00:00Z',
+                updatedAt: '2026-11-12T00:00:00Z',
+            },
+            {
+                id: 12,
+                sentenceKey: 'hash-2:3',
+                videoId: 'vid-3',
+                videoTitle: 'Tech Podcast Ep1',
+                videoPath: '/audio/podcast.mp3',
+                fileHash: 'hash-2',
+                sentenceIndex: 3,
+                startTime: 10,
+                endTime: 15,
+                text: 'Think from first principles.',
+                textZh: '从第一性原理出发思考。',
+                note: '',
+                tag: 'grammar',
+                createdAt: '2026-11-13T00:00:00Z',
+                updatedAt: '2026-11-13T00:00:00Z',
+            },
+        ]);
+
+        render(
+            <MemoryRouter>
+                <ContextStudioPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Tech Podcast Ep1')).toBeDefined();
+        });
+
+        // 切换到收藏金句后，按来源过滤仅查看播客条目，且纯音频隐藏「跟读练习」展示「播放室精听」
+        fireEvent.click(screen.getByRole('button', { name: /收藏金句/i }));
+        const sourceSelect = screen.getByLabelText('按内容来源筛选');
+        fireEvent.change(sourceSelect, { target: { value: 'vid-3' } });
+
+        expect(screen.queryByText('Stay hungry, stay foolish.')).toBeNull();
+        expect(screen.getByText('Think from first principles.')).toBeDefined();
+        expect(screen.getByRole('button', { name: '播放室精听' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: '跟读练习' })).toBeNull();
+
+        // 切进「今日训练」，可切换为「金句 (2)」主动输出回忆
+        fireEvent.click(screen.getByRole('radio', { name: /今日训练/i }));
+        const sentenceModeTab = await screen.findByRole('radio', { name: /金句 \(2\)/i });
+        fireEvent.click(sentenceModeTab);
+
+        expect(screen.getByText('求知若饥，虚心若愚。')).toBeDefined();
+        expect(screen.queryByText('Stay hungry, stay foolish.')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /显示英文表达/i }));
+        expect(screen.getByText('Stay hungry, stay foolish.')).toBeDefined();
+        fireEvent.click(screen.getByRole('button', { name: '脱口而出' }));
+        expect(screen.getByText('从第一性原理出发思考。')).toBeDefined();
     });
 });

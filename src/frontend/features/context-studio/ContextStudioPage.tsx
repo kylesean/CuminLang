@@ -14,7 +14,9 @@ import {
     BookOpenText,
     Clock,
     Download,
+    Headphones,
     Layers,
+    NotebookPen,
     Search,
     Square,
     Upload,
@@ -32,19 +34,23 @@ import WordDetailCanvas from './components/WordDetailCanvas';
 import SentenceDetailCanvas from './components/SentenceDetailCanvas';
 import { ReviewSessionCanvas } from './components/ReviewSessionCanvas';
 import {
-    SAVED_SENTENCE_TAGS,
     type SavedSentenceTag,
     type SavedSentenceVO,
 } from '@/common/types/contextStudio';
 import type { ReviewCardVO } from '@/common/types/review';
 import type { WordStatus } from '@/common/types/vocabulary';
+import MediaUtil from '@/common/utils/MediaUtil';
 import { cn } from '@/frontend/lib/utils';
 
 type AssetFilter = 'all' | 'words' | 'sentences' | 'due' | 'learning' | 'familiar' | 'known';
-type SegmentFilter = 'all' | 'words' | 'sentences';
 type StudioViewMode = 'workspace' | 'review' | 'memory';
 
 const VALID_FILTERS = new Set<AssetFilter>(['all', 'words', 'sentences', 'due', 'learning', 'familiar', 'known']);
+const OPTIONAL_DISPLAY_TAGS: readonly Exclude<SavedSentenceTag, 'general'>[] = [
+    'expression',
+    'grammar',
+    'pronunciation',
+];
 
 type StudioSelection =
     | { kind: 'word'; word: WordItem }
@@ -66,7 +72,7 @@ const SENTENCE_TAG_DEFAULT_LABEL: Record<SavedSentenceTag, string> = {
     expression: '地道表达',
     pronunciation: '发音连读',
     grammar: '长难句',
-    general: '通用',
+    general: '未分类',
 };
 
 const REVIEW_QUEUE_LIMIT = 50;
@@ -150,8 +156,9 @@ export default function ContextStudioPage() {
     });
     const [activeSentenceTag, setActiveSentenceTag] = useState<SavedSentenceTag | 'all'>(() => {
         const tagParam = searchParams.get('tag') as SavedSentenceTag | null;
-        return tagParam && (SAVED_SENTENCE_TAGS as readonly string[]).includes(tagParam) ? tagParam : 'all';
+        return tagParam && ['expression', 'pronunciation', 'grammar', 'general'].includes(tagParam) ? tagParam : 'all';
     });
+    const [selectedSourceId, setSelectedSourceId] = useState<string>('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [explicitSelection, setExplicitSelection] = useState<StudioSelection>(null);
     const [editingWord, setEditingWord] = useState<WordItem | null>(null);
@@ -240,12 +247,30 @@ export default function ContextStudioPage() {
             all: words.length + sentences.length,
             words: words.length,
             sentences: sentences.length,
+            dueWordsCount: dueWords.size,
             due: Math.max(due, dueTotalCount),
             learning,
             familiar,
             known,
         };
     }, [words, sentences, dueWords, dueTotalCount]);
+
+    const sentenceSources = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const item of sentences) {
+            if (item.videoId && !map.has(item.videoId)) {
+                map.set(item.videoId, item.videoTitle || item.videoId);
+            }
+        }
+        return Array.from(map.entries()).map(([videoId, title]) => ({ videoId, title }));
+    }, [sentences]);
+
+    const effectiveSourceId =
+        activeFilter === 'sentences'
+        && selectedSourceId !== 'all'
+        && sentenceSources.some((src) => src.videoId === selectedSourceId)
+            ? selectedSourceId
+            : 'all';
 
     const sentenceTagCounts = useMemo(() => {
         const result: Record<SavedSentenceTag, number> = {
@@ -291,18 +316,22 @@ export default function ContextStudioPage() {
                       if (activeFilter === 'sentences' && activeSentenceTag !== 'all' && s.tag !== activeSentenceTag) {
                           return false;
                       }
+                      if (effectiveSourceId !== 'all' && s.videoId !== effectiveSourceId) {
+                          return false;
+                      }
                       if (!q) return true;
                       return (
                           s.text.toLowerCase().includes(q) ||
                           s.textZh.toLowerCase().includes(q) ||
-                          s.videoTitle.toLowerCase().includes(q)
+                          s.videoTitle.toLowerCase().includes(q) ||
+                          (s.note && s.note.toLowerCase().includes(q))
                       );
                   })
                   .map((sentence) => ({ kind: 'sentence' as const, sentence }))
             : [];
 
         return [...sentenceEntries, ...wordEntries];
-    }, [activeFilter, activeSentenceTag, words, sentences, dueWords, searchTerm]);
+    }, [activeFilter, activeSentenceTag, effectiveSourceId, words, sentences, dueWords, searchTerm]);
 
     // 根据深链 ?word=、显式选中或当前筛选队列首项派生右侧画布聚焦资产。
     // 显式选中与筛选模式不匹配时回落到深链/首项（筛选切换入口已统一清空
@@ -365,18 +394,12 @@ export default function ContextStudioPage() {
         return null;
     }, [activeFilter, deepLinkSentenceKey, deepLinkWord, explicitSelection, filteredItems, words, sentences]);
 
-    const segmentValue: SegmentFilter =
-        activeFilter === 'sentences'
-            ? 'sentences'
-            : activeFilter === 'words' || activeFilter === 'due' || activeFilter === 'learning' || activeFilter === 'familiar' || activeFilter === 'known'
-                ? 'words'
-                : 'all';
-
     const handleSelectFilter = useCallback(
         (nextFilter: AssetFilter) => {
+            stopSentencePlaylist();
             if (nextFilter !== 'sentences') {
                 setActiveSentenceTag('all');
-                stopSentencePlaylist();
+                setSelectedSourceId('all');
             }
             setExplicitSelection(null);
             setActiveFilter(nextFilter);
@@ -403,6 +426,7 @@ export default function ContextStudioPage() {
 
     const handleSelectSentenceTag = useCallback(
         (nextTag: SavedSentenceTag | 'all') => {
+            stopSentencePlaylist();
             setExplicitSelection(null);
             setActiveSentenceTag(nextTag);
             setSearchParams(
@@ -419,11 +443,12 @@ export default function ContextStudioPage() {
                 { replace: true },
             );
         },
-        [setSearchParams],
+        [setSearchParams, stopSentencePlaylist],
     );
 
     const handleSelectAsset = useCallback(
         (entry: Exclude<StudioSelection, null>) => {
+            stopSentencePlaylist();
             setExplicitSelection(entry);
             setSearchParams(
                 (prev) => {
@@ -440,12 +465,8 @@ export default function ContextStudioPage() {
                 { replace: true },
             );
         },
-        [setSearchParams],
+        [setSearchParams, stopSentencePlaylist],
     );
-
-    const handleSegmentChange = (val: string) => {
-        handleSelectFilter(val as SegmentFilter);
-    };
 
     const startSentencePlaylist = useCallback(async () => {
         const sentenceQueue = filteredItems
@@ -585,6 +606,9 @@ export default function ContextStudioPage() {
                 selection?.kind === 'sentence' &&
                 selection.sentence.sentenceKey === entry.sentence.sentenceKey;
             const sentenceTag = entry.sentence.tag ?? 'general';
+            const isCategorized = sentenceTag !== 'general';
+            const isAudioSource = Boolean(entry.sentence.videoPath && MediaUtil.isAudio(entry.sentence.videoPath));
+            const noteText = entry.sentence.note?.trim() ?? '';
             return (
                 <button
                     key={`sent-${entry.sentence.sentenceKey}`}
@@ -599,15 +623,22 @@ export default function ContextStudioPage() {
                 >
                     <div className="flex items-center justify-between gap-2">
                         <span className="inline-flex items-center gap-1.5 text-metadata font-medium text-accent shrink-0">
-                            <Bookmark className="w-3 h-3 fill-current" />
+                            {playlistPlaying && isSelected ? (
+                                <Volume2 className="w-3 h-3 animate-pulse" />
+                            ) : (
+                                <Bookmark className={cn('w-3 h-3', isCategorized ? 'fill-current' : 'opacity-75')} />
+                            )}
                             <span>
-                                {t(`contextStudio.tag.${sentenceTag}`, {
-                                    defaultValue: SENTENCE_TAG_DEFAULT_LABEL[sentenceTag],
-                                })}
+                                {isCategorized
+                                    ? t(`contextStudio.tag.${sentenceTag}`, {
+                                        defaultValue: SENTENCE_TAG_DEFAULT_LABEL[sentenceTag],
+                                    })
+                                    : t('contextStudio.sentenceBadge', { defaultValue: '金句' })}
                             </span>
                         </span>
-                        <span className="text-metadata text-secondary truncate">
-                            {entry.sentence.videoTitle}
+                        <span className="inline-flex items-center gap-1 text-metadata text-secondary truncate">
+                            {isAudioSource && <Headphones className="w-3 h-3 shrink-0" />}
+                            <span className="truncate">{entry.sentence.videoTitle}</span>
                         </span>
                     </div>
                     <p className="text-sm font-medium text-primary line-clamp-2 leading-snug">
@@ -616,6 +647,12 @@ export default function ContextStudioPage() {
                     {entry.sentence.textZh && (
                         <p className="text-metadata text-secondary line-clamp-1">
                             {entry.sentence.textZh}
+                        </p>
+                    )}
+                    {noteText && (
+                        <p className="text-metadata text-accent/85 line-clamp-1 flex items-center gap-1 pt-0.5">
+                            <NotebookPen className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{noteText}</span>
                         </p>
                     )}
                 </button>
@@ -685,63 +722,48 @@ export default function ContextStudioPage() {
                 <PageHeader
                     title={t('contextStudio.title', { defaultValue: '语境工坊' })}
                     description={t('contextStudio.description', {
-                        defaultValue: '真实视频语境中的生词与金句',
+                        defaultValue: '音视频真实语境中的生词、金句与主动回忆训练',
                     })}
                     rightSlot={
-                        <div className="flex items-center gap-2">
-                            <div className="shrink-0">
-                                <SegmentedControl
-                                    size="sm"
-                                    value={studioView}
-                                    onChange={(val) => {
-                                        if (val === 'review') {
-                                            setTopicCards(null);
-                                            setActiveReviewTopic(null);
-                                            setReviewSessionKey((prev) => prev + 1);
-                                            setStudioView('review');
-                                        } else if (val === 'memory') {
-                                            setStudioView('memory');
-                                        } else {
-                                            setStudioView('workspace');
-                                        }
-                                    }}
-                                    label={t('contextStudio.viewModeLabel', { defaultValue: '工坊视图切换' })}
-                                >
-                                    <SegmentedControlItem
-                                        value="workspace"
-                                        label={t('contextStudio.viewWorkspace', { defaultValue: '语境资产' })}
-                                    />
-                                    <SegmentedControlItem
-                                        value="review"
-                                        label={
-                                            counts.due > 0
-                                                ? t('contextStudio.viewReviewWithCount', {
-                                                      count: counts.due,
-                                                      defaultValue: `今日训练 (${counts.due})`,
-                                                  })
-                                                : t('contextStudio.viewReview', { defaultValue: '今日训练' })
-                                        }
-                                    />
-                                    <SegmentedControlItem
-                                        value="memory"
-                                        label={t('contextStudio.viewMemory', { defaultValue: '记忆全景' })}
-                                    />
-                                </SegmentedControl>
-                            </div>
-                            <Button
+                        <div className="shrink-0">
+                            <SegmentedControl
                                 size="sm"
-                                variant="ghost"
-                                icon={<Upload className="w-3.5 h-3.5" />}
-                                label={t('contextStudio.importWords', { defaultValue: '导入' })}
-                                onClick={() => void handleImportWords()}
-                            />
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                icon={<Download className="w-3.5 h-3.5" />}
-                                label={t('contextStudio.exportTemplate', { defaultValue: '导出' })}
-                                onClick={() => void handleExportTemplate()}
-                            />
+                                value={studioView}
+                                onChange={(val) => {
+                                    stopSentencePlaylist();
+                                    if (val === 'review') {
+                                        setTopicCards(null);
+                                        setActiveReviewTopic(null);
+                                        setReviewSessionKey((prev) => prev + 1);
+                                        setStudioView('review');
+                                    } else if (val === 'memory') {
+                                        setStudioView('memory');
+                                    } else {
+                                        setStudioView('workspace');
+                                    }
+                                }}
+                                label={t('contextStudio.viewModeLabel', { defaultValue: '工坊视图切换' })}
+                            >
+                                <SegmentedControlItem
+                                    value="workspace"
+                                    label={t('contextStudio.viewWorkspace', { defaultValue: '语境资产' })}
+                                />
+                                <SegmentedControlItem
+                                    value="review"
+                                    label={
+                                        counts.due > 0
+                                            ? t('contextStudio.viewReviewWithCount', {
+                                                  count: counts.due,
+                                                  defaultValue: `今日训练 (${counts.due})`,
+                                              })
+                                            : t('contextStudio.viewReview', { defaultValue: '今日训练' })
+                                    }
+                                />
+                                <SegmentedControlItem
+                                    value="memory"
+                                    label={t('contextStudio.viewMemory', { defaultValue: '记忆全景' })}
+                                />
+                            </SegmentedControl>
                         </div>
                     }
                 />
@@ -754,6 +776,7 @@ export default function ContextStudioPage() {
                         key={reviewSessionKey}
                         cards={topicCards ?? dueCards}
                         allWords={words}
+                        sentences={sentences}
                         topicLabel={activeReviewTopic}
                         onSwitchToDueQueue={
                             activeReviewTopic
@@ -784,7 +807,7 @@ export default function ContextStudioPage() {
                     />
                 ) : studioView === 'memory' ? (
                     <Card padding={0} height="100%" className="h-full min-h-0 flex flex-col overflow-hidden">
-                        <div className="flex-1 min-h-0 overflow-y-auto p-5">
+                        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full p-5">
                             <MemoryMapSection
                                 defaultExpanded
                                 hideCollapseToggle
@@ -796,8 +819,9 @@ export default function ContextStudioPage() {
                     </Card>
                 ) : (
                 <Card padding={0} height="100%" className="h-full min-h-0 flex overflow-hidden">
-                    {/* 左栏：分类与记忆阶段筛选 */}
-                    <aside className="w-52 shrink-0 border-r border-border/40 bg-surface/40 p-3 flex flex-col gap-4 overflow-y-auto">
+                    {/* 左栏：唯一资产范围与标签筛选导航 */}
+                    <aside className="w-52 shrink-0 border-r border-border/40 bg-surface/40 p-3 flex flex-col justify-between gap-4 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full">
+                        <div className="flex flex-col gap-4">
                         <div className="flex flex-col gap-1">
                             <span className="px-2.5 pb-1 text-metadata font-medium text-secondary">
                                 {t('contextStudio.navCategory', { defaultValue: '资产分类' })}
@@ -853,7 +877,7 @@ export default function ContextStudioPage() {
                                         </span>
                                         <span className="text-metadata tabular-nums opacity-80">{counts.sentences}</span>
                                     </button>
-                                    {SAVED_SENTENCE_TAGS.map((tagKey) => (
+                                    {OPTIONAL_DISPLAY_TAGS.map((tagKey) => (
                                         <button
                                             key={tagKey}
                                             type="button"
@@ -870,6 +894,20 @@ export default function ContextStudioPage() {
                                             </span>
                                         </button>
                                     ))}
+                                    {sentenceTagCounts.general > 0 && (
+                                        <button
+                                            type="button"
+                                            className={navButtonClass(activeSentenceTag === 'general')}
+                                            onClick={() => handleSelectSentenceTag('general')}
+                                        >
+                                            <span className="truncate">
+                                                {t('contextStudio.tagUncategorized', { defaultValue: '未分类' })}
+                                            </span>
+                                            <span className="text-metadata tabular-nums opacity-80">
+                                                {sentenceTagCounts.general}
+                                            </span>
+                                        </button>
+                                    )}
                                 </div>
 
                                 {filteredSentenceCount > 0 && (
@@ -909,7 +947,9 @@ export default function ContextStudioPage() {
                                         <Clock className="w-3.5 h-3.5 shrink-0 text-warning-text" />
                                         <span>{t('contextStudio.filterDue', { defaultValue: '今日待复习' })}</span>
                                     </span>
-                                    <span className="text-metadata tabular-nums font-medium text-warning-text">{counts.due}</span>
+                                    <span className="text-metadata tabular-nums font-medium text-warning-text">
+                                        {dueTotalCount > counts.dueWordsCount ? `${counts.dueWordsCount}+` : counts.dueWordsCount}
+                                    </span>
                                 </button>
                                 <button
                                     type="button"
@@ -937,11 +977,38 @@ export default function ContextStudioPage() {
                                 </button>
                             </div>
                         )}
+                        </div>
+
+                        {activeFilter !== 'sentences' && (
+                            <div className="pt-2 border-t border-border/40 flex flex-col gap-1.5">
+                                <span className="px-2 text-metadata font-medium text-secondary">
+                                    {t('contextStudio.wordToolsHeading', { defaultValue: '词表工具 (.xlsx)' })}
+                                </span>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        icon={<Upload className="w-3.5 h-3.5" />}
+                                        label={t('contextStudio.importWords', { defaultValue: '导入' })}
+                                        className="justify-center"
+                                        onClick={() => void handleImportWords()}
+                                    />
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        icon={<Download className="w-3.5 h-3.5" />}
+                                        label={t('contextStudio.exportTemplate', { defaultValue: '导出' })}
+                                        className="justify-center"
+                                        onClick={() => void handleExportTemplate()}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </aside>
 
-                    {/* 中栏：资产卡片流 */}
+                    {/* 中栏：搜索 + 按篇来源筛选 + 资产卡片流 */}
                     <section className="w-80 shrink-0 border-r border-border/40 flex flex-col min-h-0 bg-body/40">
-                        <div className="p-3 border-b border-border/40 flex flex-col gap-2.5 shrink-0">
+                        <div className="p-3 border-b border-border/40 flex flex-col gap-2 shrink-0">
                             <div className="relative flex items-center">
                                 <Search className="w-3.5 h-3.5 text-secondary absolute left-2.5 pointer-events-none" />
                                 <input
@@ -949,33 +1016,44 @@ export default function ContextStudioPage() {
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder={t('contextStudio.searchPlaceholder', {
-                                        defaultValue: '搜索词汇、金句或视频...',
+                                        defaultValue: '搜索词汇、金句或来源...',
                                     })}
                                     className="w-full rounded-lg border border-border/50 bg-surface pl-8 pr-3 py-1.5 text-sm text-primary placeholder:text-secondary/70 focus:outline-none focus:ring-2 focus:ring-accent/40"
                                 />
                             </div>
-                            <div className="shrink-0">
-                                <SegmentedControl
-                                    size="sm"
-                                    layout="fill"
-                                    value={segmentValue}
-                                    onChange={handleSegmentChange}
-                                    label={t('contextStudio.assetTypeSegment', { defaultValue: '资产类型切换' })}
+                            {activeFilter === 'sentences' && sentenceSources.length > 1 && (
+                                <select
+                                    aria-label={t('contextStudio.filterSourceLabel', { defaultValue: '按内容来源筛选' })}
+                                    value={effectiveSourceId}
+                                    onChange={(e) => {
+                                        stopSentencePlaylist();
+                                        setExplicitSelection(null);
+                                        setSelectedSourceId(e.target.value);
+                                    }}
+                                    className="w-full rounded-lg border border-border/50 bg-surface px-2.5 py-1 text-metadata text-primary focus:outline-none focus:ring-2 focus:ring-accent/40"
                                 >
-                                    <SegmentedControlItem
-                                        value="all"
-                                        label={t('contextStudio.segmentAll', { defaultValue: '全部' })}
-                                    />
-                                    <SegmentedControlItem
-                                        value="words"
-                                        label={t('contextStudio.segmentWords', { defaultValue: '生词' })}
-                                    />
-                                    <SegmentedControlItem
-                                        value="sentences"
-                                        label={t('contextStudio.segmentSentences', { defaultValue: '金句' })}
-                                    />
-                                </SegmentedControl>
-                            </div>
+                                    <option value="all">
+                                        {t('contextStudio.allSourcesOption', {
+                                            count: sentenceSources.length,
+                                            defaultValue: `全部来源 (${sentenceSources.length})`,
+                                        })}
+                                    </option>
+                                    {sentenceSources.map((src) => (
+                                        <option key={src.videoId} value={src.videoId}>
+                                            {src.title}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {activeFilter === 'due' && dueTotalCount > counts.dueWordsCount && (
+                                <div className="rounded-md bg-warning/10 px-2.5 py-1.5 text-metadata text-secondary">
+                                    {t('contextStudio.dueCapNotice', {
+                                        shown: counts.dueWordsCount,
+                                        total: dueTotalCount,
+                                        defaultValue: `当前列表展示前 ${counts.dueWordsCount} 词，共 ${dueTotalCount} 词可前往「今日训练」`,
+                                    })}
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex-1 min-h-0 flex flex-col">
@@ -989,14 +1067,14 @@ export default function ContextStudioPage() {
                                 </div>
                             ) : filteredItems.length > VIRTUALIZE_ASSET_THRESHOLD ? (
                                 <Virtuoso
-                                    className="flex-1 min-h-0"
+                                    className="flex-1 min-h-0 scrollbar-thin scrollbar-thumb-rounded-full"
                                     data={filteredItems}
                                     itemContent={(_, entry) => (
                                         <div className="px-2 pb-1.5 first:pt-2">{renderAssetCard(entry)}</div>
                                     )}
                                 />
                             ) : (
-                                <div className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col gap-1.5">
+                                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full p-2 flex flex-col gap-1.5">
                                     {filteredItems.map(renderAssetCard)}
                                 </div>
                             )}
@@ -1020,7 +1098,8 @@ export default function ContextStudioPage() {
                                         prev.map((w) => (w.word === wordText ? { ...w, status: nextStatus } : w)),
                                     );
                                 }}
-                                onReviewRated={(wordText) => handleReviewWordCompleted(wordText)}
+                                onReviewRated={(wordText, nextStatus) => handleReviewWordCompleted(wordText, nextStatus)}
+                                onPlayStarted={stopSentencePlaylist}
                             />
                         ) : selection?.kind === 'sentence' ? (
                             <SentenceDetailCanvas
@@ -1036,6 +1115,7 @@ export default function ContextStudioPage() {
                                     setSentences((prev) => prev.filter((s) => s.sentenceKey !== removedKey));
                                     setExplicitSelection(null);
                                 }}
+                                onPlayStarted={stopSentencePlaylist}
                             />
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center p-8 text-center gap-3">
