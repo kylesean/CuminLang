@@ -7,7 +7,7 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { Text } from '@astryxdesign/core/Text';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { Badge } from '@astryxdesign/core/Badge';
-import { BookOpenText, ExternalLink, Pencil, Sparkles, Trash2, Volume2 } from 'lucide-react';
+import { BookOpenText, ExternalLink, Languages, Pencil, Trash2, Volume2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { WordItem } from '@/frontend/features/video-learning/components/WordSidebar';
 import type { WordContextOccurrence } from '@/common/types/contextStudio';
@@ -278,7 +278,7 @@ export default function WordDetailCanvas({
                             className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer disabled:opacity-50"
                             aria-label={t('contextStudio.aiDefine', { defaultValue: 'AI 补全释义' })}
                         >
-                            <Sparkles className="w-4 h-4" />
+                            <Languages className="w-4 h-4" />
                         </button>
                     </Tooltip>
                     <Tooltip content={t('contextStudio.deleteWord', { defaultValue: '移除词条' })} placement="below">

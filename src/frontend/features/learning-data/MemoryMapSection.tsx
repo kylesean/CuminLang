@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useTranslation } from 'react-i18next';
-import { Brain, ChevronDown, ChevronRight, Film, Flame, Layers, Play, Sparkles } from 'lucide-react';
+import { BookOpen, Brain, ChevronDown, ChevronRight, Film, Flame, Layers, Play } from 'lucide-react';
 import { Badge } from '@astryxdesign/core/Badge';
 import { Button } from '@astryxdesign/core/Button';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
@@ -284,7 +284,7 @@ function TopicCover({
                 isVideoTopic ? 'bg-accent-bg/10 text-accent' : 'bg-muted text-secondary',
             )}
         >
-            {isVideoTopic ? <Film className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {isVideoTopic ? <Film className="w-3.5 h-3.5" /> : <BookOpen className="w-3.5 h-3.5" />}
         </span>
     );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, BookMarked } from 'lucide-react';
+import { BookMarked, Languages } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
@@ -128,7 +128,7 @@ function WordEditForm({ wordItem, onOpenChange, onSaved }: WordEditFormProps) {
             label={generating ? t('generating') : t('aiGenerateDefinition')}
             variant="ghost"
             size="sm"
-            icon={<Sparkles className="w-3.5 h-3.5" />}
+            icon={<Languages className="w-3.5 h-3.5" />}
             isLoading={generating}
             isDisabled={saving}
             onClick={handleGenerate}

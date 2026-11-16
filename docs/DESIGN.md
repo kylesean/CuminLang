@@ -100,9 +100,21 @@ Astryx 的 `--color-<status>` 是**填充色**，文字色在 `--color-text-<sta
 | 5 项以上互斥 | Astryx `Select` | 横向塞满的分段控件 |
 | 数值输入 | Astryx `NumberInput` | `<input type="number">` |
 | 弹层 | Astryx `usePopover` | 自己写 absolute 定位 |
-| 图标 | `lucide-react` | 内联 SVG、emoji |
+| 图标 | `lucide-react` | 内联 SVG、emoji、**`Sparkles` / `Wand` / `Wand2`（严禁）** |
 
 图标尺寸只用两档：`h-3.5 w-3.5`（行内）、`h-4 w-4`（独立按钮）。
+
+#### 5.0 禁止使用泛化“AI 魔法星光/仙女棒”图标
+
+任何新功能（哪怕涉及本地识别、词义生成、语境解读、对话、向量嵌入或智能推荐）**严禁**偷懒使用 `Sparkles`、`Wand`、`Wand2` 这类陈词滥调的“AI 闪烁星星”符号（已通过 ESLint `no-restricted-imports` 强制拦截）。必须按**真实领域动作与物理意象**选图标：
+
+| 业务语义 | 推荐 `lucide-react` 图标 |
+| --- | --- |
+| 语音识别 / 本地重识 / 音频字幕对齐 | `AudioLines`、`Captions`、`Mic` |
+| 词义补全 / 译注 / 表达生成 | `Languages`、`BookOpen`、`BookOpenText` |
+| 本地推理模型 / 嵌入向量能力 | `Cpu`、`Layers`、`Database` |
+| 学习复盘 / 难度评估 / 检测完成 | `ListChecks`、`Gauge`、`CheckCircle2` |
+| 语境对话 / 言外之意引导 | `MessageSquareQuote`、`Lightbulb` |
 
 ### 5.1 分段控件必须 `shrink-0`
 
@@ -198,6 +210,7 @@ const { t } = useTranslation('common');   // wordMemory.*
 - [ ] 折叠入口排在它折叠的内容之后，且文案说明了内容
 - [ ] 工具栏只放视图控制；临时动作贴内容，不为了整齐而制造二级菜单
 - [ ] 「只在某状态下出现」的按钮，它的处理函数没有在该状态下提前 return
+- [ ] 全文件未导入或渲染 `Sparkles`、`Wand`、`Wand2` 等“AI 魔法星光”陈词图标，全部使用贴合业务动作的 `lucide-react` 图标
 
 ## 8.1 别做"无效开关"
 

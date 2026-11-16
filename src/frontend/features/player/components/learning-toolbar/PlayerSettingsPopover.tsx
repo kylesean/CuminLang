@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/refs -- Astryx usePopover 把 triggerRef/triggerProps/render 作为渲染期 API 返回，会被 refs 规则误判 */
 import { useCallback, useMemo, useState } from 'react';
-import { ChevronRight, Eraser, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { AudioLines, ChevronRight, Eraser, Settings2, SlidersHorizontal } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -344,7 +344,7 @@ export default function PlayerSettingsPopover({
                                             size="sm"
                                             variant="secondary"
                                             width={trackOptions.length > 1 ? undefined : '100%'}
-                                            icon={trackActions.isGenerating ? undefined : <Sparkles className="h-3.5 w-3.5" />}
+                                            icon={trackActions.isGenerating ? undefined : <AudioLines className="h-3.5 w-3.5" />}
                                             isDisabled={
                                                 trackActions.cancelling
                                                 || (trackActions.isGenerating && trackActions.taskId === undefined)

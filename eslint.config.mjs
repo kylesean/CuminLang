@@ -95,6 +95,11 @@ export default tseslint.config(
                             name: '@/frontend/infrastructure/electron/backendClient',
                             message: '业务调用请收口到当前 feature 的 *Api.ts 文件。',
                         },
+                        {
+                            name: 'lucide-react',
+                            importNames: ['Sparkles', 'Wand', 'Wand2'],
+                            message: '禁止使用泛化“AI 魔法星光/仙女棒”陈词图标，请按真实业务动作选用图标（见 docs/DESIGN.md §5.0）。',
+                        },
                     ],
                     patterns: [
                         {
@@ -114,6 +119,13 @@ export default tseslint.config(
             'no-restricted-imports': [
                 'error',
                 {
+                    paths: [
+                        {
+                            name: 'lucide-react',
+                            importNames: ['Sparkles', 'Wand', 'Wand2'],
+                            message: '禁止使用泛化“AI 魔法星光/仙女棒”陈词图标，请按真实业务动作选用图标（见 docs/DESIGN.md §5.0）。',
+                        },
+                    ],
                     patterns: [
                         {
                             group: ['qa/**', '../qa/**', '../../qa/**', '../../../qa/**'],
@@ -131,6 +143,13 @@ export default tseslint.config(
             'no-restricted-imports': [
                 'error',
                 {
+                    paths: [
+                        {
+                            name: 'lucide-react',
+                            importNames: ['Sparkles', 'Wand', 'Wand2'],
+                            message: '禁止使用泛化“AI 魔法星光/仙女棒”陈词图标，请按真实业务动作选用图标（见 docs/DESIGN.md §5.0）。',
+                        },
+                    ],
                     patterns: [
                         {
                             group: [

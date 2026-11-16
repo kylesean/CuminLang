@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { twJoin } from 'tailwind-merge';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
-import { ArrowUpToLine, Play, Sparkles, X } from 'lucide-react';
+import { ArrowUpToLine, AudioLines, Play, X } from 'lucide-react';
 import SideSentence from '../SideSentence';
 import ArticleBlock from './ArticleBlock';
 import { TranscriptToolbar } from './TranscriptToolbar';
@@ -915,7 +915,7 @@ export default function Subtitle() {
                                 onClick={() => { void trackActions.switchTrack(trackActions.localAsrTrack!.path); }}
                                 className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-medium text-accent hover:bg-accent-muted/20 transition-colors cursor-pointer disabled:opacity-50"
                             >
-                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                <AudioLines className="h-3.5 w-3.5 shrink-0" />
                                 <span>{t('subtitleOrigin.switchToLocal')}</span>
                             </button>
                         ) : (
@@ -924,7 +924,7 @@ export default function Subtitle() {
                                 onClick={() => { void trackActions.regenerateLocalSubtitle(); }}
                                 className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-medium text-accent hover:bg-accent-muted/20 transition-colors cursor-pointer"
                             >
-                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                <AudioLines className="h-3.5 w-3.5 shrink-0" />
                                 <span>{t('subtitleOrigin.regenerate')}</span>
                             </button>
                         )}

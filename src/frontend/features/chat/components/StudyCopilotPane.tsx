@@ -27,11 +27,11 @@ import {
     Bot,
     Copy,
     Lightbulb,
+    MessageSquareQuote,
     MessagesSquare,
     Play,
     Search,
     SlidersHorizontal,
-    Sparkles,
     Trash2,
     X,
 } from 'lucide-react';
@@ -114,7 +114,7 @@ export default function StudyCopilotPane({
     const starters = useMemo(() => [
         {
             id: 'subtext',
-            icon: Sparkles,
+            icon: MessageSquareQuote,
             title: t('learning.starterSubtextTitle'),
             hint: t('learning.starterSubtextHint'),
             prompt: '结合前后语境，一句话点破说话人此时真正的态度、情绪温度和言外之意。',

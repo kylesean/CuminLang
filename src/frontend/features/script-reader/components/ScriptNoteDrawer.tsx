@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@astryxdesign/core/Button';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
-import { ExternalLink, Mic, Save, Sparkles } from 'lucide-react';
+import { ExternalLink, Gauge, Mic, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -89,7 +89,7 @@ export function ScriptNoteDrawer({
                 <div className="flex flex-wrap items-center gap-2 min-w-0">
                     {comprehension && difficultyLabel && (
                         <span className="inline-flex items-center gap-1 rounded-md bg-muted/70 px-2 py-0.5 text-metadata text-secondary">
-                            <Sparkles className="h-3.5 w-3.5 shrink-0 text-accent" />
+                            <Gauge className="h-3.5 w-3.5 shrink-0 text-accent" />
                             <span>{difficultyLabel}</span>
                             {comprehension.unknownWords.length > 0 && (
                                 <span className="text-primary font-medium">

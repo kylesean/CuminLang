@@ -12,7 +12,6 @@ import {
     CheckCircle2,
     ExternalLink,
     Eye,
-    Sparkles,
     Volume2,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -292,7 +291,7 @@ export function ReviewSessionCanvas({
             <Card padding={6} height="100%" className="h-full min-h-0 flex flex-col items-center justify-center">
                 <div className="max-w-md w-full flex flex-col items-center text-center gap-5">
                     <div className="w-12 h-12 rounded-xl bg-accent-bg/15 text-accent flex items-center justify-center">
-                        <Sparkles className="w-6 h-6" />
+                        <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <div className="flex flex-col gap-1.5">
                         <h2 className="text-xl font-semibold text-primary">

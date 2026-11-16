@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-hot-toast';
-import { Download, Globe, Image, RefreshCw, Sparkles, Square, Trash2 } from 'lucide-react';
+import { Cpu, Download, Globe, Image, RefreshCw, Square, Trash2 } from 'lucide-react';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Button } from '@astryxdesign/core/Button';
 import { Card } from '@astryxdesign/core/Card';
@@ -155,7 +155,7 @@ export default function EmbeddingModelCard({
             <VStack gap={2} width="100%">
                 <HStack justify="between" vAlign="center" wrap="wrap" gap={3}>
                     <HStack gap={2} vAlign="center">
-                        <Sparkles className="h-4 w-4 text-secondary" />
+                        <Cpu className="h-4 w-4 text-secondary" />
                         <Text weight="medium" size="sm">{status?.name ?? 'EmbeddingGemma 2'}</Text>
                         {status?.ready && (
                             <Token label={t('resources.embedding.ready')} size="sm" color="green" />

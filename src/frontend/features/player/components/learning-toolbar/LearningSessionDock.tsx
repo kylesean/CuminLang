@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/refs -- Astryx usePopover 把 triggerRef/triggerProps/render 作为渲染期 API 返回，会被 refs 规则误判 */
-import { Activity, ChevronRight, Loader2, RotateCcw, Sparkles } from 'lucide-react';
+import { Activity, BookOpen, ChevronRight, ListChecks, Loader2, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { usePopover } from '@astryxdesign/core/Popover';
@@ -220,7 +220,7 @@ export default function LearningSessionDock({
                             </div>
                         ) : (
                             <div className="flex flex-col items-center gap-1.5 rounded-lg border border-border/60 bg-muted/20 px-4 py-6 text-center">
-                                <Sparkles className="h-5 w-5 text-secondary" />
+                                <BookOpen className="h-5 w-5 text-secondary" />
                                 <p className="text-sm font-medium text-primary">
                                     {t('learningSummary.emptyTitle')}
                                 </p>
@@ -238,7 +238,7 @@ export default function LearningSessionDock({
                                 onClick={() => setRecapOpen(true)}
                                 className="group flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left text-sm font-medium text-secondary transition-colors hover:text-primary"
                             >
-                                <Sparkles className="h-3.5 w-3.5 shrink-0 text-warning-text/80" />
+                                <ListChecks className="h-3.5 w-3.5 shrink-0 text-warning-text/80" />
                                 <span>{tRecap('cta')}</span>
                                 <ChevronRight className="ml-auto h-3 w-3 shrink-0 text-secondary/50 transition-transform group-hover:translate-x-0.5" />
                             </button>

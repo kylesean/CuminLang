@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
-import { Loader2, Mic, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
+import { CheckCircle2, ListChecks, Loader2, Mic, RefreshCw, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { toast } from 'react-hot-toast';
@@ -57,7 +57,7 @@ export default function LearningRecapDialog({
                     <DialogHeader
                         title={t('title')}
                         subtitle={t('subtitle')}
-                        startContent={<Sparkles className="h-4 w-4 text-accent" />}
+                        startContent={<ListChecks className="h-4 w-4 text-accent" />}
                         onOpenChange={() => onOpenChange(false)}
                     />
                     <LearningRecapContent
@@ -344,7 +344,7 @@ function RecapBody({
     if (recap.words.length === 0) {
         return (
             <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border/60 bg-muted/20 px-4 py-8 text-center">
-                <Sparkles className="h-5 w-5 text-secondary" />
+                <ListChecks className="h-5 w-5 text-secondary" />
                 <p className="text-sm font-medium text-primary">{t('emptyTitle')}</p>
                 <p className="text-metadata leading-relaxed text-secondary">{t('emptyHint')}</p>
             </div>
@@ -522,7 +522,7 @@ function RecapBody({
                             {retellLoading ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
-                                <Sparkles className="h-3.5 w-3.5" />
+                                <CheckCircle2 className="h-3.5 w-3.5" />
                             )}
                             {retellLoading ? t('checking') : t('checkRetell')}
                         </button>

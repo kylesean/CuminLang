@@ -11,7 +11,7 @@ import {
     Eraser,
     HardDrive,
     Languages,
-    Sparkles,
+    Layers,
 } from 'lucide-react';
 
 import { Banner } from '@astryxdesign/core/Banner';
@@ -513,7 +513,7 @@ const ServiceResourceSetting: React.FC = () => {
                         <SettingSection
                             title={t('resources.embedding.title')}
                             description={t('resources.embedding.sectionDesc')}
-                            icon={Sparkles as unknown as IconType}
+                            icon={Layers as unknown as IconType}
                         >
                             <EmbeddingModelCard
                                 status={embeddingStatus ?? null}

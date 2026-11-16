@@ -11,11 +11,11 @@ import { Badge } from '@astryxdesign/core/Badge';
 import {
     Bookmark,
     BookOpen,
+    BookOpenText,
     Clock,
     Download,
     Layers,
     Search,
-    Sparkles,
     Square,
     Upload,
     Volume2,
@@ -1039,7 +1039,7 @@ export default function ContextStudioPage() {
                             />
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center p-8 text-center gap-3">
-                                <Sparkles className="w-8 h-8 text-secondary/60" />
+                                <BookOpenText className="w-8 h-8 text-secondary/60" />
                                 <Text type="body" weight="medium">
                                     {t('contextStudio.emptyCanvasTitle', { defaultValue: '欢迎来到语境工坊' })}
                                 </Text>
