@@ -4,6 +4,7 @@ import type { Sentence } from '@/common/types/SentenceC';
 import {
     findSentenceBlock,
     groupSentencesIntoBlocks,
+    groupSentencesIntoParagraphs,
     selectVisibleSentences,
 } from '@/frontend/features/player/lib/sentence-grouping';
 
@@ -123,5 +124,26 @@ describe('字幕意群归并', () => {
         ]);
         const target = blocks[0].sentences[1];
         expect(findSentenceBlock(blocks, target)?.repr.index).toBe(0);
+    });
+
+    it('讲稿自然段归并：将连续完整句合并成多句段落，仅在长停顿、场景切分点或篇幅上限处另起一段', () => {
+        const list = [
+            line(0, 'First complete sentence.', 0, 2.0),
+            line(1, 'Second complete sentence.', 2.2, 4.5),
+            line(2, 'Third complete sentence.', 4.7, 7.0),
+            // 超过 2.0s 停顿 -> 自然分段
+            line(3, 'After a pause, new thought.', 9.5, 12.0),
+            // 场景切换点 -> 强制分段
+            line(4, 'Scene transition sentence.', 12.2, 14.5),
+        ];
+
+        const paragraphs = groupSentencesIntoParagraphs(list, {
+            sceneDividerIndices: new Set([4]),
+        });
+
+        expect(paragraphs).toHaveLength(3);
+        expect(paragraphs[0].sentences.map((s) => s.index)).toEqual([0, 1, 2]);
+        expect(paragraphs[1].sentences.map((s) => s.index)).toEqual([3]);
+        expect(paragraphs[2].sentences.map((s) => s.index)).toEqual([4]);
     });
 });

@@ -10,7 +10,7 @@ import SideSentence from '../SideSentence';
 import ArticleBlock from './ArticleBlock';
 import { TranscriptToolbar } from './TranscriptToolbar';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
-import { groupSentencesIntoBlocks, type SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
+import { groupSentencesIntoParagraphs, type SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
 import { selectSceneDividers, type SceneBoundary } from '@/common/learning/sceneSegmentation';
 import { useSceneBoundaries } from '@/frontend/features/player/hooks/useSceneBoundaries';
 import { useSubtitleTrackActions } from '@/frontend/features/player/hooks/useSubtitleTrackActions';
@@ -265,7 +265,15 @@ export default function Subtitle() {
         searchActive ? state.translations : EMPTY_TRANSLATIONS,
     );
 
-    const blocks = useMemo(() => groupSentencesIntoBlocks(displaySentences), [displaySentences]);
+    const sceneDividerIndexSet = useMemo(
+        () => new Set(sceneDividersByIndex.keys()),
+        [sceneDividersByIndex],
+    );
+
+    const blocks = useMemo(
+        () => groupSentencesIntoParagraphs(displaySentences, { sceneDividerIndices: sceneDividerIndexSet }),
+        [displaySentences, sceneDividerIndexSet],
+    );
 
     const matchedSentenceIndices = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();

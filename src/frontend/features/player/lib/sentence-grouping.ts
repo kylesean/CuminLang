@@ -34,6 +34,24 @@ const MAX_GAP_SECONDS = 0.8;
  */
 const MAX_BLOCK_CHARS = 220;
 
+const PARAGRAPH_PAUSE_BREAK_SECONDS = 2.0;
+const DEFAULT_MAX_PARAGRAPH_SENTENCES = 4;
+const DEFAULT_SOFT_PARAGRAPH_CHARS = 280;
+const DEFAULT_HARD_PARAGRAPH_CHARS = 440;
+
+export interface ParagraphGroupingOptions {
+    /** 场景或话题切换处的句子 index 集合：命中时强制另起一段。 */
+    sceneDividerIndices?: ReadonlySet<number>;
+    /** 单段最多容纳句子数（默认 4 句）。 */
+    maxSentencesPerParagraph?: number;
+    /** 软字数阈值（超过后遇到句末标点即收束另起一段）。 */
+    softParagraphChars?: number;
+    /** 硬字数上限（达到后无论如何封段）。 */
+    hardParagraphChars?: number;
+    /** 长停顿分段阈值（秒，默认 2.0s）。 */
+    pauseBreakSeconds?: number;
+}
+
 /**
  * 判断行文本是否以句末标点收束。
  *
@@ -80,6 +98,56 @@ export const groupSentencesIntoBlocks = (sentences: Sentence[]): SentenceBlock[]
         }
     }
     return blocks;
+};
+
+/**
+ * 将完成规范化的完整句子按话题停顿与篇幅节奏合并成「讲稿」自然阅读段落（通常 2~4 句一段）。
+ *
+ * 与用于播放/复读切分的 {@link groupSentencesIntoBlocks} 不同，本函数不会因句末出现 `.!?`
+ * 就把单句拆成孤立卡片，而是结合场景切分点、说话长停顿与自然段字数预算组段。
+ */
+export const groupSentencesIntoParagraphs = (
+    sentences: readonly Sentence[],
+    options?: ParagraphGroupingOptions,
+): SentenceBlock[] => {
+    const sceneDividerIndices = options?.sceneDividerIndices;
+    const maxSentences = options?.maxSentencesPerParagraph ?? DEFAULT_MAX_PARAGRAPH_SENTENCES;
+    const softChars = options?.softParagraphChars ?? DEFAULT_SOFT_PARAGRAPH_CHARS;
+    const hardChars = options?.hardParagraphChars ?? DEFAULT_HARD_PARAGRAPH_CHARS;
+    const pauseBreak = options?.pauseBreakSeconds ?? PARAGRAPH_PAUSE_BREAK_SECONDS;
+
+    const paragraphs: SentenceBlock[] = [];
+    let current: SentenceBlock | null = null;
+
+    for (const sentence of sentences) {
+        const startsNewScene = sceneDividerIndices?.has(sentence.index) ?? false;
+        const canContinue = current !== null
+            && !startsNewScene
+            && sentence.start - current.end < pauseBreak
+            && current.sentences.length < maxSentences
+            && current.charCount + sentence.text.length <= hardChars
+            && !(
+                current.charCount >= softChars
+                && endsWithTerminalPunctuation(current.sentences[current.sentences.length - 1].text)
+            );
+
+        if (current !== null && canContinue) {
+            current.sentences.push(sentence);
+            current.end = Math.max(current.end, sentence.end);
+            current.charCount += sentence.text.length + 1;
+        } else {
+            current = {
+                sentences: [sentence],
+                start: sentence.start,
+                end: sentence.end,
+                charCount: sentence.text.length,
+                repr: sentence,
+            };
+            paragraphs.push(current);
+        }
+    }
+
+    return paragraphs;
 };
 
 /**

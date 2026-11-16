@@ -226,10 +226,12 @@ describe('ArticleBlock - Flowing article layout', () => {
         expect(container.textContent).toContain('Welcome to the flowing article mode.');
         expect(container.textContent).toContain('It presents comfortable book-like typography.');
 
-        // Current sentence has illuminated styling
+        // Current sentence uses crisp ink emphasis + accent underline instead of murky gray pill blocks
         const s1Element = container.querySelector('[data-sentence-index="1"]');
         expect(s1Element).not.toBeNull();
-        expect(s1Element?.className).toContain('bg-accent-bg/20');
+        expect(s1Element?.className).toContain('text-primary');
+        expect(s1Element?.className).toContain('decoration-accent/60');
+        expect(s1Element?.className).not.toContain('bg-accent-bg/20');
 
         // Clicking sentence triggers callback
         fireEvent.click(s1Element!);

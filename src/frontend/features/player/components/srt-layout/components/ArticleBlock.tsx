@@ -147,14 +147,14 @@ const ArticleSentenceZhSpan = ({
                 }
             }}
             className={cn(
-                'inline rounded px-1 py-0.5 mr-1 cursor-pointer transition-colors',
+                'inline transition-colors cursor-pointer',
                 isCurrent
-                    ? 'text-accent font-medium bg-accent-muted/15'
-                    : 'text-secondary/70 hover:text-secondary/95',
-                isActiveMatch && 'ring-1 ring-amber-500/80 bg-amber-500/15 text-primary',
+                    ? 'text-primary font-medium'
+                    : 'text-secondary/75 hover:text-primary',
+                isActiveMatch && 'rounded px-0.5 ring-1 ring-amber-500/80 bg-amber-500/15 text-primary',
             )}
         >
-            {highlightSlice(zhText, zhText, 0, searchQuery, isActiveMatch)}
+            {highlightSlice(zhText, zhText, 0, searchQuery, isActiveMatch)}{' '}
         </span>
     );
 };
@@ -214,25 +214,25 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
             : '';
 
         return (
-            <div
+            <article
                 ref={ref}
                 className={cn(
-                    'mx-2.5 my-2 px-3.5 py-3 rounded-lg transition-all duration-200 border',
-                    hasActiveCurrent
-                        ? 'bg-surface/75 border-border/60 shadow-xs'
-                        : 'bg-surface/30 hover:bg-surface/50 border-border/25',
+                    'mx-2 px-3 py-3 border-b border-border/20 transition-colors duration-150',
+                    hasActiveCurrent ? 'bg-surface/35 rounded-lg border-transparent' : '',
                 )}
             >
-                {/* 段落顶部轻量起始标记 */}
+                {/* 段落顶部轻量起始时间锚，遵循书卷式流淌而非堆叠卡片 */}
                 {timeStr && (
-                    <div className="flex items-center gap-1.5 mb-2 pointer-events-none select-none">
+                    <div className="flex items-center gap-1.5 mb-1.5 pointer-events-none select-none">
+                        {hasActiveCurrent && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-bg shrink-0" />
+                        )}
                         <span
                             className={cn(
-                                'inline-block w-1.5 h-1.5 rounded-full transition-colors',
-                                hasActiveCurrent ? 'bg-accent-bg' : 'bg-secondary/40',
+                                'text-metadata font-mono tracking-tight transition-colors',
+                                hasActiveCurrent ? 'text-accent font-medium' : 'text-secondary/50',
                             )}
-                        />
-                        <span className="text-metadata font-mono text-secondary/60 tracking-tight">
+                        >
                             {timeStr}
                         </span>
                     </div>
@@ -302,15 +302,15 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                                         }
                                     }}
                                     className={cn(
-                                        'inline rounded-md px-1 py-0.5 cursor-pointer transition-all duration-150',
+                                        'inline cursor-pointer transition-colors duration-150',
                                         isCurrent
-                                            ? 'bg-accent-bg/20 text-primary font-medium ring-1 ring-accent/35 shadow-xs'
-                                            : 'text-secondary hover:text-primary hover:bg-surface/80',
-                                        isActiveMatch && 'ring-1 ring-amber-500/80 bg-amber-500/15 text-primary shadow-xs',
+                                            ? 'text-primary font-medium underline decoration-accent/60 decoration-[1.5px] underline-offset-[5px]'
+                                            : 'text-secondary/85 hover:text-primary',
+                                        isActiveMatch && 'rounded px-0.5 ring-1 ring-amber-500/80 bg-amber-500/15 text-primary',
                                     )}
                                 >
                                     {renderSentenceWords(s, isCurrent, isActiveMatch)}
-                                </span>
+                                </span>{' '}
                                 {onToggleSingleRepeat && isCurrent && (
                                     <button
                                         type="button"
@@ -354,7 +354,7 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                     return (
                         <div
                             className={cn(
-                                'w-full text-left leading-relaxed select-text break-words mt-2.5 pt-2 border-t border-border/20 transition-colors',
+                                'w-full text-left leading-relaxed select-text break-words mt-2 transition-colors',
                                 fontSize === 'fontSizeSmall' && 'text-side-zh-small',
                                 (!fontSize || fontSize === 'fontSizeMedium') && 'text-side-zh-medium',
                                 fontSize === 'fontSizeLarge' && 'text-side-zh-large',
@@ -378,7 +378,7 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                         </div>
                     );
                 })()}
-            </div>
+            </article>
         );
     },
 );
