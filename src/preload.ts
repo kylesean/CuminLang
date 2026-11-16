@@ -7,6 +7,10 @@ import type {DpTask} from '@/common/contracts/dp-task';
 import type {RendererApiDefinitions, RendererApiMap} from '@/common/api/renderer-api-def';
 import { type RendererEventChannel } from '@/common/api/renderer-event-def';
 import type { SimpleEvent, TraceCarrier } from '@/common/log/simple-types';
+import type {
+    DesktopLyricsCommandType,
+    DesktopLyricsStatePayload,
+} from '@/common/contracts/desktop-lyrics';
 import type { WindowState } from '@/common/types/Types';
 
 /**
@@ -19,7 +23,9 @@ export type Channels =
     | 'error-msg'
     | 'info-msg'
     | 'dp-task-update'
-    | 'window-state-update';
+    | 'window-state-update'
+    | 'desktop-lyrics-sync'
+    | 'desktop-lyrics-command';
 const on = (channel: Channels, func: (...args: unknown[]) => void) => {
     const subscription = (_event: IpcRendererEvent, ...args: unknown[]) =>
         func(...args);
@@ -53,6 +59,12 @@ const electronHandler = {
     },
     onWindowStateUpdate: (func: (state: WindowState) => void) => {
         return on('window-state-update', func as never);
+    },
+    onDesktopLyricsSync: (func: (payload: DesktopLyricsStatePayload) => void) => {
+        return on('desktop-lyrics-sync', func as never);
+    },
+    onDesktopLyricsCommand: (func: (command: DesktopLyricsCommandType) => void) => {
+        return on('desktop-lyrics-command', func as never);
     },
     /**
      * 调用 main 进程 API，并为本次调用附加独立 trace ID。

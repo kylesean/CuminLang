@@ -58,6 +58,10 @@
         "rewindTitle": "继续播放时从当前句开头开始",
         "tooltipSingleRepeat": "训练模式：单句循环",
         "tooltipAutoPause": "训练模式：句末自动暂停",
+        "desktopLyrics": "桌面字幕",
+        "desktopLyricsOpen": "开启桌面整句字幕（可置顶悬浮/穿透）",
+        "desktopLyricsClose": "关闭桌面字幕",
+        "desktopLyricsUnlock": "桌面字幕已锁定穿透，点击恢复可交互",
         "tooltipLoopTimes": "训练模式：每句重复 ×{{times}} (第 {{done}}/{{total}} 遍)",
         "tooltipLoopRates": "训练模式：递进倍速精听 (当前 {{rate}}x，第 {{done}}/{{total}} 遍)",
         "tooltipTrainingActive": "训练模式（已启用辅助行为）",
@@ -412,5 +416,20 @@
         "blindHint": "悬停、点击或按住 \\ 查看本句",
         "blindHide": "收起本句",
         "sentenceCounter": "第 {{current}} 句，共 {{total}} 句"
+    },
+    "desktopLyrics": {
+        "dragHint": "按住拖动位置",
+        "toggleTranslation": "显示/隐藏中文译文",
+        "cycleStyle": "切换样式",
+        "cycleSize": "切换字号",
+        "cycleOpacity": "调节透明度",
+        "presetFrosted": "磨砂底板",
+        "presetOutline": "极简通透",
+        "presetAmber": "琥珀高亮",
+        "lockClickThrough": "锁定鼠标穿透（从托盘或主窗口可解锁）",
+        "focusMain": "回到主窗口",
+        "close": "关闭桌面字幕",
+        "waitingSentence": "当前位置暂无字幕句",
+        "noMedia": "在主窗口打开视频或音频后，这里将同步当前正在学习的整句"
     }
 }

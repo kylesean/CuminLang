@@ -30,6 +30,9 @@ import {
 } from '@/frontend/app/lib/startup-theme';
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
 import HomePage from '@/frontend/features/file-browser/HomePage';
+import { useDesktopLyricsBridge } from '@/frontend/features/desktop-lyrics/useDesktopLyricsBridge';
+
+const DesktopLyricsPage = lazy(() => import('@/frontend/features/desktop-lyrics/DesktopLyricsPage'));
 
 const YoutubeImportDialogHost = lazy(() => import('@/frontend/features/youtube-import/YoutubeImportDialogHost'));
 const PlayerPage = lazy(() => import('@/frontend/features/player/PlayerPage'));
@@ -110,12 +113,19 @@ export const App = () => {
     // 深色专用主题（如 Gothic）无视保存的浅色/跟随系统设置，强制 dark
     const isDarkOnlyTheme = themeSlug !== undefined && DARK_ONLY_THEME_SLUGS.has(themeSlug);
     const languageSetting = useSetting((s) => s.values.get('i18n.language'));
+    const isDesktopLyricsRoute = typeof window !== 'undefined'
+        && window.location.hash.startsWith('#/desktop-lyrics');
     /** 当前生效的启动门槛；null 表示两个门槛都还没读出结果。 */
     const [gate, setGate] = React.useState<StartupGate<MigrationFailureDetail> | null>(null);
+
+    useDesktopLyricsBridge(!isDesktopLyricsRoute);
 
     // 两个门槛并行读取、统一裁决，避免各自为政时互相覆盖；
     // 单次读取失败按「该门槛不拦截」处理，否则一次 IPC 异常就会把用户永久锁在启动页。
     useEffect(() => {
+        if (isDesktopLyricsRoute) {
+            return;
+        }
         let cancelled = false;
         (async () => {
             const [failure, completedVersion] = await Promise.all([
@@ -130,10 +140,13 @@ export const App = () => {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [isDesktopLyricsRoute]);
 
     // 同步外观主题到 html 根节点：支持 light、dark 及跟随系统（system）
     useEffect(() => {
+        if (isDesktopLyricsRoute) {
+            return;
+        }
         document.documentElement.dataset.testid = 'app-root';
         // 运行时设置尚在 IPC 水合中：保留 index.html 首屏镜像已套用的明暗，
         // 避免尚未拿到配置时先把 dark 覆写成 light 并在 localStorage 中污染镜像。
@@ -171,13 +184,16 @@ export const App = () => {
                 mediaQuery.removeEventListener('change', listener);
             };
         }
-    }, [theme, isDarkOnlyTheme, settingsInit]);
+    }, [theme, isDarkOnlyTheme, settingsInit, isDesktopLyricsRoute]);
 
     useEffect(() => {
         applyLanguageSetting(languageSetting).catch(() => undefined);
     }, [languageSetting]);
 
     useEffect(() => {
+        if (isDesktopLyricsRoute) {
+            return;
+        }
         const timer = window.setTimeout(() => {
             (async () => {
                 const result = await backendClient.call('system/check-update', { mode: 'toast' });
@@ -208,7 +224,7 @@ export const App = () => {
         }, UPDATE_CHECK_DELAY_MS);
 
         return () => window.clearTimeout(timer);
-    }, [t]);
+    }, [isDesktopLyricsRoute, t]);
 
     const effectiveThemeMode = resolveEffectiveThemeMode({
         settingsInit,
@@ -217,6 +233,16 @@ export const App = () => {
         isDarkOnlyTheme,
     });
     const activeTheme = themes[themeSlug] ?? themes['dp-neutral'];
+
+    if (isDesktopLyricsRoute) {
+        return (
+            <Theme theme={activeTheme} mode={effectiveThemeMode}>
+                <Suspense fallback={null}>
+                    <DesktopLyricsPage />
+                </Suspense>
+            </Theme>
+        );
+    }
 
     return (
         <Theme theme={activeTheme} mode={effectiveThemeMode}>

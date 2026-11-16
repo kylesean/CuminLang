@@ -11,6 +11,7 @@ const TYPES = {
     SrtTimeAdjustService: Symbol('SubtitleTimestampAdjustmentService'),
     MainWindowRegistry: Symbol('MainWindowRegistry'),
     WindowPort: Symbol('WindowPort'),
+    DesktopLyricsWindow: Symbol('DesktopLyricsWindow'),
     CacheService: Symbol('CacheService'),
     SettingService: Symbol('SettingService'),
     StorageDirectoryProvider: Symbol('StorageDirectoryProvider'),

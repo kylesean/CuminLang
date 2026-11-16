@@ -64,19 +64,23 @@ export function startRendererRuntime(): () => void {
     }
 
     const cleanups: Array<() => void> = [];
+    const isDesktopLyricsWindow = typeof window !== 'undefined'
+        && window.location.hash.startsWith('#/desktop-lyrics');
 
     try {
         // 先注册异常兜底，后续任一步骤失败都能留下日志证据。
         cleanups.push(startGlobalErrorLogging());
-        cleanups.push(initRendererApis());
         cleanups.push(initSettingsSync());
-        cleanups.push(initIpcMessageToasts());
-        cleanups.push(initMouseFocusCleanup());
-        startListeningToDpTasks();
-        syncStatus();
-        // 开发态判定与播放器调试面：启动时各查一次，后续所有 dev/qa 能力读缓存
-        void resolveDevMode();
-        void initPlayerDebug();
+        if (!isDesktopLyricsWindow) {
+            cleanups.push(initRendererApis());
+            cleanups.push(initIpcMessageToasts());
+            cleanups.push(initMouseFocusCleanup());
+            startListeningToDpTasks();
+            syncStatus();
+            // 开发态判定与播放器调试面：启动时各查一次，后续所有 dev/qa 能力读缓存
+            void resolveDevMode();
+            void initPlayerDebug();
+        }
     } catch (error) {
         cleanups.reverse().forEach((cleanup) => cleanup());
         stopListeningToDpTasks();

@@ -1,4 +1,10 @@
 import type {DpTask} from '@/common/contracts/dp-task';
+import type {
+    DesktopLyricsCommandType,
+    DesktopLyricsSnapshot,
+    DesktopLyricsStatePayload,
+    DesktopLyricsWindowState,
+} from '@/common/contracts/desktop-lyrics';
 import type { YoutubeImportSettingDetailVO, YoutubeImportSettingSaveVO, YoutubeImportStartResult } from '@/common/contracts/youtube-import';
 import type { LocalAiSpeedTestResult, LocalAiStatus, LocalEmbeddingStatus } from '@/common/contracts/local-ai';
 import type { ResourceFallbackSnapshot } from '@/common/contracts/resource-fallback';
@@ -734,8 +740,18 @@ interface ContextStudioDef {
 }
 
 // 使用交叉类型合并 ApiDefinitions 和 ExtraApiDefinition
+interface DesktopLyricsDef {
+    'desktop-lyrics/state': { params: void; return: DesktopLyricsStatePayload };
+    'desktop-lyrics/toggle': { params: { open?: boolean }; return: DesktopLyricsWindowState };
+    'desktop-lyrics/set-locked': { params: { locked: boolean }; return: DesktopLyricsWindowState };
+    'desktop-lyrics/move-by': { params: { dx: number; dy: number }; return: void };
+    'desktop-lyrics/sync-state': { params: DesktopLyricsSnapshot; return: void };
+    'desktop-lyrics/command': { params: { type: DesktopLyricsCommandType }; return: void };
+}
+
 export type ApiDefinitions = ApiDefinition
     & AiFuncDef
+    & DesktopLyricsDef
     & DpTaskDef
     & SystemDef
     & AiTransDef
@@ -812,6 +828,12 @@ export const API_ROUTE_KEYS = [
     'context-studio/save-sentence',
     'context-studio/unsave-sentence',
     'context-studio/update-saved-sentence',
+    'desktop-lyrics/command',
+    'desktop-lyrics/move-by',
+    'desktop-lyrics/set-locked',
+    'desktop-lyrics/state',
+    'desktop-lyrics/sync-state',
+    'desktop-lyrics/toggle',
     'dictionary-enhancement/cancel',
     'dictionary-enhancement/install',
     'dictionary-enhancement/remove',

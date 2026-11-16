@@ -27,7 +27,8 @@ import { initLogMaintenance } from '@/backend/startup/initLogMaintenance';
 import { terminateAllActiveChildProcesses } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { RESET_DB_RESYNC_FLAG } from '@/common/constants/resetDb';
 import { isDevelopmentMode, getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
-import { destroyAppTray, initAppTray, isAppTrayActive } from '@/backend/startup/appTray';
+import { destroyAppTray, initAppTray, isAppTrayActive, refreshAppTrayMenu } from '@/backend/startup/appTray';
+import { DesktopLyricsWindowManager } from '@/backend/infrastructure/window/DesktopLyricsWindow';
 import {
     hideWindowToTray,
     shouldHideInsteadOfClose,
@@ -418,9 +419,20 @@ app.on('ready', async () => {
         mode: isDevelopmentMode() ? 'development' : 'production',
         proxyMode: storeGet('proxy.mode'),
     });
+    const lyricsWindow = container.get<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow);
+    const rendererDirectory = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
+    lyricsWindow.configure({
+        devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL,
+        htmlPath: path.join(rendererDirectory, 'index.html'),
+        rendererDirectory,
+        onStateChanged: (state) => refreshAppTrayMenu(state),
+        onFocusMain: showOrCreateMainWindow,
+    });
     initAppTray({
         onShowWindow: showOrCreateMainWindow,
         onQuitApp: () => app.quit(),
+        onToggleDesktopLyrics: () => lyricsWindow.toggle(),
+        onToggleDesktopLyricsLock: (locked) => lyricsWindow.setLocked(locked),
     });
     createWindow();
 });
@@ -465,6 +477,7 @@ app.on('before-quit', (event) => {
     logger.info('app before quit', { forceExitAfterMs: QUIT_FORCE_EXIT_TIMEOUT_MS });
     armForceExitWatchdog();
     try {
+        container.get<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow).destroy();
         destroyAppTray();
         disposeProxyFeature();
         terminateAllActiveChildProcesses();

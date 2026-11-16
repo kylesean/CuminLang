@@ -154,6 +154,7 @@ import type ProsodySignalService from '@/backend/services/ProsodySignalService';
 import { ProsodySignalServiceImpl } from '@/backend/services/ProsodySignalService';
 import type SpeakerDiarizationModelService from '@/backend/services/SpeakerDiarizationModelService';
 import { SpeakerDiarizationModelServiceImpl } from '@/backend/services/SpeakerDiarizationModelService';
+import { DesktopLyricsController } from '@/backend/controllers/DesktopLyricsController';
 import { SpeakerDiarizationModelController } from '@/backend/controllers/SpeakerDiarizationModelController';
 import type MemoryMapService from '@/backend/services/MemoryMapService';
 import { MemoryMapServiceImpl } from '@/backend/services/MemoryMapService';
@@ -165,6 +166,7 @@ import type RendererEvents from '@/backend/services/gateways/renderer/RendererEv
 import RendererEventsImpl from '@/backend/infrastructure/renderer/RendererEventsImpl';
 import type WindowPort from '@/backend/services/gateways/window/WindowPort';
 import WindowPortImpl from '@/backend/infrastructure/window/WindowPortImpl';
+import { DesktopLyricsWindowManager } from '@/backend/infrastructure/window/DesktopLyricsWindow';
 import type FfmpegGateway from '@/backend/services/gateways/media/FfmpegGateway';
 import FfmpegGatewayImpl from '@/backend/infrastructure/media/ffmpeg/FfmpegGatewayImpl';
 import type WordsRepository from '@/backend/services/repositories/WordsRepository';
@@ -286,6 +288,7 @@ container.bind<Controller>(TYPES.Controller).to(LearningDataController).inSingle
 container.bind<Controller>(TYPES.Controller).to(ContentCompassController).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(VideoLearningApiController).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(SentencePracticeController).inSingletonScope();
+container.bind<Controller>(TYPES.Controller).to(DesktopLyricsController).inSingletonScope();
 // 恢复路由控制器：不绑定到 TYPES.Controller（恢复模式下不解析业务控制器），单独绑定。
 container.bind<MigrationFailureController>(TYPES.MigrationFailureController).to(MigrationFailureController).inSingletonScope();
 // Services
@@ -293,6 +296,7 @@ container.bind<RendererGateway>(TYPES.RendererGateway).to(RendererGatewayImpl).i
 container.bind<RendererEvents>(TYPES.RendererEvents).to(RendererEventsImpl).inSingletonScope();
 container.bind<MainWindowRegistry>(TYPES.MainWindowRegistry).to(MainWindowRegistryImpl).inSingletonScope();
 container.bind<WindowPort>(TYPES.WindowPort).to(WindowPortImpl).inSingletonScope();
+container.bind<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow).to(DesktopLyricsWindowManager).inSingletonScope();
 container.bind<AiFuncService>(TYPES.AiFuncService).to(AiFuncServiceImpl).inSingletonScope();
 container.bind<LocalModelService>(TYPES.ParakeetModelService).to(ParakeetModelServiceImpl).inSingletonScope();
 container.bind<YtDlpGateway>(TYPES.YtDlpGateway).to(YtDlpProcessGatewayImpl).inSingletonScope();

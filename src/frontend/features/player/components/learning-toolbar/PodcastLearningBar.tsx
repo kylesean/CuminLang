@@ -10,6 +10,7 @@ import PracticeModeButton from '@/frontend/features/player/components/srt-layout
 import PlayerSettingsPopover from './PlayerSettingsPopover';
 import { CONTROL_POPOVER_OFFSET_STACKED_BAR } from '@/frontend/features/player/components/ControlPopover';
 import SubtitleTrackSegmented from './SubtitleTrackSegmented';
+import { DesktopLyricsButton } from '@/frontend/features/desktop-lyrics/DesktopLyricsButton';
 import {
     TOOLBAR_DIVIDER,
     TOOLBAR_ICON_BUTTON,
@@ -80,6 +81,7 @@ export default function PodcastLearningBar({ className }: { className?: string }
             <span className={cn(TOOLBAR_DIVIDER, style.divider)} />
 
             <PracticeModeButton variant="toolbar" />
+            <DesktopLyricsButton />
             <PlayerSettingsPopover tone="panel" popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR} />
         </div>
     );

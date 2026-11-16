@@ -58,6 +58,10 @@
         "rewindTitle": "Resume playback from the current sentence start",
         "tooltipSingleRepeat": "Training: loop current sentence",
         "tooltipAutoPause": "Training: auto-pause at sentence end",
+        "desktopLyrics": "Desktop Subtitles",
+        "desktopLyricsOpen": "Show floating desktop sentence bar (always-on-top)",
+        "desktopLyricsClose": "Hide desktop subtitles",
+        "desktopLyricsUnlock": "Desktop subtitles locked click-through — click to unlock",
         "tooltipLoopTimes": "Training: repeat ×{{times}} (round {{done}}/{{total}})",
         "tooltipLoopRates": "Training: progressive rates (now {{rate}}x, round {{done}}/{{total}})",
         "tooltipTrainingActive": "Training (assist behaviors enabled)",
@@ -412,5 +416,20 @@
         "blindHint": "Hover, click, or hold \\ to peek",
         "blindHide": "Hide text",
         "sentenceCounter": "Sentence {{current}} of {{total}}"
+    },
+    "desktopLyrics": {
+        "dragHint": "Drag to move",
+        "toggleTranslation": "Toggle translation",
+        "cycleStyle": "Switch style",
+        "cycleSize": "Switch text size",
+        "cycleOpacity": "Adjust opacity",
+        "presetFrosted": "Frosted card",
+        "presetOutline": "Minimal outline",
+        "presetAmber": "Amber accent",
+        "lockClickThrough": "Lock click-through (unlock from tray or player)",
+        "focusMain": "Back to main window",
+        "close": "Close desktop subtitles",
+        "waitingSentence": "No subtitle at current timestamp",
+        "noMedia": "Open a video or audio file in the main window to sync active sentences here"
     }
 }

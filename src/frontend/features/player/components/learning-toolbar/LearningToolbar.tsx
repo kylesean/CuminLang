@@ -14,6 +14,7 @@ import ReviewDock from './ReviewDock';
 import LearningSessionDock from './LearningSessionDock';
 import SubtitleTrackSegmented from './SubtitleTrackSegmented';
 import TrainingMenuButton from './TrainingMenuButton';
+import { DesktopLyricsButton } from '@/frontend/features/desktop-lyrics/DesktopLyricsButton';
 import {
     TOOLBAR_DIVIDER,
     TOOLBAR_ICON_BUTTON,
@@ -185,6 +186,7 @@ export default function LearningToolbar({
 
             <div className="flex-1" />
 
+            <DesktopLyricsButton />
             <PlayerSettingsPopover tone="panel" popoverOffset={POPOVER_OFFSET} />
 
             {onTogglePinned && (

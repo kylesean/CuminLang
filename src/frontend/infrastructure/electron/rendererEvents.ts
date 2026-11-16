@@ -1,4 +1,8 @@
 import type { DpTask } from '@/common/contracts/dp-task';
+import type {
+    DesktopLyricsCommandType,
+    DesktopLyricsStatePayload,
+} from '@/common/contracts/desktop-lyrics';
 import type { RuntimeSettingKey } from '@/common/contracts/runtime-settings';
 import type { WindowState } from '@/common/types/Types';
 
@@ -55,5 +59,19 @@ export const rendererEvents = {
      */
     onInfoMessage(handler: (info: string) => void): () => void {
         return window.electron.onInfoMsg(handler);
+    },
+
+    /**
+     * 订阅桌面句卡状态与当前句内容同步。
+     */
+    onDesktopLyricsSync(handler: (payload: DesktopLyricsStatePayload) => void): () => void {
+        return window.electron?.onDesktopLyricsSync?.(handler) ?? (() => undefined);
+    },
+
+    /**
+     * 订阅来自桌面句卡浮窗的播放控制指令。
+     */
+    onDesktopLyricsCommand(handler: (command: DesktopLyricsCommandType) => void): () => void {
+        return window.electron?.onDesktopLyricsCommand?.(handler) ?? (() => undefined);
     },
 };

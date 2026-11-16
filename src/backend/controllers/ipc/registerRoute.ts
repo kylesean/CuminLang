@@ -27,6 +27,8 @@ export const QUIET_PATH_POLICIES: Partial<Record<string, { logParam: boolean; lo
     // 高频轮询状态路径降为 debug，避免刷屏同步落盘阻塞主线程
     'video-learning/clip-queue-status': { logParam: false, logResult: false },
     'video-learning/detect-clip-status': { logParam: false, logResult: false },
+    // 桌面浮窗随播放高频同步当前句，降为 debug 且跳过大段句文落盘
+    'desktop-lyrics/sync-state': { logParam: false, logResult: false },
     'dp-task/detail': { logParam: true, logResult: false },
     // 返回值里带手机访问令牌（lanUrls 的 ?t= 与裸 token），落日志等于把长期凭据写进磁盘
     'settings/mobile-access/detail': { logParam: true, logResult: false },

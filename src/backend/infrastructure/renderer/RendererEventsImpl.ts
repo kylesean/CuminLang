@@ -3,6 +3,7 @@ import TYPES from '@/backend/ioc/types';
 import type RendererEvents from '@/backend/services/gateways/renderer/RendererEvents';
 import type { RuntimeSettingKey } from '@/common/contracts/runtime-settings';
 import { type DpTask, DpTaskState } from '@/common/contracts/dp-task';
+import type { DesktopLyricsCommandType } from '@/common/contracts/desktop-lyrics';
 import type { WindowState } from '@/common/types/Types';
 import { createWindowedDeduper } from '@/common/log/windowed-dedup';
 import type MainWindowRegistry from '@/backend/infrastructure/system/MainWindowRegistry';
@@ -161,5 +162,17 @@ export default class RendererEventsImpl implements RendererEvents {
         }
         logger.info('renderer info toast sent', { message });
         win.webContents.send('info-msg', message);
+    }
+
+    /**
+     * 向主窗口播放器转发桌面句卡发起的控制指令。
+     */
+    public desktopLyricsCommand(command: DesktopLyricsCommandType): void {
+        const win = this.resolveWindow('desktop-lyrics-command');
+        if (!win) {
+            return;
+        }
+        logger.debug('desktop lyrics command forwarded', { command });
+        win.webContents.send('desktop-lyrics-command', command);
     }
 }
