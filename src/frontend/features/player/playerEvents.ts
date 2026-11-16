@@ -6,6 +6,7 @@ import useDictionaryStream from '@/frontend/features/player/dictionaryStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import useTranslation from '@/frontend/features/player/translationStore';
+import { useSavedSentences } from '@/frontend/features/context-studio/savedSentencesStore';
 
 const logger = getRendererLogger('PlayerEvents');
 
@@ -46,6 +47,7 @@ export function registerPlayerRendererApis(register: RegisterRendererApi): void 
                 session.updateFile(resolution.subtitlePath || subtitlePath);
             }
             session.reloadSubtitles();
+            void useSavedSentences.getState().loadForVideo(videoId).catch(() => undefined);
             toast.success(i18n.t('player:subtitleOrigin.autoRefinedDone'));
         } catch (error) {
             logger.warn('Failed to apply refined subtitle track', {

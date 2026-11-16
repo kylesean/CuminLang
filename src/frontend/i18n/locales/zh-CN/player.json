@@ -230,7 +230,14 @@
         "sentenceSaved": "已收藏至语境工坊",
         "sentenceUnsaved": "已取消金句收藏",
         "sentenceSaveFailed": "收藏操作失败",
-        "replaySentence": "从头重播此句"
+        "replaySentence": "从头重播此句",
+        "editSentence": "编辑字幕文本",
+        "saveEdit": "保存",
+        "cancelEdit": "取消",
+        "splitSentence": "光标处拆句",
+        "mergeNextSentence": "并入下句",
+        "editSaveFailed": "保存字幕修改失败：{{message}}",
+        "editUndone": "已撤销上一步字幕修改"
     },
     "sourceLine": {
         "aiTranslation": "AI 翻译",

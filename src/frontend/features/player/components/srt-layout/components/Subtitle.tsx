@@ -14,6 +14,7 @@ import { groupSentencesIntoBlocks, type SentenceBlock } from '@/frontend/feature
 import { selectSceneDividers, type SceneBoundary } from '@/common/learning/sceneSegmentation';
 import { useSceneBoundaries } from '@/frontend/features/player/hooks/useSceneBoundaries';
 import { useSubtitleTrackActions } from '@/frontend/features/player/hooks/useSubtitleTrackActions';
+import { sentenceEditKey, useTranscriptEditing } from '@/frontend/features/player/hooks/useTranscriptEditing';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
 import useLayout from '@/frontend/app/stores/layoutStore';
@@ -62,6 +63,7 @@ export default function Subtitle() {
     const showSideTranslation = usePlayerUi((state) => state.showSideTranslation);
     const changeShowSideTranslation = usePlayerUi((state) => state.changeShowSideTranslation);
     const { t } = useI18nTranslation('player');
+    const transcriptEditing = useTranscriptEditing();
     const { currentSentence, subtitle, singleRepeat, hoverRepeat, virtualGroup, srtTender } = usePlayer(
         useShallow((s) => ({
             currentSentence: s.currentSentence,
@@ -477,6 +479,16 @@ export default function Subtitle() {
                 }
                 e.preventDefault();
                 setIsSearchOpen(true);
+            } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+                if (!showTranscript || transcriptEditing.editingSentenceKey !== null || !transcriptEditing.canUndo) {
+                    return;
+                }
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)) {
+                    return;
+                }
+                e.preventDefault();
+                void transcriptEditing.undoLastEdit();
             } else if (e.key === 'Escape' && isSearchOpen) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -485,7 +497,7 @@ export default function Subtitle() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [showTranscript, isSearchOpen]);
+    }, [showTranscript, isSearchOpen, transcriptEditing]);
 
     useEffect(() => {
         return () => {
@@ -594,8 +606,13 @@ export default function Subtitle() {
 
     const handleMouseDown = useCallback((sentence: Sentence, listPosition: number) => (event: React.MouseEvent) => {
         const target = event.target as HTMLElement | null;
-        if (target?.closest('[data-word="true"]') || target?.closest('button')) {
-            // 点击或操作单词/按钮时不拦截原生交互与词典浮层
+        if (
+            transcriptEditing.editingSentenceKey !== null
+            || target?.closest('[data-word="true"]')
+            || target?.closest('button')
+            || target?.closest('[data-inline-editor="true"], textarea, input')
+        ) {
+            // 点击单词、按钮或正处于原地编辑框内时不触发多句拖蓝选区
             return;
         }
         event.preventDefault();
@@ -606,7 +623,7 @@ export default function Subtitle() {
             sentence,
         };
         selectionRangeRef.current = null;
-    }, []);
+    }, [transcriptEditing.editingSentenceKey]);
 
     const handleMouseEnter = useCallback((_sentence: Sentence, listPosition: number) => () => {
         const state = dragStateRef.current;
@@ -770,6 +787,20 @@ export default function Subtitle() {
                     searchQuery={searchQuery}
                     isActiveSearchMatch={activeMatchedSentenceIndex === item.index}
                     onToggleSingleRepeat={handleToggleSingleRepeat}
+                    isEditing={transcriptEditing.editingSentenceKey === sentenceEditKey(item)}
+                    isSavingEdit={transcriptEditing.saving}
+                    canMergeNext={vocabularyFilter === 'all' && listPosition + 1 < displaySentences.length}
+                    onStartEdit={transcriptEditing.startEditing}
+                    onCancelEdit={transcriptEditing.cancelEditing}
+                    onCommitEdit={(targetSentence, nextText) => {
+                        void transcriptEditing.commitEdit(targetSentence, nextText);
+                    }}
+                    onSplitAtCursor={(targetSentence, draftText, cursorOffset) => {
+                        void transcriptEditing.splitAtCursor(targetSentence, draftText, cursorOffset);
+                    }}
+                    onMergeNext={(targetSentence, draftText) => {
+                        void transcriptEditing.mergeWithNext(targetSentence, draftText);
+                    }}
                     selectionState={
                         isSelected
                             ? {
@@ -804,6 +835,9 @@ export default function Subtitle() {
         handleSentenceReplay,
         handleToggleSingleRepeat,
         sceneDividersByIndex,
+        vocabularyFilter,
+        displaySentences.length,
+        transcriptEditing,
         t,
     ]);
 
@@ -1016,6 +1050,13 @@ export default function Subtitle() {
                                     onSentenceClick={handleSentenceClick}
                                     onToggleSingleRepeat={handleToggleSingleRepeat}
                                     isRepeat={singleRepeat || hoverRepeat}
+                                    editingSentenceKey={transcriptEditing.editingSentenceKey}
+                                    isSavingEdit={transcriptEditing.saving}
+                                    onStartEdit={transcriptEditing.startEditing}
+                                    onCancelEdit={transcriptEditing.cancelEditing}
+                                    onCommitEdit={(targetSentence, nextText) => {
+                                        void transcriptEditing.commitEdit(targetSentence, nextText);
+                                    }}
                                 />
                             );
                         }}

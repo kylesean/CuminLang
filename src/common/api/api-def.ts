@@ -11,6 +11,7 @@ import type { ResourceStatusSnapshot } from '@/common/contracts/resource-status'
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
 import type { GpuAcceleration } from '@/common/contracts/system-info';
 import type { SubtitleResolution } from '@/common/contracts/subtitle-resolution';
+import type { SaveEditedSubtitleRequest, SaveEditedSubtitleResponse } from '@/common/contracts/subtitle-edit';
 import type { ImportedDictionaryVO } from '@/common/contracts/imported-dictionary';
 import type { BuiltinDictionaryMetaVO } from '@/common/contracts/builtin-dictionary';
 import type { EnglishDictionaryStatusVO } from '@/common/contracts/english-dictionary';
@@ -363,6 +364,11 @@ interface SubtitleControllerDef {
     'subtitle/scene-boundaries': {
         params: { sentences: SceneSentence[]; videoPath?: string };
         return: SceneBoundary[];
+    };
+    /** 保存右侧文稿原地编辑结果到 L3 `.edited.srt`，迁移学习资产并返回新字幕。 */
+    'subtitle/srt/save-edited': {
+        params: SaveEditedSubtitleRequest;
+        return: SaveEditedSubtitleResponse;
     };
 }
 
@@ -921,6 +927,7 @@ export const API_ROUTE_KEYS = [
     'subtitle/scene-boundaries',
     'subtitle/srt/match-vocabulary',
     'subtitle/srt/parse-to-sentences',
+    'subtitle/srt/save-edited',
     'subtitle/text/parse-structs',
     'system/app-version',
     'system/clipboard/write',

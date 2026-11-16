@@ -33,6 +33,8 @@ export type PlaybackSessionState = {
     subtitleSessionId: string | null;
     /** 字幕重载令牌；递增时触发播放器按当前字幕路径重建字幕上下文。 */
     subtitleReloadToken: number;
+    /** 刚由内存内原地保存并载入 `playerStore` 的新哈希：供 bridge 跳过冗余清屏重载。 */
+    preloadedHash: string | null;
 };
 
 /** 当前播放会话状态变更动作。 */
@@ -41,6 +43,8 @@ export type PlaybackSessionActions = {
     updateFile: (file: string) => void;
     /** 应用后端解析出的字幕与轨道诊断结果。 */
     updateSubtitleResolution: (resolution: SubtitleResolution) => void;
+    /** 应用原地编辑保存返回的 L3 `.edited.srt` 轨与哈希，免除冗余清屏重载。 */
+    applySavedEditedSubtitle: (filePath: string, fileHash: string, resolution?: SubtitleResolution | null) => void;
     /** 暂时隐藏当前视频顶部的自动字幕质量提示条。 */
     dismissSubtitleOriginHint: (videoId: string) => void;
     /** 标记目标视频路径已完成媒体就绪。 */
@@ -69,11 +73,13 @@ export const usePlaybackSession = create(
         srtHash: null,
         subtitleSessionId: null,
         subtitleReloadToken: 0,
+        preloadedHash: null,
         updateFile: (ph: string) => {
             if (MediaUtil.isMedia(ph)) {
                 set({
                     videoPath: ph,
                     videoLoaded: false,
+                    preloadedHash: null,
                 });
                 const fileName = MediaUtil.fileName(ph);
                 if (StrUtil.isNotBlank(fileName)) {
@@ -83,6 +89,7 @@ export const usePlaybackSession = create(
             if (MediaUtil.isSubtitle(ph)) {
                 set((s) => ({
                     subtitlePath: ph,
+                    preloadedHash: null,
                     srtHash: s.subtitlePath === ph ? s.srtHash : null,
                     subtitleSessionId: s.subtitlePath === ph ? s.subtitleSessionId : null,
                 }));
@@ -94,8 +101,19 @@ export const usePlaybackSession = create(
                 subtitleOrigin: resolution.origin ?? null,
                 subtitleQualityIssue: resolution.qualityIssue ?? null,
                 subtitleTracks: resolution.tracks ?? [],
+                preloadedHash: null,
                 srtHash: s.subtitlePath === (resolution.subtitlePath || null) ? s.srtHash : null,
                 subtitleSessionId: s.subtitlePath === (resolution.subtitlePath || null) ? s.subtitleSessionId : null,
+            }));
+        },
+        applySavedEditedSubtitle: (filePath: string, fileHash: string, resolution?: SubtitleResolution | null) => {
+            set((s) => ({
+                subtitlePath: filePath || null,
+                srtHash: fileHash,
+                preloadedHash: fileHash,
+                subtitleOrigin: resolution?.origin ?? 'user_edited',
+                subtitleQualityIssue: resolution?.qualityIssue ?? null,
+                subtitleTracks: resolution?.tracks ?? s.subtitleTracks,
             }));
         },
         dismissSubtitleOriginHint: (videoId: string) => {
@@ -121,6 +139,7 @@ export const usePlaybackSession = create(
                 videoId: null,
                 srtHash: null,
                 subtitleSessionId: null,
+                preloadedHash: null,
             });
         },
         clearSrt: () => {
@@ -131,10 +150,11 @@ export const usePlaybackSession = create(
                 subtitleTracks: [],
                 srtHash: null,
                 subtitleSessionId: null,
+                preloadedHash: null,
             });
         },
         reloadSubtitles: () => {
-            set((s) => ({ subtitleReloadToken: s.subtitleReloadToken + 1 }));
+            set((s) => ({ preloadedHash: null, subtitleReloadToken: s.subtitleReloadToken + 1 }));
         },
     })),
 );

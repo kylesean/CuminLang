@@ -230,7 +230,14 @@
         "sentenceSaved": "Saved to Context Studio",
         "sentenceUnsaved": "Removed from Context Studio",
         "sentenceSaveFailed": "Failed to save sentence",
-        "replaySentence": "Replay sentence"
+        "replaySentence": "Replay sentence",
+        "editSentence": "Edit subtitle text",
+        "saveEdit": "Save",
+        "cancelEdit": "Cancel",
+        "splitSentence": "Split here",
+        "mergeNextSentence": "Merge next",
+        "editSaveFailed": "Failed to save subtitle edit: {{message}}",
+        "editUndone": "Reverted last subtitle edit"
     },
     "sourceLine": {
         "aiTranslation": "AI translation",

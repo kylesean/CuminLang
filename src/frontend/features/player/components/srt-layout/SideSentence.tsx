@@ -1,8 +1,8 @@
-import React, { forwardRef, memo, useMemo } from 'react';
+import React, { forwardRef, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { useShallow } from 'zustand/react/shallow';
-import { Bookmark, History, Play, Repeat1 } from 'lucide-react';
+import { Bookmark, Check, History, Pencil, Play, Repeat1, Scissors, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 import useSetting from '@/frontend/features/settings/settingsStore';
@@ -52,6 +52,22 @@ export interface SideSentenceProps {
     isTimeAdjusted?: boolean;
     /** 清除本句的时间轴调整。 */
     onResetTime?: (sentence: Sentence) => void;
+    /** 是否正处于原地实时编辑状态。 */
+    isEditing?: boolean;
+    /** 正在保存当前字幕编辑。 */
+    isSavingEdit?: boolean;
+    /** 当前句之后是否还有下一句可供合并。 */
+    canMergeNext?: boolean;
+    /** 进入当前句的原地编辑状态。 */
+    onStartEdit?: (sentence: Sentence) => void;
+    /** 放弃当前草稿并退出编辑态。 */
+    onCancelEdit?: () => void;
+    /** 提交本句英文文本修改并落盘 `.edited.srt`。 */
+    onCommitEdit?: (sentence: Sentence, nextText: string) => void;
+    /** 在光标处把本句拆分成两句。 */
+    onSplitAtCursor?: (sentence: Sentence, draftText: string, cursorOffset: number) => void;
+    /** 将本句与下一句合并为一句。 */
+    onMergeNext?: (sentence: Sentence, draftText: string) => void;
 }
 
 /**
@@ -63,6 +79,216 @@ const IconTip = ({ tip, children }: { tip: string; children: React.ReactNode }) 
         <Tooltip content={t(tip)} placement="above">
             {children}
         </Tooltip>
+    );
+};
+
+interface SideSentenceInlineEditorProps {
+    sentence: Sentence;
+    primaryText: string;
+    secondaryText: string;
+    timeStr: string;
+    englishFontClass: string;
+    fontSize: string | undefined;
+    isSavingEdit: boolean;
+    canMergeNext: boolean;
+    onReplayClick: () => void;
+    onCancelEdit?: () => void;
+    onCommitEdit?: (sentence: Sentence, nextText: string) => void;
+    onSplitAtCursor?: (sentence: Sentence, draftText: string, cursorOffset: number) => void;
+    onMergeNext?: (sentence: Sentence, draftText: string) => void;
+}
+
+const SideSentenceInlineEditor = ({
+    sentence,
+    primaryText,
+    secondaryText,
+    timeStr,
+    englishFontClass,
+    fontSize,
+    isSavingEdit,
+    canMergeNext,
+    onReplayClick,
+    onCancelEdit,
+    onCommitEdit,
+    onSplitAtCursor,
+    onMergeNext,
+}: SideSentenceInlineEditorProps) => {
+    const { t } = useI18nTranslation('player');
+    const [draftText, setDraftText] = useState(primaryText);
+    const [cursorPos, setCursorPos] = useState(primaryText.length);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const editorWrapperRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+    }, []);
+
+    const canSplitHere = useMemo(() => {
+        const left = draftText.slice(0, cursorPos).trim();
+        const right = draftText.slice(cursorPos).trim();
+        return left.length > 0 && right.length > 0;
+    }, [cursorPos, draftText]);
+
+    const handleWrapperBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+        const nextFocused = e.relatedTarget as Node | null;
+        if (nextFocused && editorWrapperRef.current?.contains(nextFocused)) {
+            return;
+        }
+        const normalizedDraft = draftText.replace(/\s+/g, ' ').trim();
+        if (normalizedDraft && normalizedDraft !== primaryText.trim()) {
+            onCommitEdit?.(sentence, draftText);
+        } else {
+            onCancelEdit?.();
+        }
+    };
+
+    return (
+        <div
+            ref={editorWrapperRef}
+            data-inline-editor="true"
+            onBlur={handleWrapperBlur}
+            className="w-full px-3 py-2 rounded-lg flex flex-col gap-1.5 bg-surface/90 ring-1 ring-accent/45"
+        >
+            <div className="w-full flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                    {timeStr && (
+                        <span className="text-metadata font-mono tracking-tight text-accent font-medium">
+                            {timeStr}
+                        </span>
+                    )}
+                    <Tooltip content={t('sideSentence.replaySentence')} placement="above">
+                        <button
+                            type="button"
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }}
+                            onClick={onReplayClick}
+                            aria-label={t('sideSentence.replaySentence')}
+                            className="p-0.5 rounded text-secondary hover:text-primary hover:bg-muted/60 transition-colors cursor-pointer"
+                        >
+                            <Play className="w-3 h-3 fill-current" />
+                        </button>
+                    </Tooltip>
+                </div>
+            </div>
+
+            <textarea
+                ref={textareaRef}
+                data-testid="side-sentence-inline-editor"
+                aria-label={t('sideSentence.editSentence')}
+                disabled={isSavingEdit}
+                rows={Math.min(6, Math.max(2, Math.ceil(Math.max(draftText.length, 1) / 36)))}
+                value={draftText}
+                onMouseDown={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                    setDraftText(e.target.value);
+                    setCursorPos(e.target.selectionStart ?? e.target.value.length);
+                }}
+                onSelect={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
+                onClick={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
+                onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onCommitEdit?.(sentence, draftText);
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onCancelEdit?.();
+                    }
+                }}
+                className={cn(
+                    'w-full text-left font-sans leading-relaxed tracking-normal break-words',
+                    'rounded-md px-2 py-1 bg-card/80 text-primary border border-border/60',
+                    'focus:outline-none focus:ring-1 focus:ring-accent/60 resize-none select-text',
+                    englishFontClass,
+                )}
+            />
+
+            {secondaryText && (
+                <div
+                    className={cn(
+                        'w-full text-left leading-normal break-words text-secondary/70',
+                        fontSize === 'fontSizeSmall' && 'text-side-zh-small',
+                        (!fontSize || fontSize === 'fontSizeMedium') && 'text-side-zh-medium',
+                        fontSize === 'fontSizeLarge' && 'text-side-zh-large',
+                    )}
+                >
+                    {secondaryText}
+                </div>
+            )}
+
+            <div className="flex items-center justify-between gap-2 pt-0.5 text-metadata">
+                <div className="flex items-center gap-1.5">
+                    {onSplitAtCursor && (
+                        <button
+                            type="button"
+                            data-testid="side-sentence-split"
+                            disabled={!canSplitHere || isSavingEdit}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }}
+                            onClick={() => onSplitAtCursor(sentence, draftText, cursorPos)}
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-secondary hover:text-primary hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                            <Scissors className="w-3 h-3" />
+                            <span>{t('sideSentence.splitSentence')}</span>
+                        </button>
+                    )}
+                    {canMergeNext && onMergeNext && (
+                        <button
+                            type="button"
+                            data-testid="side-sentence-merge-next"
+                            disabled={isSavingEdit}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }}
+                            onClick={() => onMergeNext(sentence, draftText)}
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-secondary hover:text-primary hover:bg-muted/60 transition-colors cursor-pointer disabled:opacity-40"
+                        >
+                            <span>{t('sideSentence.mergeNextSentence')}</span>
+                        </button>
+                    )}
+                </div>
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        data-testid="side-sentence-edit-cancel"
+                        disabled={isSavingEdit}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }}
+                        onClick={() => onCancelEdit?.()}
+                        className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-secondary hover:text-primary hover:bg-muted/60 transition-colors cursor-pointer"
+                    >
+                        <X className="w-3 h-3" />
+                        <span>{t('sideSentence.cancelEdit')}</span>
+                    </button>
+                    <button
+                        type="button"
+                        data-testid="side-sentence-edit-save"
+                        disabled={isSavingEdit || !draftText.trim()}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }}
+                        onClick={() => onCommitEdit?.(sentence, draftText)}
+                        className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-accent-muted/20 transition-colors cursor-pointer disabled:opacity-40"
+                    >
+                        <Check className="w-3 h-3" />
+                        <span>{t('sideSentence.saveEdit')}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 };
 
@@ -113,6 +339,14 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
             onToggleSingleRepeat,
             isTimeAdjusted = false,
             onResetTime,
+            isEditing = false,
+            isSavingEdit = false,
+            canMergeNext = false,
+            onStartEdit,
+            onCancelEdit,
+            onCommitEdit,
+            onSplitAtCursor,
+            onMergeNext,
         }: SideSentenceProps,
         ref
     ) => {
@@ -176,6 +410,12 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
             return TimeUtil.secondToTimeStrCompact(sentence.start);
         }, [sentence.start]);
 
+        const englishFontClass = cn(
+            fontSize === 'fontSizeSmall' && 'text-side-en-small',
+            (!fontSize || fontSize === 'fontSizeMedium') && 'text-side-en-medium',
+            fontSize === 'fontSizeLarge' && 'text-side-en-large',
+        );
+
         return (
             <div
                 ref={ref}
@@ -201,6 +441,24 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
                   两个嵌套的动作目标（WCAG 4.1.2）。现在点击区只覆盖文本区域，
                   操作栏浮在同一行的右侧，两者各自独立可聚焦。
                 */}
+                {isEditing ? (
+                    <SideSentenceInlineEditor
+                        key={`${sentence.fileHash}:${sentence.index}:${primaryText}`}
+                        sentence={sentence}
+                        primaryText={primaryText}
+                        secondaryText={secondaryText}
+                        timeStr={timeStr}
+                        englishFontClass={englishFontClass}
+                        fontSize={fontSize}
+                        isSavingEdit={isSavingEdit}
+                        canMergeNext={canMergeNext}
+                        onReplayClick={() => (onReplay ?? onClick)(sentence)}
+                        onCancelEdit={onCancelEdit}
+                        onCommitEdit={onCommitEdit}
+                        onSplitAtCursor={onSplitAtCursor}
+                        onMergeNext={onMergeNext}
+                    />
+                ) : (
                 <div
                     role="button"
                     tabIndex={0}
@@ -218,9 +476,9 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
                 >
                 {/*
                   顶部行：状态指示 / 时间戳。
-                  右侧留出 pr-12 给浮在行尾的操作栏，避免悬停时按钮压住时间戳。
+                  右侧留出 pr-14 给浮在行尾的操作栏，避免悬停时按钮压住时间戳。
                 */}
-                <div className="w-full flex items-center justify-between gap-1.5 mb-1 pr-12">
+                <div className="w-full flex items-center justify-between gap-1.5 mb-1 pr-14">
                     <div className="flex items-center gap-1.5">
                         {/* 活跃态声波动效 */}
                         {isCurrent && (
@@ -242,14 +500,17 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
                     </div>
                 </div>
 
-                {/* 英文主句文本：坚固的左对齐基线，优化的西文字体与行距 */}
+                {/* 英文主句文本：坚固的左对齐基线，优化的西文字体与行距；双击原地进入改写态 */}
                 <div className="w-full text-left">
                     <div
+                        onDoubleClick={(e) => {
+                            if (!onStartEdit) return;
+                            e.stopPropagation();
+                            onStartEdit(sentence);
+                        }}
                         className={cn(
                             'w-full text-left font-sans leading-relaxed tracking-normal select-text break-words transition-colors',
-                            fontSize === 'fontSizeSmall' && 'text-side-en-small',
-                            (!fontSize || fontSize === 'fontSizeMedium') && 'text-side-en-medium',
-                            fontSize === 'fontSizeLarge' && 'text-side-en-large',
+                            englishFontClass,
                             isCurrent
                                 ? 'text-primary font-medium'
                                 : 'text-secondary/90 group-hover:text-primary',
@@ -276,14 +537,30 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
                     )}
                 </div>
                 </div>
+                )}
 
-                {/* 悬停微动作栏：收藏金句 / 单句精听循环 / 重播单句。浮在行尾，不参与整行点击区。 */}
+                {/* 悬停微动作栏：编辑 / 收藏 / 单句循环 / 重播。浮在行尾，不参与整行点击区。 */}
+                {!isEditing && (
                 <div
                     className={cn(
                         'absolute right-2 top-1.5 flex items-center gap-1 transition-opacity duration-150',
                         (isCurrent && isRepeat) || isSaved ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
                     )}
                 >
+                    {onStartEdit && (
+                        <Tooltip content={t('sideSentence.editSentence')} placement="above">
+                            <button
+                                type="button"
+                                data-testid="side-sentence-edit"
+                                onClick={() => onStartEdit(sentence)}
+                                className="p-1 rounded text-secondary hover:text-primary hover:bg-surface/80 transition-colors cursor-pointer"
+                                title={t('sideSentence.editSentence')}
+                                aria-label={t('sideSentence.editSentence')}
+                            >
+                                <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                        </Tooltip>
+                    )}
                     <Tooltip
                         content={
                             isSaved
@@ -400,6 +677,7 @@ const SideSentence = forwardRef<HTMLDivElement, SideSentenceProps>(
                         </button>
                     </Tooltip>
                 </div>
+                )}
             </div>
         );
     },

@@ -1,4 +1,4 @@
-import { forwardRef, memo } from 'react';
+import { forwardRef, memo, useEffect, useRef, useState } from 'react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Repeat1 } from 'lucide-react';
 import type { SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
@@ -29,6 +29,16 @@ export interface ArticleBlockProps {
     onToggleSingleRepeat?: (sentence: Sentence) => void;
     /** 是否处于单句循环状态。 */
     isRepeat?: boolean;
+    /** 当前处于原地编辑状态的句子 key（`fileHash:index`）。 */
+    editingSentenceKey?: string | null;
+    /** 正在保存当前修改。 */
+    isSavingEdit?: boolean;
+    /** 双击句子进入原地编辑。 */
+    onStartEdit?: (sentence: Sentence) => void;
+    /** 放弃编辑并退出。 */
+    onCancelEdit?: () => void;
+    /** 提交修改并写盘 `.edited.srt`。 */
+    onCommitEdit?: (sentence: Sentence, nextText: string) => void;
 }
 
 interface ArticleSentenceZhSpanProps {
@@ -43,6 +53,66 @@ interface ArticleSentenceZhSpanProps {
     /** 点击译文跳转回调。 */
     onSentenceClick: (sentence: Sentence) => void;
 }
+
+interface ArticleInlineEditorProps {
+    sentence: Sentence;
+    isSaving: boolean;
+    onCancel?: () => void;
+    onCommit?: (sentence: Sentence, nextText: string) => void;
+}
+
+const ArticleInlineEditor = ({
+    sentence,
+    isSaving,
+    onCancel,
+    onCommit,
+}: ArticleInlineEditorProps) => {
+    const [draft, setDraft] = useState(sentence.text || '');
+    const inputRef = useRef<HTMLInputElement | null>(null);
+
+    useEffect(() => {
+        const el = inputRef.current;
+        if (el) {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+        }
+    }, []);
+
+    const handleBlur = () => {
+        const normalized = draft.replace(/\s+/g, ' ').trim();
+        if (normalized && normalized !== (sentence.text || '').trim()) {
+            onCommit?.(sentence, draft);
+        } else {
+            onCancel?.();
+        }
+    };
+
+    return (
+        <input
+            ref={inputRef}
+            type="text"
+            data-testid="article-sentence-inline-editor"
+            data-inline-editor="true"
+            disabled={isSaving}
+            value={draft}
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCommit?.(sentence, draft);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onCancel?.();
+                }
+            }}
+            className="inline-block w-full rounded-md px-2 py-0.5 my-0.5 bg-card/90 text-primary border border-accent/60 focus:outline-none focus:ring-1 focus:ring-accent/60"
+        />
+    );
+};
 
 /**
  * 段落内单句中文译文 span：按句订阅自身译文。
@@ -110,6 +180,11 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
             onSentenceClick,
             onToggleSingleRepeat,
             isRepeat,
+            editingSentenceKey,
+            isSavingEdit = false,
+            onStartEdit,
+            onCancelEdit,
+            onCommitEdit,
         }: ArticleBlockProps,
         ref,
     ) => {
@@ -175,6 +250,19 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                     {block.sentences.map((s) => {
                         const isCurrent = !!currentSentence && s.index === currentSentence.index && s.fileHash === currentSentence.fileHash;
                         const isActiveMatch = activeMatchedSentenceIndex === s.index;
+                        const isEditingThisSentence = editingSentenceKey === `${s.fileHash}:${s.index}`;
+
+                        if (isEditingThisSentence) {
+                            return (
+                                <ArticleInlineEditor
+                                    key={`${s.fileHash}:${s.index}`}
+                                    sentence={s}
+                                    isSaving={isSavingEdit}
+                                    onCancel={onCancelEdit}
+                                    onCommit={onCommitEdit}
+                                />
+                            );
+                        }
 
                         /**
                          * 句子与「单句循环」按钮必须是兄弟节点。
@@ -197,6 +285,15 @@ const ArticleBlock = forwardRef<HTMLDivElement, ArticleBlockProps>(
                                             return;
                                         }
                                         onSentenceClick(s);
+                                    }}
+                                    onDoubleClick={(e) => {
+                                        if (!onStartEdit) return;
+                                        const target = e.target as HTMLElement | null;
+                                        if (target?.closest('[data-word="true"]')) {
+                                            return;
+                                        }
+                                        e.stopPropagation();
+                                        onStartEdit(s);
                                     }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' || e.key === ' ') {

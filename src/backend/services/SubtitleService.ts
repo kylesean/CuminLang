@@ -4,16 +4,20 @@ import { findBetterEnglishSubtitle } from '@/common/utils/subtitle/preferred-tra
 import type { SentenceBlockBySpace, SentenceBlockPart, SentenceStruct } from '@/common/types/SentenceStruct';
 import StrUtil from '@/common/utils/str-util';
 import type { Sentence, SrtSentence } from '@/common/types/SentenceC';
-import { inject, injectable } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import type SrtTimeAdjustService from '@/backend/services/SrtTimeAdjustService';
 import type CacheService from '@/backend/services/CacheService';
+import type SubtitleAssetMigrationService from '@/backend/services/SubtitleAssetMigrationService';
+import type { EditedSubtitleLineInput } from '@/common/contracts/subtitle-edit';
 import type { SubtitleTimestampAdjustment } from '@/common/contracts/subtitle-timestamp-adjustment';
 import { ObjUtil } from '@/backend/utils/ObjUtil';
 import { assertSubtitlePath } from '@/backend/utils/file-path-guard';
 import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
 import { isAuthoritativeSubtitlePath, parseSrt, parseAss, srtLineToSentence, type SrtLine } from '@/common/utils/subtitle';
+import { toSrtContent } from '@/common/utils/subtitle/parser';
 import { resegmentIntoMeaningGroups } from '@/common/utils/subtitle/meaning-group-segmenter';
+import { USER_EDITED_TRACK_SUFFIX } from '@/common/utils/subtitle/track-diagnostics';
 import MediaUtil from '@/common/utils/MediaUtil';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
@@ -106,6 +110,17 @@ export default interface SubtitleService {
      * 词表变化后清除共享字幕生词分析缓存。
      */
     invalidateVocabularyAnalysisCache(): void;
+
+    /**
+     * 将右侧文稿原地编辑后的字幕行写盘为 L3 `.edited.srt` 权威轨，
+     * 迁移既有学习资产并返回完成分词的结构化字幕。
+     */
+    saveEditedTrack(params: {
+        videoPath?: string;
+        sourceSubtitlePath?: string;
+        oldFileHash?: string;
+        lines: EditedSubtitleLineInput[];
+    }): Promise<SrtSentence>;
 }
 
 
@@ -167,6 +182,8 @@ export class SubtitleServiceImpl implements SubtitleService {
         @inject(TYPES.StorageDirectoryProvider) private readonly storageDirectoryProvider: StorageDirectoryProvider,
         @inject(TYPES.FileSystemGateway) private readonly fileSystemGateway: FileSystemGateway,
         @inject(TYPES.MediaPathRegistry) private readonly mediaPathRegistry: MediaPathRegistry,
+        @optional() @inject(TYPES.SubtitleAssetMigrationService)
+        private readonly assetMigrationService?: SubtitleAssetMigrationService,
     ) {}
 
     /**
@@ -208,6 +225,115 @@ export class SubtitleServiceImpl implements SubtitleService {
         const segmented = isAuthoritativeSubtitlePath(path)
             ? lines.map((line, idx) => ({ ...line, index: idx + 1 }))
             : resegmentIntoMeaningGroups(lines);
+        return this.buildSentenceList(segmented, fileHash, path);
+    }
+
+    /** {@inheritDoc SubtitleService.saveEditedTrack} */
+    public async saveEditedTrack(params: {
+        videoPath?: string;
+        sourceSubtitlePath?: string;
+        oldFileHash?: string;
+        lines: EditedSubtitleLineInput[];
+    }): Promise<SrtSentence> {
+        const targetPath = this.resolveEditedTargetPath(params.videoPath, params.sourceSubtitlePath);
+        assertSubtitlePath(targetPath);
+        this.mediaPathRegistry.allowFile(targetPath);
+        await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(targetPath);
+
+        const oldSnapshot = await this.readMigrationSourceBeforeWrite(
+            params.sourceSubtitlePath,
+            params.oldFileHash,
+        );
+
+        const normalizedLines: SrtLine[] = params.lines.map((line, index) => {
+            const start = Math.max(0, Number.isFinite(line.start) ? line.start : 0);
+            const rawEnd = Number.isFinite(line.end) ? line.end : start + 0.5;
+            const end = Math.max(rawEnd, start + 0.05);
+            return {
+                index: index + 1,
+                start,
+                end,
+                contentEn: line.contentEn.trim(),
+                contentZh: line.contentZh?.trim() ?? '',
+            };
+        });
+
+        const srtContent = toSrtContent(normalizedLines);
+        const newFileHash = ObjUtil.hash(srtContent);
+        await this.fileSystemGateway.writeTextFile(targetPath, srtContent);
+
+        if (
+            this.assetMigrationService
+            && oldSnapshot
+            && oldSnapshot.fileHash
+            && oldSnapshot.fileHash !== newFileHash
+            && oldSnapshot.sentences.length > 0
+        ) {
+            try {
+                await this.assetMigrationService.migrateTrackAssets({
+                    oldFileHash: oldSnapshot.fileHash,
+                    oldSentences: oldSnapshot.sentences,
+                    newFileHash,
+                    newSentences: normalizedLines,
+                });
+            } catch (error) {
+                logger.warn('failed to migrate learning assets on edited subtitle save', {
+                    targetPath,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
+        return this.buildSentenceList(normalizedLines, newFileHash, targetPath);
+    }
+
+    private resolveEditedTargetPath(videoPath?: string, sourceSubtitlePath?: string): string {
+        if (videoPath && videoPath.trim()) {
+            return path.join(
+                path.dirname(videoPath),
+                `${path.basename(videoPath, path.extname(videoPath))}${USER_EDITED_TRACK_SUFFIX}`,
+            );
+        }
+        if (sourceSubtitlePath && sourceSubtitlePath.trim()) {
+            const dir = path.dirname(sourceSubtitlePath);
+            const base = path.basename(sourceSubtitlePath)
+                .replace(/\.(edited|local)\.srt$/i, '')
+                .replace(/\.[a-z]{2}(?:-[A-Za-z0-9]+)?\.srt$/i, '')
+                .replace(/\.(srt|ass|vtt)$/i, '');
+            return path.join(dir, `${base}${USER_EDITED_TRACK_SUFFIX}`);
+        }
+        throw new Error('缺少视频或源字幕路径，无法保存人工编辑轨');
+    }
+
+    private async readMigrationSourceBeforeWrite(
+        sourceSubtitlePath?: string,
+        fallbackHash?: string,
+    ): Promise<{ fileHash: string; sentences: SrtLine[] } | null> {
+        if (!sourceSubtitlePath || !sourceSubtitlePath.trim()) {
+            return null;
+        }
+        try {
+            assertSubtitlePath(sourceSubtitlePath);
+            if (!await this.fileSystemGateway.fileExists(sourceSubtitlePath)) {
+                return null;
+            }
+            const raw = await this.fileSystemGateway.readTextFile(sourceSubtitlePath);
+            const fileHash = ObjUtil.hash(raw) || fallbackHash || '';
+            const lines = MediaUtil.isAss(sourceSubtitlePath) ? parseAss(raw) : parseSrt(raw);
+            const sentences = isAuthoritativeSubtitlePath(sourceSubtitlePath)
+                ? lines.map((line, index) => ({ ...line, index: index + 1 }))
+                : resegmentIntoMeaningGroups(lines);
+            return fileHash ? { fileHash, sentences } : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private async buildSentenceList(
+        segmented: SrtLine[],
+        fileHash: string,
+        filePath: string,
+    ): Promise<SrtSentence> {
         // Wink 分词是同步 CPU 工作。整部字幕一次性跑完会长时间占住主进程，
         // 拖慢窗口交互和其它 IPC；按固定批次让渡事件循环，把长任务切碎。
         this.scheduler.beginFrame();
@@ -224,8 +350,8 @@ export class SubtitleServiceImpl implements SubtitleService {
         });
         const res: SrtSentence = {
             fileHash,
-            filePath: path,
-            sentences: subtitles
+            filePath,
+            sentences: subtitles,
         };
         this.cacheService.set('cache:srt', fileHash, res);
         this.cacheVocabularyTexts(fileHash, subtitles);
@@ -234,7 +360,7 @@ export class SubtitleServiceImpl implements SubtitleService {
         return {
             fileHash: res.fileHash,
             filePath: res.filePath,
-            sentences: adjustedSentence
+            sentences: adjustedSentence,
         };
     }
 

@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import registerRoute from '@/backend/controllers/ipc/registerRoute';
-import { nonEmptyStringSchema } from '@/backend/controllers/ipc/routeSchemas';
+import { finiteNonNegativeNumberSchema, nonEmptyStringSchema } from '@/backend/controllers/ipc/routeSchemas';
+import type { SaveEditedSubtitleRequest, SaveEditedSubtitleResponse } from '@/common/contracts/subtitle-edit';
 import type { SrtSentence } from '@/common/types/SentenceC';
 import type { SentenceStruct } from '@/common/types/SentenceStruct';
-import { inject, injectable } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import type Controller from '@/backend/controllers/Controller';
 import type SubtitleService from '@/backend/services/SubtitleService';
@@ -11,6 +12,7 @@ import { type SubtitleVocabularyMatchResult } from '@/backend/services/SubtitleS
 import type SubtitleComprehensionService from '@/backend/services/SubtitleComprehensionService';
 import type { SubtitleComprehensionParams } from '@/common/types/subtitleComprehension';
 import type SceneIndexService from '@/backend/services/SceneIndexService';
+import type WatchHistoryService from '@/backend/services/WatchHistoryService';
 import type { SceneBoundary, SceneSentence } from '@/common/learning/sceneSegmentation';
 
 
@@ -31,6 +33,8 @@ export default class SubtitleController implements Controller {
         private readonly subtitleComprehensionService: SubtitleComprehensionService,
         @inject(TYPES.SceneIndexService)
         private readonly sceneIndexService: SceneIndexService,
+        @optional() @inject(TYPES.WatchHistoryService)
+        private readonly watchHistoryService?: WatchHistoryService,
     ) {}
 
     /**
@@ -106,6 +110,29 @@ export default class SubtitleController implements Controller {
     }
 
     /**
+     * 将右侧文稿原地编辑结果落盘到 L3 `.edited.srt`，绑定播放记录并返回最新结构化字幕。
+     */
+    public async saveEdited(params: SaveEditedSubtitleRequest): Promise<SaveEditedSubtitleResponse> {
+        let videoPath = params.videoPath;
+        if (!videoPath && this.watchHistoryService) {
+            videoPath = await this.watchHistoryService.videoPath(params.videoId).catch(() => undefined);
+        }
+        const srt = await this.subtitleService.saveEditedTrack({
+            videoPath,
+            sourceSubtitlePath: params.sourceSubtitlePath,
+            oldFileHash: params.oldFileHash,
+            lines: params.lines,
+        });
+        if (videoPath && this.watchHistoryService) {
+            await this.watchHistoryService.attachSrt(videoPath, srt.filePath);
+        }
+        const resolution = this.watchHistoryService
+            ? await this.watchHistoryService.playerSubtitle(params.videoId).catch(() => null)
+            : null;
+        return { srt, resolution };
+    }
+
+    /**
      * 注册字幕相关 IPC 路由。
      */
     registerRoutes(): void {
@@ -144,6 +171,20 @@ export default class SubtitleController implements Controller {
                 })).min(2).max(20000),
                 // 可选：提供时后端会用真实声纹替代文本推测；缺省时退回纯文本启发式。
                 videoPath: z.string().min(1).optional(),
+            }),
+        });
+        registerRoute('subtitle/srt/save-edited', (p) => this.saveEdited(p), {
+            schema: z.object({
+                videoId: nonEmptyStringSchema,
+                videoPath: z.string().min(1).optional(),
+                sourceSubtitlePath: z.string().min(1).optional(),
+                oldFileHash: z.string().min(1).optional(),
+                lines: z.array(z.object({
+                    start: finiteNonNegativeNumberSchema,
+                    end: finiteNonNegativeNumberSchema,
+                    contentEn: z.string().trim().min(1),
+                    contentZh: z.string().optional(),
+                })).min(1).max(20000),
             }),
         });
     }

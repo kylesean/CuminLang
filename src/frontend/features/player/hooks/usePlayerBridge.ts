@@ -68,6 +68,15 @@ export function usePlayerBridge(navigate: (path: string) => void) {
          * - 新字幕解析成功后，先激活新的 fileHash，再加载字幕，确保依赖当前句子的副作用看到的是一致上下文。
          */
         const loadSubtitles = async () => {
+            const activeSession = usePlaybackSession.getState();
+            if (
+                activeSession.preloadedHash
+                && activeSession.preloadedHash === activeSession.srtHash
+                && usePlayer.getState().sentences.length > 0
+            ) {
+                usePlaybackSession.setState({ preloadedHash: null });
+                return;
+            }
             useVocabularyStore.getState().clearVocabularyWords();
             const currentVideoId = videoId;
             if (StrUtil.isBlank(currentVideoId)) {
