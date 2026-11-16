@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import type { UseSpeechRecognitionReturn } from '@astryxdesign/core/Chat';
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
 import { chatApi } from '@/frontend/features/chat/chatApi';
+import { stripIpcErrorPrefix } from '@/common/utils/ipc-error';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 
 const logger = getRendererLogger('WhisperDictation');
@@ -10,9 +11,7 @@ const logger = getRendererLogger('WhisperDictation');
 const EMPTY_BANDS = [0, 0, 0, 0, 0];
 
 const sanitizeDictationError = (raw: string, hasSenseVoice: boolean): string => {
-    const stripped = raw
-        .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
-        .trim();
+    const stripped = stripIpcErrorPrefix(raw);
     if (/parakeet_model_load|Segments\s*\(0\)/i.test(stripped)) {
         if (/parakeet/i.test(stripped) || !hasSenseVoice) {
             return '当前仅安装了英文 Parakeet 模型，未识别到英语语音；如需中文/中英混说输入，请在「设置 → 资源与模型 → 扩展模型」下载「中英双语对话语音输入」。';

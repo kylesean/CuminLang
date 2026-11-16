@@ -97,6 +97,7 @@ export default class WatchHistoryController implements Controller {
                 file: nonEmptyStringSchema,
                 currentPosition: finiteNonNegativeNumberSchema,
             }),
+            broadcastError: false,
         });
         registerRoute('watch-history/create', (p) => this.create(p), {
             schema: z.array(nonEmptyStringSchema),
@@ -106,6 +107,7 @@ export default class WatchHistoryController implements Controller {
         });
         registerRoute('watch-history/group-delete', (p) => this.groupDelete(p), {
             schema: nonEmptyStringSchema,
+            broadcastError: false,
         });
         registerRoute('watch-history/detail', (p: string) => this.detail(p), {
             schema: z.string(),

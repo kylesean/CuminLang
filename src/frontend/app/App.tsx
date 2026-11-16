@@ -193,7 +193,12 @@ export const App = () => {
                     action: {
                         label: t('updateAvailableAction'),
                         onClick: () => {
-                            void backendClient.call('system/open-url', latest.url);
+                            void backendClient.call('system/open-url', latest.url).catch((error) => {
+                                showNotification({
+                                    variant: 'error',
+                                    message: error instanceof Error ? error.message : String(error),
+                                });
+                            });
                         },
                     },
                 });

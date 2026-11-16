@@ -8,6 +8,12 @@ import {
 } from '@/common/types/chat';
 import type { SentenceMemoryHints } from '@/common/types/vo/SentenceVocabularyVO';
 
+const createAbortError = (message: string): Error => {
+    const error = new Error(message);
+    error.name = 'AbortError';
+    return error;
+};
+
 /**
  * 内存中的一次整句学习会话。
  */
@@ -216,7 +222,7 @@ export class InMemoryChatSessionStore implements ChatSessionStore {
         if (!controller) {
             return false;
         }
-        controller.abort('chat run stopped');
+        controller.abort(createAbortError('chat run stopped'));
         session.runs.delete(runId);
         return true;
     }
@@ -224,7 +230,7 @@ export class InMemoryChatSessionStore implements ChatSessionStore {
     public stop(sessionId: string): void {
         const session = this.getOpenSession(sessionId);
         for (const controller of session.runs.values()) {
-            controller.abort('chat run stopped');
+            controller.abort(createAbortError('chat run stopped'));
         }
         session.runs.clear();
     }
@@ -236,7 +242,7 @@ export class InMemoryChatSessionStore implements ChatSessionStore {
         }
         session.closed = true;
         for (const controller of session.runs.values()) {
-            controller.abort('chat session closed');
+            controller.abort(createAbortError('chat session closed'));
         }
         session.runs.clear();
     }

@@ -456,7 +456,7 @@ export class ChatSessionServiceImpl implements ChatSessionService {
         if (shouldFallbackWithoutTools) {
             return this.runStream(sessionId, messageId, model, messages, abortSignal, personaPrompt, false, streamStarted);
         }
-        if (!aborted) {
+        if (!aborted && !abortSignal.aborted) {
             this.chatSessionStore.appendMessage(sessionId, { role: 'assistant', content });
             this.chatSessionStore.appendPersistedMessage(sessionId, {
                 id: messageId,

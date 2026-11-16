@@ -30,6 +30,8 @@ export default function GlobalShortCut() {
         const effectiveDark = theme === 'dark'
             || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         void setSetting('appearance.theme', effectiveDark ? 'light' : 'dark');
+    }, {
+        ignoreEventWhen: () => typeof document !== 'undefined' && Boolean(document.querySelector('[data-shortcut-recorder="true"]')),
     }, [theme, themeFamily, setSetting]);
     return <></>;
 }

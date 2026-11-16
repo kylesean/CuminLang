@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     autoUpdate,
     flip,
@@ -37,9 +37,27 @@ import {
     type WordStatus,
 } from '@/common/types/vocabulary';
 import { shouldRecordEncounter } from './encounterThrottle';
-import { useWordPopoverStore, type WordPopoverTarget } from './wordPopoverStore';
+import { useWordPopoverStore, type WordPopoverRect, type WordPopoverTarget } from './wordPopoverStore';
 
 const logger = getRendererLogger('WordPopoverHost');
+
+const toVirtualElement = (rect: WordPopoverRect): VirtualElement => ({
+    getBoundingClientRect: () => new DOMRect(rect.left, rect.top, rect.width, rect.height),
+});
+
+const readConnectedRect = (el: HTMLElement): WordPopoverRect | null => {
+    if (!el.isConnected) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 && rect.height <= 0) return null;
+    return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+    };
+};
 
 const MAX_SELECTION_PHRASE_WORDS = 6;
 
@@ -244,7 +262,10 @@ export const WordPopoverHost: React.FC = () => {
         };
     }, [openImmediately, pause, pauseOnWordHover]);
 
-    const { refs, floatingStyles, context } = useFloating({
+    const lastValidRectRef = useRef<WordPopoverRect | null>(null);
+    const setReferenceRef = useRef<((node: HTMLElement | VirtualElement | null) => void) | null>(null);
+
+    const { refs, floatingStyles, context, isPositioned } = useFloating({
         open: open && Boolean(target),
         onOpenChange: (next) => {
             if (!next) {
@@ -252,33 +273,58 @@ export const WordPopoverHost: React.FC = () => {
             }
         },
         placement: 'top',
-        whileElementsMounted: autoUpdate,
+        whileElementsMounted: (reference, floating, update) =>
+            autoUpdate(reference, floating, () => {
+                const { target: currentTarget, mode: currentMode } = useWordPopoverStore.getState();
+                if (currentTarget?.triggerEl && reference === currentTarget.triggerEl) {
+                    if (!currentTarget.triggerEl.isConnected) {
+                        if (currentMode === 'hover' || !lastValidRectRef.current) {
+                            closePopover();
+                            return;
+                        }
+                        // 原字幕行在播控切换后卸载时，改由最近一次有效矩形锚定（仅切换一次，避免 detached 元素的 (0,0) 把浮层推回窗口左上角）
+                        setReferenceRef.current?.(toVirtualElement(lastValidRectRef.current));
+                        return;
+                    }
+                    const connectedRect = readConnectedRect(currentTarget.triggerEl);
+                    if (connectedRect) {
+                        lastValidRectRef.current = connectedRect;
+                    }
+                }
+                update();
+            }),
         middleware: [offset(8), flip(), shift({ padding: 8 })],
     });
 
-    // 同步当前激活词元或虚拟划词矩形到 Floating UI reference
-    useEffect(() => {
+    // 在浏览器绘制前同步 Floating UI reference，避免首帧停在 (0,0) 再跳回目标词上方
+    useLayoutEffect(() => {
+        setReferenceRef.current = refs.setReference;
         if (!open || !target) {
+            lastValidRectRef.current = null;
             refs.setReference(null);
             return;
         }
+        lastValidRectRef.current = target.anchorRect ?? target.virtualRect ?? null;
         if (target.triggerEl) {
-            refs.setReference(target.triggerEl);
+            if (target.triggerEl.isConnected) {
+                const connectedRect = readConnectedRect(target.triggerEl);
+                if (connectedRect) {
+                    lastValidRectRef.current = connectedRect;
+                }
+                refs.setReference(target.triggerEl);
+                return;
+            }
+            if (mode === 'hover' || !lastValidRectRef.current) {
+                closePopover();
+                return;
+            }
+            refs.setReference(toVirtualElement(lastValidRectRef.current));
             return;
         }
         if (target.virtualRect) {
-            const snapshot = target.virtualRect;
-            const virtualEl: VirtualElement = {
-                getBoundingClientRect: () => new DOMRect(
-                    snapshot.left,
-                    snapshot.top,
-                    snapshot.width,
-                    snapshot.height,
-                ),
-            };
-            refs.setReference(virtualEl);
+            refs.setReference(toVirtualElement(target.virtualRect));
         }
-    }, [open, refs, target]);
+    }, [closePopover, mode, open, refs, target]);
 
     const hover = useHover(context, {
         enabled: open && mode === 'hover' && Boolean(target?.triggerEl),
@@ -545,6 +591,10 @@ export const WordPopoverHost: React.FC = () => {
     const streamingData = isStreaming ? dictionaryEntry?.data ?? null : null;
     const showLoading = dictionaryLoading && !streamingData && !dictionaryResponse;
 
+    const resolvedFloatingStyles: React.CSSProperties = isPositioned
+        ? floatingStyles
+        : { ...floatingStyles, visibility: 'hidden', pointerEvents: 'none' };
+
     return (
         <Eb key={`word-pop-${target.popKey}`}>
             <WordPop
@@ -561,7 +611,7 @@ export const WordPopoverHost: React.FC = () => {
                 onMarkKnown={() => { void handleStatusChange('known'); }}
                 onMarkIgnored={() => { void handleStatusChange('ignored'); }}
                 isUpdatingStatus={updatingStatus}
-                floatingStyles={floatingStyles}
+                floatingStyles={resolvedFloatingStyles}
                 getFloatingProps={getFloatingProps}
                 setFloatingRef={refs.setFloating}
                 contextWord={target.word}

@@ -1,5 +1,15 @@
 import { create } from 'zustand';
 
+/** 浮层锚点矩形快照。 */
+export interface WordPopoverRect {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+}
+
 /** 当前激活的单词/短语查词浮层目标。 */
 export interface WordPopoverTarget {
     kind: 'word' | 'phrase';
@@ -24,15 +34,10 @@ export interface WordPopoverTarget {
     };
     /** 单词级浮层的 DOM 锚点。 */
     triggerEl: HTMLElement | null;
+    /** 触发瞬间捕获的单词边界矩形，用于在字幕切换卸载原 DOM 后避免浮层退化到 (0,0)。 */
+    anchorRect?: WordPopoverRect | null;
     /** 划词多词浮层的虚拟选区边界矩形。 */
-    virtualRect?: {
-        left: number;
-        top: number;
-        right: number;
-        bottom: number;
-        width: number;
-        height: number;
-    } | null;
+    virtualRect?: WordPopoverRect | null;
 }
 
 export type WordPopoverTriggerMode = 'hover' | 'click' | 'selection';
@@ -76,6 +81,10 @@ export const useWordPopoverStore = create<WordPopoverState>((set, get) => ({
         }
         hoverOpenTimer = setTimeout(() => {
             hoverOpenTimer = null;
+            // 字幕切换/卸载后，已脱离文档的 DOM 节点 getBoundingClientRect() 会返回 (0,0,0,0)，不能再用它打开浮层。
+            if (target.triggerEl && !target.triggerEl.isConnected) {
+                return;
+            }
             const latest = get();
             if (latest.open && latest.mode !== 'hover' && latest.target?.popKey !== target.popKey) {
                 return;
@@ -90,6 +99,9 @@ export const useWordPopoverStore = create<WordPopoverState>((set, get) => ({
 
     openImmediately: (target, mode) => {
         clearHoverTimer();
+        if (target.triggerEl && !target.triggerEl.isConnected && !target.anchorRect && !target.virtualRect) {
+            return;
+        }
         set({ open: true, mode, target });
     },
 

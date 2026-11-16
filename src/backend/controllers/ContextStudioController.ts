@@ -31,15 +31,19 @@ export default class ContextStudioController implements Controller {
                 note: z.string().optional(),
                 tag: savedSentenceTagSchema.optional(),
             }),
+            broadcastError: false,
         });
 
         registerRoute('context-studio/unsave-sentence', (params) => this.contextStudioService.unsaveSentence(params.sentenceKey), {
             schema: z.object({
                 sentenceKey: nonEmptyStringSchema,
             }),
+            broadcastError: false,
         });
 
-        registerRoute('context-studio/list-saved-sentences', () => this.contextStudioService.listSavedSentences());
+        registerRoute('context-studio/list-saved-sentences', () => this.contextStudioService.listSavedSentences(), {
+            broadcastError: false,
+        });
 
         registerRoute('context-studio/list-saved-keys', (params) => this.contextStudioService.listSavedKeysByVideo(params.videoId), {
             schema: z.object({
@@ -53,14 +57,18 @@ export default class ContextStudioController implements Controller {
                 note: z.string().optional(),
                 tag: savedSentenceTagSchema.optional(),
             }),
+            broadcastError: false,
         });
 
         registerRoute('context-studio/get-word-contexts', (params) => this.contextStudioService.getWordContexts(params.word), {
             schema: z.object({
                 word: nonEmptyStringSchema,
             }),
+            broadcastError: false,
         });
 
-        registerRoute('context-studio/list-reader-documents', () => this.contextStudioService.listReaderDocuments());
+        registerRoute('context-studio/list-reader-documents', () => this.contextStudioService.listReaderDocuments(), {
+            broadcastError: false,
+        });
     }
 }

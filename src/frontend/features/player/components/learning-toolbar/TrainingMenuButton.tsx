@@ -284,6 +284,7 @@ export default function TrainingMenuButton({
                                 const current = radios.findIndex((radio) => radio === document.activeElement);
                                 if (current === -1) return;
                                 event.preventDefault();
+                                event.stopPropagation();
                                 const step = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1;
                                 const next = radios[(current + step + radios.length) % radios.length];
                                 next.focus();

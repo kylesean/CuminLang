@@ -23,13 +23,18 @@ export class YoutubeImportController implements Controller {
     public registerRoutes(): void {
         registerRoute('youtube-import/start', (p) => this.importService.start(p.url), {
             schema: z.object({ url: nonEmptyStringSchema }),
+            broadcastError: false,
         });
         registerRoute('youtube-import/cancel', (p) => this.importService.cancel(p.taskId), {
             schema: z.object({ taskId: positiveIntSchema }),
+            broadcastError: false,
         });
-        registerRoute('youtube-import/setting-detail', () => this.importService.getSettingDetail());
+        registerRoute('youtube-import/setting-detail', () => this.importService.getSettingDetail(), {
+            broadcastError: false,
+        });
         registerRoute('youtube-import/setting-save', (p) => this.importService.saveSetting(p), {
             schema: youtubeImportSettingSaveSchema,
+            broadcastError: false,
         });
     }
 }

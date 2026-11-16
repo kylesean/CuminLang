@@ -536,11 +536,15 @@ export default function ContextStudioPage() {
         try {
             const res = await videoLearningApi.exportVocabularyTemplate();
             if (res.success && res.data) {
-                const blob = new Blob([res.data], { type: 'text/plain;charset=utf-8' });
+                const binary = atob(res.data);
+                const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+                const blob = new Blob([bytes], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'context-studio-words.txt';
+                a.download = 'context-studio-words.xlsx';
                 a.click();
                 URL.revokeObjectURL(url);
                 toast.success(t('vocabularyStudio.exportSuccess', { defaultValue: '导出成功' }));
@@ -551,25 +555,20 @@ export default function ContextStudioPage() {
     };
 
     const handleImportWords = async () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.txt,.csv';
-        input.onchange = async () => {
-            const file = input.files?.[0] as (File & { path?: string }) | undefined;
-            if (!file?.path) return;
-            try {
-                const res = await videoLearningApi.importVocabulary(file.path);
-                if (res.success) {
-                    toast.success(res.message || t('vocabularyStudio.importSuccess', { defaultValue: '导入成功' }));
-                    void loadAllAssets();
-                } else {
-                    toast.error(res.error || t('vocabularyStudio.importFailed', { defaultValue: '导入失败' }));
-                }
-            } catch {
-                toast.error(t('vocabularyStudio.importFailed', { defaultValue: '导入失败' }));
+        try {
+            const selectedFiles = await videoLearningApi.selectVocabularyFile();
+            const filePath = selectedFiles?.[0];
+            if (!filePath) return;
+            const res = await videoLearningApi.importVocabulary(filePath);
+            if (res.success) {
+                toast.success(res.message || t('vocabularyStudio.importSuccess', { defaultValue: '导入成功' }));
+                void loadAllAssets();
+            } else {
+                toast.error(res.error || t('vocabularyStudio.importFailed', { defaultValue: '导入失败' }));
             }
-        };
-        input.click();
+        } catch {
+            toast.error(t('vocabularyStudio.importFailed', { defaultValue: '导入失败' }));
+        }
     };
 
     const navButtonClass = (active: boolean) =>

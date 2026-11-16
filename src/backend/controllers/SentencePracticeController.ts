@@ -27,9 +27,11 @@ export default class SentencePracticeController implements Controller {
     registerRoutes(): void {
         registerRoute('practice/score-shadowing', (p) => this.sentencePracticeService.scoreShadowing(p), {
             schema: shadowingParamsSchema,
+            broadcastError: false,
         });
         registerRoute('practice/score-dictation', (p) => this.sentencePracticeService.scoreDictation(p), {
             schema: dictationParamsSchema,
+            broadcastError: false,
         });
         registerRoute('practice/list-by-sentence', (p) => this.sentencePracticeService.listBySentence(p), {
             schema: z.object({

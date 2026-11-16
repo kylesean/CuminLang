@@ -264,44 +264,56 @@ export default class SettingsController implements Controller {
         registerRoute('settings/runtime/detail', () => this.getRuntimeSettings());
         registerRoute('settings/runtime/save', (p) => this.saveRuntimeSetting(p), {
             schema: runtimeSettingSaveSchema,
+            broadcastError: false,
         });
         registerRoute('settings/service-credentials/detail', () => this.getServiceCredentialsDetail());
         registerRoute('settings/service-credentials/save', (p) => this.saveServiceCredentials(p), {
             schema: serviceCredentialSaveSchema,
+            broadcastError: false,
         });
         registerRoute('settings/service-credentials/test-openai', (p) => this.testOpenAi(p), {
             schema: z.object({ model: z.string(), providerId: z.string().optional() }),
+            broadcastError: false,
         });
-        registerRoute('settings/service-credentials/test-tencent', () => this.testTencent());
+        registerRoute('settings/service-credentials/test-tencent', () => this.testTencent(), { broadcastError: false });
         registerRoute('settings/engine-selection/detail', () => this.getEngineSelectionDetail());
         registerRoute('settings/resource-fallback/detail', () => this.getResourceFallbackDetail());
         registerRoute('settings/resource-status/detail', () => this.getResourceStatusDetail());
         registerRoute('settings/engine-selection/save', (p) => this.saveEngineSelection(p), {
             schema: engineSelectionSaveSchema,
+            broadcastError: false,
         });
         registerRoute('settings/transcription-engine/save', (p) => this.saveTranscriptionEngineDetail(p), {
             schema: transcriptionEngineSchema,
+            broadcastError: false,
         });
         registerRoute('settings/shortcuts/detail', () => this.getShortcutSettingsDetail());
         registerRoute('settings/shortcuts/save', (p) => this.saveShortcutSettings(p), {
             schema: shortcutSettingSaveSchema,
+            broadcastError: false,
         });
         registerRoute('settings/appearance/detail', () => this.getAppearanceSettingDetail());
         registerRoute('settings/appearance/save', (p) => this.saveAppearanceSettings(p), {
             schema: appearanceSettingSchema,
+            broadcastError: false,
         });
         registerRoute('settings/storage/detail', () => this.getStorageSettingDetail());
         registerRoute('settings/storage/save', (p) => this.saveStorageSettings(p), {
             schema: storageSettingSchema,
+            broadcastError: false,
         });
         registerRoute('settings/proxy/detail', () => this.getProxySettingDetail());
         registerRoute('settings/proxy/save', (p) => this.saveProxySettings(p), {
             schema: proxySettingSaveSchema,
+            broadcastError: false,
         });
         registerRoute('settings/mobile-access/detail', () => this.getMobileAccessDetail());
         registerRoute('settings/mobile-access/save', (p) => this.saveMobileAccessSettings(p), {
             schema: mobileAccessSettingSaveSchema,
+            broadcastError: false,
         });
-        registerRoute('settings/mobile-access/regenerate-token', () => this.regenerateMobileAccessToken());
+        registerRoute('settings/mobile-access/regenerate-token', () => this.regenerateMobileAccessToken(), {
+            broadcastError: false,
+        });
     }
 }

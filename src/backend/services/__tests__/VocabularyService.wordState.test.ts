@@ -202,4 +202,51 @@ describe('VocabularyService 单词状态', () => {
         expect(visible.map((word) => word.word)).toEqual(['custom']);
         expect(all.map((word) => word.word).sort()).toEqual(['cancel', 'custom']);
     });
+
+    it('updateWord 改名时同步迁移复习卡并从队列保留新词调度', async () => {
+        memoryDb = createMemoryDb();
+        const { service, repository, reviewCardRepository } = buildService(memoryDb);
+        await repository.insertOne({ word: 'running', translate: '跑步', status: 'learning', source: 'manual' });
+        await reviewCardRepository.upsert({
+            word: 'running',
+            due_at: new Date(Date.now() - 60_000).toISOString(),
+            state: 'review',
+            reps: 3,
+            lapses: 0,
+            stability: 7,
+            difficulty: 4,
+            last_review_at: new Date(Date.now() - 86_400_000).toISOString(),
+            last_rating: 'good',
+        });
+
+        const result = await service.updateWord({
+            oldWord: 'running',
+            word: 'sprinting',
+            translate: '冲刺',
+        });
+
+        expect(result.success).toBe(true);
+        expect(await reviewCardRepository.findByWord('running')).toBeNull();
+        const migrated = await reviewCardRepository.findByWord('sprinting');
+        expect(migrated).not.toBeNull();
+        expect(migrated?.reps).toBe(3);
+        const due = await reviewCardRepository.listDue(new Date().toISOString(), 20);
+        expect(due.map((item) => item.word.word)).toContain('sprinting');
+    });
+
+    it('favoriteWord 新增生词或重新激活已知词时应建立到期复习卡', async () => {
+        memoryDb = createMemoryDb();
+        const { service, repository, reviewCardRepository } = buildService(memoryDb);
+        await repository.insertOne({ word: 'cancel', translate: '取消', status: 'known', source: 'manual' });
+
+        await service.favoriteWord('serendipity', '意外发现');
+        await service.favoriteWord('cancel');
+
+        const newCard = await reviewCardRepository.findByWord('serendipity');
+        const reactivatedCard = await reviewCardRepository.findByWord('cancel');
+        expect(newCard).not.toBeNull();
+        expect(reactivatedCard).not.toBeNull();
+        const due = await reviewCardRepository.listDue(new Date(Date.now() + 1000).toISOString(), 20);
+        expect(due.map((item) => item.word.word).sort()).toEqual(['cancel', 'serendipity']);
+    });
 });

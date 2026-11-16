@@ -93,6 +93,7 @@ export default class AiTransController implements Controller {
                 definitions: z.array(z.string().max(300)).max(8).optional(),
                 forceRefresh: z.boolean().optional(),
             }),
+            broadcastError: false,
         });
 
         registerRoute('ai-trans/update-subtitle-demand', (p) => this.updateSubtitleDemand(p), {
@@ -102,18 +103,20 @@ export default class AiTransController implements Controller {
                 demandId: z.number().int().min(0),
                 rendererSessionId: nonEmptyStringSchema,
             }),
+            broadcastError: false,
         });
         registerRoute('ai-trans/release-subtitle-session', (p) => this.releaseSubtitleSession(p), {
             schema: z.object({
                 fileHash: nonEmptyStringSchema,
                 rendererSessionId: nonEmptyStringSchema,
             }),
+            broadcastError: false,
         });
         registerRoute('ai-trans/clear-subtitle-translation-cache', async () => ({
             deleted: await this.subtitleTranslationService.clearTranslationCache(),
-        }));
+        }), { broadcastError: false });
         registerRoute('ai-trans/clear-dictionary-cache', async () => ({
             deleted: await this.translateService.clearDictionaryCache(),
-        }));
+        }), { broadcastError: false });
     }
 }

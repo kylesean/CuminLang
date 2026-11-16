@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { BrowserWindow } from 'electron';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 
@@ -31,7 +32,11 @@ export interface RendererSecurityOptions {
  * @param options 守卫参数。
  * @returns 是应用页面时为 true。
  */
-const isAppPageUrl = (url: string, options: RendererSecurityOptions): boolean => {
+export const isAppPageUrl = (
+    url: string,
+    options: RendererSecurityOptions,
+    platform: NodeJS.Platform = process.platform,
+): boolean => {
     let parsed: URL;
     try {
         parsed = new URL(url);
@@ -54,10 +59,12 @@ const isAppPageUrl = (url: string, options: RendererSecurityOptions): boolean =>
         return false;
     }
     try {
-        const rendererDirectory = path.resolve(options.rendererDirectory);
-        const targetPath = path.resolve(decodeURIComponent(parsed.pathname));
-        const relativePath = path.relative(rendererDirectory, targetPath);
-        return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+        const isWindows = platform === 'win32';
+        const pathApi = isWindows ? path.win32 : path.posix;
+        const rendererDirectory = pathApi.resolve(options.rendererDirectory);
+        const targetPath = pathApi.resolve(fileURLToPath(parsed, { windows: isWindows }));
+        const relativePath = pathApi.relative(rendererDirectory, targetPath);
+        return relativePath === '' || (!relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath));
     } catch {
         return false;
     }

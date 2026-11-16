@@ -10,6 +10,11 @@ import {
     decideLockedOutcome,
     type HomeWindowOutcome,
 } from '@/backend/infrastructure/window/home-window-outcome';
+import {
+    hideWindowToTray,
+    shouldHideInsteadOfMinimize,
+} from '@/backend/infrastructure/window/window-close-policy';
+import { isAppTrayActive } from '@/backend/startup/appTray';
 
 /** 首页的设计尺寸，与 src/main.ts 创建窗口时的初始尺寸保持一致。 */
 const HOME_WIDTH = 1200;
@@ -67,7 +72,11 @@ export default class WindowPortImpl implements WindowPort {
                 win.maximize();
                 break;
             case 'minimized':
-                win.minimize();
+                if (shouldHideInsteadOfMinimize({ trayActive: isAppTrayActive() })) {
+                    hideWindowToTray(win);
+                } else {
+                    win.minimize();
+                }
                 break;
             case 'fullscreen':
                 win.setFullScreen(true);

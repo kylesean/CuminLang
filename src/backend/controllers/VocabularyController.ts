@@ -129,15 +129,17 @@ export default class VocabularyController implements Controller {
                 pageSize: positiveIntSchema.optional(),
             }),
         });
-        registerRoute('vocabulary/export-template', () => this.exportTemplate());
+        registerRoute('vocabulary/export-template', () => this.exportTemplate(), { broadcastError: false });
         registerRoute('vocabulary/import', (p) => this.importWords(p), {
             schema: z.object({ filePath: nonEmptyStringSchema }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/favorite', (p) => this.favoriteWord(p), {
             schema: z.object({
                 word: nonEmptyStringSchema,
                 translate: z.string().optional(),
             }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/update', (p) => this.updateWord(p), {
             schema: z.object({
@@ -145,12 +147,14 @@ export default class VocabularyController implements Controller {
                 word: nonEmptyStringSchema,
                 translate: z.string(),
             }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/update-state', (p) => this.updateWordState(p), {
             schema: z.object({
                 word: nonEmptyStringSchema,
                 status: z.enum(WORD_STATUSES),
             }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/word-memory', (p) => this.getWordMemory(p), {
             schema: z.object({ word: nonEmptyStringSchema }),
@@ -167,6 +171,7 @@ export default class VocabularyController implements Controller {
                 score: z.number().min(0).max(100).optional(),
                 rating: z.enum(REVIEW_RATINGS).optional(),
             }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/review-queue', (p) => this.getReviewQueue(p), {
             schema: z.object({
@@ -181,15 +186,19 @@ export default class VocabularyController implements Controller {
                 videoId: z.string().min(1).optional(),
                 fileHash: z.string().min(1).optional(),
             }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/delete', (p) => this.deleteWord(p), {
             schema: z.object({ word: nonEmptyStringSchema }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/generate-definition', (p) => this.generateDefinition(p), {
             schema: z.object({ word: nonEmptyStringSchema }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/pick-sentence', (p) => this.pickSentenceVocabulary(p), {
             schema: z.object({ text: z.string() }),
+            broadcastError: false,
         });
         registerRoute('vocabulary/context-pack', (p) => this.buildContextPack(p), {
             schema: z.object({

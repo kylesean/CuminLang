@@ -36,7 +36,7 @@ export default function registerModelRoutes(
     service: LocalModelManagementService,
 ): void {
     registerRoute(`${prefix}/models/status`, () => service.getStatus());
-    registerRoute(`${prefix}/models/download`, () => service.download());
-    registerRoute(`${prefix}/models/cancel-download`, () => service.cancelDownload());
-    registerRoute(`${prefix}/models/delete`, () => service.deleteModel());
+    registerRoute(`${prefix}/models/download`, () => service.download(), { broadcastError: false });
+    registerRoute(`${prefix}/models/cancel-download`, () => service.cancelDownload(), { broadcastError: false });
+    registerRoute(`${prefix}/models/delete`, () => service.deleteModel(), { broadcastError: false });
 }

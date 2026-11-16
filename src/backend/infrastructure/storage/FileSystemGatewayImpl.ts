@@ -76,7 +76,8 @@ export default class FileSystemGatewayImpl implements FileSystemGateway {
     public async readTextFile(filePath: string): Promise<string> {
         const buffer = await fs.readFile(filePath);
         const detected = jschardetDetect(buffer);
-        const encoding = detected.encoding || 'utf-8';
+        const candidate = detected.encoding || 'utf-8';
+        const encoding = iconv.encodingExists(candidate) ? candidate : 'utf-8';
         return iconv.decode(buffer, encoding);
     }
 

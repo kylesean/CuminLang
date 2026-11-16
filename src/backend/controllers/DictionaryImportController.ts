@@ -32,16 +32,19 @@ export default class DictionaryImportController implements Controller {
         registerRoute('dictionary/list', async () => this.importedDictionaryService.list());
         registerRoute('dictionary/import', (p) => this.importedDictionaryService.importFromFile(p.filePath), {
             schema: z.object({ filePath: nonEmptyStringSchema }),
+            broadcastError: false,
         });
         registerRoute('dictionary/remove', async (p) => {
             this.importedDictionaryService.remove(p.id);
         }, {
             schema: z.object({ id: nonEmptyStringSchema }),
+            broadcastError: false,
         });
         registerRoute('dictionary/set-enabled', async (p) => {
             this.importedDictionaryService.setEnabled(p.id, p.enabled);
         }, {
             schema: z.object({ id: nonEmptyStringSchema, enabled: z.boolean() }),
+            broadcastError: false,
         });
     }
 }

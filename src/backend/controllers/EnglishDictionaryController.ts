@@ -24,14 +24,19 @@ export default class EnglishDictionaryController implements Controller {
     /** 注册增强包路由。 */
     public registerRoutes(): void {
         registerRoute('dictionary-enhancement/status', async () => this.englishDictionaryService.status());
-        registerRoute('dictionary-enhancement/install', async () => this.englishDictionaryService.install());
+        registerRoute('dictionary-enhancement/install', async () => this.englishDictionaryService.install(), {
+            broadcastError: false,
+        });
         registerRoute('dictionary-enhancement/cancel', async (p) => {
             this.englishDictionaryService.cancel(p.taskId);
         }, {
             schema: z.object({ taskId: positiveIntSchema }),
+            broadcastError: false,
         });
         registerRoute('dictionary-enhancement/remove', async () => {
             this.englishDictionaryService.remove();
+        }, {
+            broadcastError: false,
         });
     }
 }

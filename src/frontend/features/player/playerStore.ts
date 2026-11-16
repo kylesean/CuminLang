@@ -1905,14 +1905,13 @@ export const usePlayer = create<PlayerState>((set, get) => {
       }
       if (!target) return;
 
-      // 可选安全（如需）：避免 end <= start（与你对 begin 的安全策略对称）
-      // const { start, end } = srtTender.mapSeekTime(target);
-      // const minGap = 0.02;
-      // const maxDelta = Number.POSITIVE_INFINITY; // 允许延长
-      // const minDelta = (start + minGap) - end;   // 防止缩短到与 start 交叉
-      // const safeDelta = Math.max(deltaSeconds, minDelta);
+      // 防止缩短结束时间时跨过开始时间（与 adjustCurrentBegin 对称）
+      const { start, end: currentEnd } = srtTender.mapSeekTime(target);
+      const minGap = 0.02;
+      const minDelta = (start + minGap) - currentEnd;
+      const safeDelta = deltaSeconds < 0 ? Math.max(deltaSeconds, Math.min(minDelta, 0)) : deltaSeconds;
 
-      const updated = srtTender.adjustEnd(target, deltaSeconds /* 或 safeDelta */);
+      const updated = srtTender.adjustEnd(target, safeDelta);
       patchSentenceInStore(updated);
 
       state.repeatCurrent({ loop: false, play: state.playing });

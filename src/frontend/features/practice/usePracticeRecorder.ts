@@ -420,22 +420,30 @@ export function usePracticeRecorder({
 
         usePlayer.getState().pause();
         chunksRef.current = [];
-        const mimeType = pickMimeType();
-        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-        mediaRecorderRef.current = recorder;
-        startedAtRef.current = Date.now();
-        recorder.ondataavailable = (event: BlobEvent) => {
-            if (event.data.size > 0) {
-                chunksRef.current.push(event.data);
-            }
-        };
-        recorder.onstop = () => {
+        try {
+            const mimeType = pickMimeType();
+            const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+            mediaRecorderRef.current = recorder;
+            startedAtRef.current = Date.now();
+            recorder.ondataavailable = (event: BlobEvent) => {
+                if (event.data.size > 0) {
+                    chunksRef.current.push(event.data);
+                }
+            };
+            recorder.onstop = () => {
+                releaseStream();
+                void handleRecordingDone();
+            };
+            recorder.start();
+            startAudioMonitor(stream, recorder);
+            applyEvent('MIC_READY');
+        } catch (error) {
+            logger.error('启动 MediaRecorder 失败', { error });
+            mediaRecorderRef.current = null;
             releaseStream();
-            void handleRecordingDone();
-        };
-        recorder.start();
-        startAudioMonitor(stream, recorder);
-        applyEvent('MIC_READY');
+            showNotification({ message: t('recorder.denied'), variant: 'error' });
+            applyEvent('CANCEL');
+        }
     };
 
     const stop = (): void => {

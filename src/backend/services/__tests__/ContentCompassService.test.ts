@@ -548,4 +548,38 @@ My grandmother baked a lemon cake in the kitchen.
             reviewRate: 1,
         });
     });
+
+    it('兼容 SQLite CURRENT_TIMESTAMP 历史行，不漏查窗口边界日事件且不反向归因', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.setSystemTime(new Date('2026-06-15T15:00:00.000Z'));
+            harness = await buildHarness();
+            const toSqliteUtc = (iso: string): string => iso.slice(0, 19).replace('T', ' ');
+
+            await harness.memoryDb.db.insert(recommendationEvent).values([
+                // 窗口边界日（7天前 15:00 之后 16:00）：同日空格格式历史事件不应被漏查
+                { video_id: 'video-boundary', action: 'shown', created_at: toSqliteUtc('2026-06-08T16:00:00.000Z') },
+                // 当日 12:00 推荐进入复习
+                { video_id: 'video-today', action: 'shown', created_at: toSqliteUtc('2026-06-15T11:50:00.000Z') },
+                { video_id: 'video-today', action: 'opened', created_at: toSqliteUtc('2026-06-15T11:55:00.000Z') },
+                { video_id: 'video-today', action: 'reviewed', created_at: toSqliteUtc('2026-06-15T12:00:00.000Z') },
+            ]);
+            // 当日早先 08:00 的回忆成功不应反向归因到 12:00 的推荐
+            await harness.memoryDb.db.insert(wordEncounter).values({
+                word: 'journey',
+                lemma: 'journey',
+                action: 'review',
+                rating: 'good',
+                created_at: '2026-06-15T08:00:00.000Z',
+            });
+
+            const stats = await harness.service.getStats({ days: 7 });
+            const attribution = await harness.service.getAttribution({ days: 7 });
+
+            expect(stats.shown).toBe(2);
+            expect(attribution.overall.counts.recalled).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

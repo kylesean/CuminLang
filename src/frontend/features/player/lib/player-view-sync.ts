@@ -42,6 +42,20 @@ export function resetBaseViewBeforeOverlay(): void {
 }
 
 /**
+ * 离开播放页或切换视频时收拢覆盖层与底层视图记忆。
+ */
+export function resetPlayerOverlaysOnMediaReset(): void {
+    resetBaseViewBeforeOverlay();
+    const practice = usePracticePanel.getState();
+    if (practice.visible) {
+        practice.setVisible(false);
+    }
+    if (practice.recorderPhase !== 'idle') {
+        practice.setRecorderPhase('idle');
+    }
+}
+
+/**
  * 按目标视图同步「练习面板」与「播客模式」两个字段。
  *
  * 单独拆出来是为了打断依赖环：`chatStore` 需要在进入学习页时关闭竞争视图，

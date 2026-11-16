@@ -180,9 +180,9 @@ export default class LearningDataController implements Controller {
                 message: 'videoId 或 fileHash 至少提供一个',
             }),
         });
-        registerRoute('learning-data/export', () => this.exportData());
-        registerRoute('learning-data/import', () => this.importData());
-        registerRoute('learning-data/reset', () => this.resetLearningData());
+        registerRoute('learning-data/export', () => this.exportData(), { broadcastError: false });
+        registerRoute('learning-data/import', () => this.importData(), { broadcastError: false });
+        registerRoute('learning-data/reset', () => this.resetLearningData(), { broadcastError: false });
         registerRoute('learning-data/recap', (p) => this.getRecap(p), {
             schema: z.object({
                 videoId: z.string().min(1).optional(),
@@ -193,6 +193,7 @@ export default class LearningDataController implements Controller {
             }).refine((value) => Boolean(value.videoId || value.fileHash), {
                 message: 'videoId 或 fileHash 至少提供一个',
             }),
+            broadcastError: false,
         });
         registerRoute('learning-data/retell-feedback', (p) => this.evaluateRetell(p), {
             schema: z.object({

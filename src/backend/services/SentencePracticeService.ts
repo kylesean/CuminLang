@@ -3,7 +3,11 @@ import { randomUUID } from 'crypto';
 import { inject, injectable, optional } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import { getMainLogger } from '@/backend/infrastructure/logger';
-import { alignPracticeTokens, normalizePracticeTokens } from '@/common/utils/practice/pronunciationScoring';
+import {
+    alignPracticeTokens,
+    expandSpokenTokens,
+    normalizePracticeTokens,
+} from '@/common/utils/practice/pronunciationScoring';
 import { buildRhythmFeedback, decodePcm16Wav, type PcmAudio, type RhythmToken } from '@/common/utils/practice/rhythmFeedback';
 import { compareProsodyDtw } from '@/common/utils/practice/dtwProsody';
 import { parsePcm16WavHeader } from '@/common/utils/audio/wav';
@@ -157,7 +161,8 @@ export class SentencePracticeServiceImpl implements SentencePracticeService {
         const phonemeGopAvailable = this.phonemeGopService ? await this.phonemeGopService.isReady() : false;
 
         if (userPcm && phonemeGopAvailable && this.phonemeGopService) {
-            const expectedWords = normalizePracticeTokens(expectedText);
+            // 与 alignPracticeTokens 使用同一套展开词序列（如 gonna → going to），避免缩读词后音素索引错位。
+            const expectedWords = expandSpokenTokens(normalizePracticeTokens(expectedText));
             const gopOutputs = await this.phonemeGopService.scoreWords({
                 pcm: userPcm,
                 words: expectedWords,

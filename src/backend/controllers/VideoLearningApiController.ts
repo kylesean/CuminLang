@@ -89,7 +89,7 @@ export default class VideoLearningApiController implements Controller {
         registerRoute('video-learning/sync-from-oss', async () => {
             await this.videoLearningService.syncFromOss();
             return { success: true };
-        });
+        }, { broadcastError: false });
 
         registerRoute('video-learning/word-clip-stats', async () => {
             const data = await this.videoLearningService.getWordClipStats();

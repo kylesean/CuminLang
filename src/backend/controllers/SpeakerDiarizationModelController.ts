@@ -19,8 +19,8 @@ export class SpeakerDiarizationModelController implements Controller {
     /** 注册模型状态、下载、取消下载与删除路由。 */
     public registerRoutes(): void {
         registerRoute('speaker-diarization/models/status', () => this.modelService.getStatus());
-        registerRoute('speaker-diarization/models/download', () => this.modelService.download());
-        registerRoute('speaker-diarization/models/cancel-download', () => this.modelService.cancelDownload());
-        registerRoute('speaker-diarization/models/delete', () => this.modelService.deleteModel());
+        registerRoute('speaker-diarization/models/download', () => this.modelService.download(), { broadcastError: false });
+        registerRoute('speaker-diarization/models/cancel-download', () => this.modelService.cancelDownload(), { broadcastError: false });
+        registerRoute('speaker-diarization/models/delete', () => this.modelService.deleteModel(), { broadcastError: false });
     }
 }

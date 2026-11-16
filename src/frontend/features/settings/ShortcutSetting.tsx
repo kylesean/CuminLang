@@ -339,6 +339,7 @@ const RecordDialogBody: React.FC<RecordDialogBodyProps> = ({
                     <button
                         ref={recordContainerRef}
                         type="button"
+                        data-shortcut-recorder="true"
                         data-autofocus=""
                         onFocus={() => {
                             setIsListening(true);

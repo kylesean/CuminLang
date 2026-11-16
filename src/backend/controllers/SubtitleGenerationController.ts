@@ -44,9 +44,11 @@ export default class SubtitleGenerationController implements Controller {
     public registerRoutes(): void {
         registerRoute('subtitle-generation/start', (p) => this.start(p), {
             schema: z.object({ videoId: nonEmptyStringSchema }),
+            broadcastError: false,
         });
         registerRoute('subtitle-generation/cancel', (p) => this.cancel(p), {
             schema: z.object({ taskId: positiveIntSchema }),
+            broadcastError: false,
         });
     }
 }

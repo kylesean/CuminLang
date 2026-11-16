@@ -35,6 +35,7 @@ export class SherpaTtsModelController implements Controller {
         registerRoute('sherpa-tts/voices/list', () => this.listVoices());
         registerRoute('sherpa-tts/voices/select', (params) => this.selectVoice(params.voiceId), {
             schema: z.object({ voiceId: z.string().min(1) }),
+            broadcastError: false,
         });
     }
 

@@ -23,6 +23,7 @@ export default class AiFuncController implements Controller {
     registerRoutes(): void {
         registerRoute('ai-func/tts', (p) => this.aiFuncService.tts(p), {
             schema: nonEmptyStringSchema,
+            broadcastError: false,
         });
     }
 }

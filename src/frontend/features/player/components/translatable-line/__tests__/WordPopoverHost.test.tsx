@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 
 import Word from '../word';
@@ -138,5 +138,75 @@ describe('Word + WordPopoverHost', () => {
             context: 'Please make sure it works.',
         }));
         expect(videoLearningApi.getWordMemory).toHaveBeenCalledWith('make sure');
+    });
+
+    it('悬停延迟期间触发节点已从 DOM 卸载时，不得在 (0,0) 处打开浮层', () => {
+        vi.useFakeTimers();
+        try {
+            const { unmount } = renderWithHost(
+                <Word
+                    word="talk"
+                    original="talk"
+                    lemma="talk"
+                    sentenceText="Let us talk later."
+                    sentenceIndex={1}
+                    sentenceHash="hash-talk"
+                    popKey="hash-talk:1:2"
+                    show={true}
+                />,
+            );
+
+            fireEvent.mouseEnter(screen.getByText('talk'));
+            // 字幕切换导致原词节点在 90ms 延迟触发前被卸载
+            unmount();
+            vi.advanceTimersByTime(120);
+
+            expect(useWordPopoverStore.getState().open).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('点击打开单词卡后即使原字幕节点随后卸载，浮层仍锚定在最后已知位置而不会跳到左上角', async () => {
+        const { unmount } = render(
+            <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+                <Word
+                    word="talk"
+                    original="talk"
+                    lemma="talk"
+                    sentenceText="Let us talk later."
+                    sentenceIndex={1}
+                    sentenceHash="hash-talk"
+                    popKey="hash-talk:1:2"
+                    show={true}
+                />
+            </SWRConfig>,
+        );
+
+        const hostResult = render(
+            <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+                <WordPopoverHost />
+            </SWRConfig>,
+        );
+
+        const wordSpan = screen.getByText('talk').closest('[data-word="true"]') as HTMLElement;
+        wordSpan.getBoundingClientRect = () => new DOMRect(420, 720, 48, 28);
+
+        fireEvent.click(wordSpan);
+        expect(await hostResult.findByText('meaning of talk')).toBeDefined();
+
+        // 模拟字幕推进：旧句中的 <Word> 卸载，但若不降级到已记录的 anchorRect，getBoundingClientRect 会变成 (0,0,0,0)
+        unmount();
+        wordSpan.getBoundingClientRect = () => new DOMRect(0, 0, 0, 0);
+
+        // 触发重新布局后，浮层改由快照矩形锚定，不会因 detached 节点退化到左上角 (8px, 8px)
+        fireEvent(window, new Event('resize'));
+
+        await waitFor(() => {
+            const floatingWrapper = hostResult.getByLabelText('talk');
+            expect(floatingWrapper.style.transform).toContain('712px');
+        });
+        const styleAttr = hostResult.getByLabelText('talk').getAttribute('style') ?? '';
+        expect(styleAttr).not.toMatch(/translate(?:3d)?\(8px,\s*8px/);
     });
 });

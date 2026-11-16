@@ -4,10 +4,13 @@ import { LocalEmbeddingRuntime } from '@/backend/infrastructure/ai/LocalEmbeddin
 import type LocalAiService from '@/backend/services/LocalAiService';
 import { app, BrowserWindow, protocol, type Session } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
-import { spawn } from 'node:child_process';
 import fs from 'fs';
 import path from 'path';
 import { installExtension, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
+import {
+    armForceExitWatchdog,
+    QUIT_FORCE_EXIT_TIMEOUT_MS,
+} from '@/backend/startup/forceExitWatchdog';
 import registerHandler from '@/backend/dispatcher';
 import { setConcurrencyLogger } from '@/backend/utils/concurrency';
 import { seedDefaultVocabularyIfNeeded } from '@/backend/startup/seedDefaultVocabulary';
@@ -23,7 +26,13 @@ import { initProcessWatchdog } from '@/backend/startup/initProcessWatchdog';
 import { initLogMaintenance } from '@/backend/startup/initLogMaintenance';
 import { terminateAllActiveChildProcesses } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { RESET_DB_RESYNC_FLAG } from '@/common/constants/resetDb';
-import { isDevelopmentMode } from '@/backend/utils/runtimeEnv';
+import { isDevelopmentMode, getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
+import { destroyAppTray, initAppTray, isAppTrayActive } from '@/backend/startup/appTray';
+import {
+    hideWindowToTray,
+    shouldHideInsteadOfClose,
+    showAndFocusWindow,
+} from '@/backend/infrastructure/window/window-close-policy';
 import { storeGet } from '@/backend/infrastructure/settings/store';
 import type MobileAccessService from '@/backend/services/MobileAccessService';
 import type RendererEvents from '@/backend/services/gateways/renderer/RendererEvents';
@@ -96,6 +105,20 @@ const mainWindowRef = {
 };
 
 /**
+ * 唤醒并聚焦主窗口；若窗口已销毁且应用就绪则重建主窗口。
+ */
+const showOrCreateMainWindow = (): void => {
+    const window = mainWindowRef.current;
+    if (window && !window.isDestroyed()) {
+        showAndFocusWindow(window);
+        return;
+    }
+    if (app.isReady()) {
+        createWindow();
+    }
+};
+
+/**
  * 单实例锁：同一时刻只允许一个应用实例运行。
  *
  * 为什么必须在任何数据库迁移之前获取：两个实例并行启动会各自跑一遍启动迁移、
@@ -113,15 +136,7 @@ if (squirrelStartup) {
 } else {
     // 第二个实例启动时把已有实例的窗口带到前台，避免用户以为应用没反应。
     app.on('second-instance', () => {
-        const window = mainWindowRef.current;
-        if (!window || window.isDestroyed()) {
-            return;
-        }
-        if (window.isMinimized()) {
-            window.restore();
-        }
-        window.show();
-        window.focus();
+        showOrCreateMainWindow();
     });
 }
 
@@ -234,12 +249,14 @@ const createWindow = () => {
     logger.info('main window created');
     // Create the browser window.
     const isMac = process.platform === 'darwin';
+    const windowIconPath = !isMac ? getRuntimeResourcePath('resources', 'tray-icon@2x.png') : undefined;
     const mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
         // 学习页使用 480px 固定左栏，窗口过窄会把右栏挤到不可用。
         minWidth: 1024,
         minHeight: 640,
+        ...(windowIconPath && fs.existsSync(windowIconPath) ? { icon: windowIconPath } : {}),
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             // 本地媒体改由 media:// 协议提供，同源策略不再需要关闭。
@@ -274,11 +291,23 @@ const createWindow = () => {
                     : 'normal';
         container.get<RendererEvents>(TYPES.RendererEvents).windowStateUpdate(state);
     };
-    for (const event of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'minimize'] as const) {
-        // 五个事件的回调签名同为 () => void，Electron 类型按逐事件重载声明，
+    for (const event of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'minimize', 'show'] as const) {
+        // 回调签名同为 () => void，Electron 类型按逐事件重载声明，
         // 统一以 maximize 的签名挂接即可
         mainWindow.on(event as 'maximize', pushWindowState);
     }
+    // 点击窗口关闭按钮时隐藏到系统托盘保留后台播放/下载/未来桌面歌词能力；
+    // 仅在托盘退出、Cmd+Q 或迁移恢复页下才放行真正销毁窗口与退出进程。
+    mainWindow.on('close', (event) => {
+        if (shouldHideInsteadOfClose({
+            trayActive: isAppTrayActive(),
+            isQuitting: shutdownPhase !== 'idle',
+            recoveryMode: getMigrationFailure() !== null,
+        })) {
+            event.preventDefault();
+            hideWindowToTray(mainWindow);
+        }
+    });
     mainWindow.webContents.once('dom-ready', () => {
         logger.info('renderer dom ready', {
             durationMs: Math.round(performance.now() - startupStartedAt),
@@ -389,6 +418,10 @@ app.on('ready', async () => {
         mode: isDevelopmentMode() ? 'development' : 'production',
         proxyMode: storeGet('proxy.mode'),
     });
+    initAppTray({
+        onShowWindow: showOrCreateMainWindow,
+        onQuitApp: () => app.quit(),
+    });
     createWindow();
 });
 
@@ -401,46 +434,10 @@ app.on('window-all-closed', () => {
         app.quit();
     }
 });
-/**
- * 退出兜底超时。
- *
- * 正常退出是秒级：本地模型子进程最多等 3s 自然退出，手机访问只是关监听。
- */
-const QUIT_FORCE_EXIT_TIMEOUT_MS = 8_000;
-
 /** 退出流程所处阶段。 */
 type ShutdownPhase = 'idle' | 'stopping' | 'ready';
 
 let shutdownPhase: ShutdownPhase = 'idle';
-
-/**
- * 部署退出兜底：超时后如果本进程还活着，从外部直接 SIGKILL。
- *
- * 为什么不用 JS 定时器：卡死发生在 Electron 关掉 JS 环境之后的清理阶段，那时定时器不会再跑。
- * 实测一个卡在文件读上的线程池请求（等一个没人点的 TCC 授权弹窗就会这样）能让 app.quit()、
- * app.exit(0) 甚至 process.exit(0) 全部退不掉，只有来自进程外的信号能把它杀掉，
- * 所以这里起一个脱离父进程的 shell 来收尾；正常退出时它醒来发现进程已经没了，自行结束。
- *
- * 硬杀必须连子进程一起：主进程被 SIGKILL 后，子进程会被 launchd 收养、继续卡在原来的读上
- * （实测漏了 5 个 ffprobe），所以先杀直接子进程再杀自己；Windows 用 taskkill /t 直接杀整棵进程树。
- */
-const armForceExitWatchdog = (): void => {
-    const pid = process.pid;
-    const seconds = Math.ceil(QUIT_FORCE_EXIT_TIMEOUT_MS / 1000);
-    const command = process.platform === 'win32'
-        ? `timeout /t ${seconds} /nobreak >nul & taskkill /f /t /pid ${pid}`
-        : `sleep ${seconds}; for child in $(pgrep -P ${pid}); do [ "$child" = "$$" ] || kill -9 "$child" 2>/dev/null; done; kill -9 ${pid} 2>/dev/null`;
-    const watchdog = spawn(command, {
-        shell: true,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-    });
-    watchdog.on('error', (error) => {
-        logger.warn('quit watchdog failed to start', { error });
-    });
-    watchdog.unref();
-};
 
 /**
  * 退出前释放本地模型进程和手机访问监听，避免后台遗留进程、端口占用和长连接卡住退出。
@@ -468,6 +465,7 @@ app.on('before-quit', (event) => {
     logger.info('app before quit', { forceExitAfterMs: QUIT_FORCE_EXIT_TIMEOUT_MS });
     armForceExitWatchdog();
     try {
+        destroyAppTray();
         disposeProxyFeature();
         terminateAllActiveChildProcesses();
         const localAiShutdown = container.get<LocalAiService>(TYPES.LocalAiService).shutdown()
@@ -497,13 +495,11 @@ app.on('before-quit', (event) => {
 });
 app.on('activate', () => {
     // On OS X it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
+    // dock icon is clicked and there are no other windows open or the main window was hidden.
     if (!hasSingleInstanceLock) {
         return;
     }
-    if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow();
-    }
+    showOrCreateMainWindow();
 });
 
 // In this file you can include the rest of your app's specific main process

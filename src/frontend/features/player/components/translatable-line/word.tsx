@@ -143,23 +143,38 @@ function WordBase({
     const vocabFamiliarStyle = classNames?.vocabFamiliar ?? theme.word.vocabFamiliarClass;
     const referenceBg = classNames?.reference ?? theme.word.popReferenceBgClass;
 
-    const buildTarget = (): WordPopoverTarget => ({
-        kind: 'word',
-        popKey: resolvedPopKey,
-        word,
-        original,
-        cleanWord,
-        lemma,
-        sentenceText,
-        sentenceIndex,
-        sentenceHash,
-        alwaysDark,
-        wordClassNames: {
-            openaiContainer: classNames?.openaiContainer,
-            refreshButton: classNames?.refreshButton,
-        },
-        triggerEl: spanRef.current,
-    });
+    const buildTarget = (): WordPopoverTarget => {
+        const el = spanRef.current;
+        const rect = el?.isConnected ? el.getBoundingClientRect() : null;
+        const anchorRect = rect && (rect.width > 0 || rect.height > 0)
+            ? {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+                width: rect.width,
+                height: rect.height,
+            }
+            : null;
+        return {
+            kind: 'word',
+            popKey: resolvedPopKey,
+            word,
+            original,
+            cleanWord,
+            lemma,
+            sentenceText,
+            sentenceIndex,
+            sentenceHash,
+            alwaysDark,
+            wordClassNames: {
+                openaiContainer: classNames?.openaiContainer,
+                refreshButton: classNames?.refreshButton,
+            },
+            triggerEl: el,
+            anchorRect,
+        };
+    };
 
     return (
         <span

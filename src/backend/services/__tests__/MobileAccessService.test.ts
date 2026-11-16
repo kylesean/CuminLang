@@ -28,7 +28,13 @@ vi.mock('@/backend/utils/runtimeEnv', () => ({
 }));
 
 vi.mock('@/backend/infrastructure/mobile/MobileWebServer', () => ({
-    ClientRequestError: class ClientRequestError extends Error {},
+    ClientRequestError: class ClientRequestError extends Error {
+        public readonly status: number;
+        constructor(message: string, status = 400) {
+            super(message);
+            this.status = status;
+        }
+    },
     default: class MockMobileWebServer {
         public start = vi.fn(() => (nextStartHook ? nextStartHook() : Promise.resolve()));
         public stop = vi.fn().mockResolvedValue(undefined);
@@ -107,5 +113,34 @@ describe('MobileAccessService 生命周期串行化', () => {
 
         const instance = serverInstances[0];
         expect(instance.tokenHistory[instance.tokenHistory.length - 1]).toBe(newToken);
+    });
+
+    it('观看记录或视频文件不存在时 getWatchDetail / resolveVideoFile / getThumbnail 均应抛出 404 ClientRequestError', async () => {
+        const notFoundService = new MobileAccessServiceImpl(
+            {
+                get: vi.fn((k: string) => settingsMap.get(k)),
+                set: vi.fn(() => true),
+            } as unknown as SettingsStore,
+            {
+                basicDetail: vi.fn().mockResolvedValue(null),
+                videoPath: vi.fn().mockRejectedValue(new Error('观看记录不存在：missing-id')),
+            } as unknown as WatchHistoryService,
+            {} as SubtitleService,
+            {} as TranslateService,
+            {} as MediaService,
+            {} as SubtitleTranslationService,
+        );
+
+        const dataSource = (notFoundService as unknown as {
+            createDataSource: () => {
+                getWatchDetail: (id: string) => Promise<unknown>;
+                resolveVideoFile: (id: string) => Promise<string>;
+                getThumbnail: (id: string) => Promise<string>;
+            };
+        }).createDataSource();
+
+        await expect(dataSource.getWatchDetail('missing-id')).rejects.toMatchObject({ status: 404 });
+        await expect(dataSource.resolveVideoFile('missing-id')).rejects.toMatchObject({ status: 404 });
+        await expect(dataSource.getThumbnail('missing-id')).rejects.toMatchObject({ status: 404 });
     });
 });

@@ -571,4 +571,61 @@ describe('句子练习服务', () => {
             expect(vo.transcript).toBe('what does it mean');
         });
     });
+
+    describe('scoreShadowing 与口语缩读对齐', () => {
+        it('包含 gonna 等缩读词时 GOP 音素分与时间窗应与展开后的单词索引一一对应', async () => {
+            speechGateway.transcriptText = 'i going to leave';
+            speechGateway.tokens = [
+                { text: ' i', start: 0.0, end: 0.2 },
+                { text: ' going', start: 0.2, end: 0.5 },
+                { text: ' to', start: 0.5, end: 0.7 },
+                { text: ' leave', start: 0.7, end: 1.1 },
+            ];
+            const scoreWords = vi.fn(async ({ words }: { words: string[] }) => (
+                words.map((word, wordIndex) => ({
+                    wordIndex,
+                    word,
+                    phonemeScore: 80 + wordIndex,
+                    phonemes: [],
+                    startSec: wordIndex * 0.25,
+                    endSec: (wordIndex + 1) * 0.25,
+                }))
+            ));
+            const gopService = {
+                isReady: async () => true,
+                scoreWords,
+            };
+
+            const gopPracticeService = new SentencePracticeServiceImpl(
+                new SentencePracticeRecordRepositoryImpl(memoryDb.db),
+                {
+                    convertToWav: vi.fn().mockImplementation(async (_input: string, output: string) => {
+                        await fsGateway.writeBinaryFile(output, buildWav(1.2, 6000));
+                    }),
+                } as unknown as FfmpegService,
+                {
+                    provideDirectory: async (target: StorageDirectoryTarget) => path.join(STORAGE_ROOT, target),
+                    ensurePathAccessPermissionIfExists: async () => undefined,
+                } as unknown as StorageDirectoryProvider,
+                fsGateway,
+                new FakeTranscriptionEngineSelector(speechGateway),
+                { lookup: () => ({ phonetic: 'ˈɡɔnə' }) } as never,
+                gopService as never,
+            );
+
+            const vo = await gopPracticeService.scoreShadowing({
+                fileHash: FILE_HASH,
+                sentenceIndex: 7,
+                audio: new Uint8Array([1, 2, 3, 4]),
+                expectedText: 'I gonna leave',
+                referenceDurationSec: 1.2,
+            });
+
+            expect(scoreWords).toHaveBeenCalledWith(
+                expect.objectContaining({ words: ['i', 'going', 'to', 'leave'] }),
+            );
+            const leaveResult = vo.words.find((w) => w.expected === 'leave');
+            expect(leaveResult?.phonemeScore).toBe(83);
+        });
+    });
 });

@@ -19,6 +19,7 @@
     "showInExplorer": "在文件夹中显示",
     "delete": "删除",
     "openFolder": "打开文件夹",
+    "folderNoMediaFound": "所选文件夹下没有找到可播放的音视频文件",
     "folderBadge": "文件夹",
     "recentPlayedVideo": "最近播放：{{name}}",
     "deleteConfirmTitle": "删除观看记录？",

@@ -274,4 +274,16 @@ describe('意群重切分', () => {
         }
         expect(result.map((item) => item.contentEn).join(' ')).toBe(text);
     });
+
+    it('多词 cue 以单词句开头时，单词句不吞掉整条 cue 时长', () => {
+        const result = resegmentIntoMeaningGroups([
+            line(1, 0, 6, 'Wait. Come here right now please.'),
+        ]);
+        expect(result).toHaveLength(2);
+        expect(result[0].contentEn).toBe('Wait.');
+        expect(result[1].contentEn).toBe('Come here right now please.');
+        expect(result[0].end).toBeLessThan(2);
+        expect(result[1].end - result[1].start).toBeGreaterThan(2);
+        expect(result[1].end).toBe(6);
+    });
 });

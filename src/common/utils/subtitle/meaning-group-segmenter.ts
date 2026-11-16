@@ -621,7 +621,8 @@ const buildLines = (words: readonly Word[], starts: readonly number[]): SrtLine[
           - 同一 cue 被拆成多行时，只有最后一行才贴 cue 终点，
             否则第一行会吃掉整条 cue 的时长。
         */
-        const isCueLastWord = last.cueIndex !== slice[slice.length - 2]?.cueIndex;
+        const nextWord = words[to];
+        const isCueLastWord = last.cueIndex !== nextWord?.cueIndex;
         const coveredCueEnd = slice.reduce(
             (max, word) => Math.max(
                 max,

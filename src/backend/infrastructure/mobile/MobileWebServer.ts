@@ -898,7 +898,13 @@ export default class MobileWebServer {
         id: string,
     ): Promise<void> {
         const filePath = await this.source.getThumbnail(id);
-        const stat = await fs.promises.stat(filePath);
+        let stat: Stats;
+        try {
+            stat = await fs.promises.stat(filePath);
+        } catch {
+            this.sendJson(response, 404, { error: '缩略图不存在' });
+            return;
+        }
         if (!stat.isFile()) {
             this.sendJson(response, 404, { error: '缩略图不存在' });
             return;
@@ -929,7 +935,13 @@ export default class MobileWebServer {
         id: string,
     ): Promise<void> {
         const filePath = await this.source.resolveVideoFile(id);
-        const stat = await fs.promises.stat(filePath);
+        let stat: Stats;
+        try {
+            stat = await fs.promises.stat(filePath);
+        } catch {
+            this.sendJson(response, 404, { error: '视频文件不存在' });
+            return;
+        }
         if (!stat.isFile()) {
             this.sendJson(response, 404, { error: '视频文件不存在' });
             return;

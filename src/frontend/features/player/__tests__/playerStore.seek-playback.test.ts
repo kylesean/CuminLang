@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePlayer } from '@/frontend/features/player/playerStore';
+import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import type { Sentence } from '@/common/types/SentenceC';
 
 // playerStore 在模块加载时会拉取设置与窗口信息；这里只关心 seek 对播放意图的影响，
@@ -114,6 +115,23 @@ describe('playerStore seek 与播放意图', () => {
         usePlayer.getState().repeatCurrent({ loop: false });
 
         expect(usePlayer.getState().playing).toBe(true);
+    });
+
+    it('连续缩短当前句结束时间不会跨过开始时间导致起止互换或负数持久化', () => {
+        const shortSentences = [
+            { key: 'h-0', index: 0, fileHash: 'h', text: 'short', start: 0.3, end: 0.8, adjustedStart: null, adjustedEnd: null },
+        ] as unknown as Sentence[];
+        usePlayer.setState({ playing: false });
+        usePlayer.getState().loadSubtitles(shortSentences);
+        usePlayer.setState({ currentSentence: shortSentences[0], playing: false });
+        usePlaybackSession.setState({ subtitlePath: '/tmp/test.srt', srtHash: 'hash' });
+
+        usePlayer.getState().adjustCurrentEnd(-1.0);
+
+        const state = usePlayer.getState();
+        const mapped = state.srtTender!.mapSeekTime(state.currentSentence!);
+        expect(mapped.start).toBeCloseTo(0.3, 5);
+        expect(mapped.end).toBeGreaterThanOrEqual(0.32 - 1e-6);
     });
 
     it('超短句单句循环在落点处不反复触发 seek（区间下限守卫）', () => {

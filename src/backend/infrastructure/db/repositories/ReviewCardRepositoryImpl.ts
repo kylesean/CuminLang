@@ -126,6 +126,22 @@ export default class ReviewCardRepositoryImpl implements ReviewCardRepository {
         }
     }
 
+    public async renameWord(oldWord: string, newWord: string): Promise<void> {
+        const from = oldWord.toLowerCase();
+        const to = newWord.toLowerCase();
+        if (from === to) {
+            return;
+        }
+        const now = new Date().toISOString();
+        this.db.transaction((tx) => {
+            tx.delete(reviewCard).where(eq(reviewCard.word, to)).run();
+            tx.update(reviewCard)
+                .set({ word: to, updated_at: now })
+                .where(eq(reviewCard.word, from))
+                .run();
+        });
+    }
+
     public async deleteOrphans(): Promise<void> {
         this.db.delete(reviewCard)
             .where(notInArray(

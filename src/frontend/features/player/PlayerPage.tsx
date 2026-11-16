@@ -20,6 +20,7 @@ import useSubtitleTranslation from '@/frontend/features/player/translationStore'
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { useDevPlayerEntry } from '@/frontend/features/player/dev/useDevPlayerEntry';
 import { setPlayerViewMode } from '@/frontend/features/player/lib/player-view-controller';
+import { resetPlayerOverlaysOnMediaReset } from '@/frontend/features/player/lib/player-view-sync';
 
 const logger = getRendererLogger('PlayerWithControlsPage');
 const MODE_SWITCH_TOAST_ID = 'mode-switch-toast';
@@ -128,6 +129,7 @@ const PlayerWithControlsPage = () => {
                 useSubtitleTranslation.getState().clearTranslations();
                 usePlayer.getState().clearSubtitles();
                 usePlayer.getState().setSource(null);
+                resetPlayerOverlaysOnMediaReset();
                 return;
             }
             const previousVideoId = usePlaybackSession.getState().videoId;
@@ -142,6 +144,7 @@ const PlayerWithControlsPage = () => {
                 });
                 // 整句学习会话绑定在具体视频与字幕缓存上，换片必须结束，否则会检索到上一部片的字幕
                 useChatPanel.getState().clear();
+                resetPlayerOverlaysOnMediaReset();
             }
             if (videoPath && vp !== videoPath) {
                 usePlaybackSession.getState().updateFile(videoPath);

@@ -51,6 +51,11 @@ export default interface ReviewCardRepository {
     ensureForWords(words: string[], dueAt: string): Promise<void>;
 
     /**
+     * 迁移单词关联的复习卡（改名时调用）；目标词若已有孤儿卡会先清理再迁移。
+     */
+    renameWord(oldWord: string, newWord: string): Promise<void>;
+
+    /**
      * 清理词表里已经不存在的卡，避免重新导入同名词时复活旧调度。
      */
     deleteOrphans(): Promise<void>;

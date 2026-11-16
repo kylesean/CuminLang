@@ -45,6 +45,8 @@ export const QUIET_PATH_POLICIES: Partial<Record<string, { logParam: boolean; lo
 export interface RegisterVoidRouteOptions<K extends keyof ApiMap> {
     /** 可选入参校验架构。 */
     schema?: z.ZodType<ApiDefinitions[K]['params']>;
+    /** 是否在异常时通过 RendererEvents.error 广播全局错误提示；前端已自行处理错误时传 false。默认 true。 */
+    broadcastError?: boolean;
 }
 
 /**
@@ -53,6 +55,8 @@ export interface RegisterVoidRouteOptions<K extends keyof ApiMap> {
 export interface RegisterParameterizedRouteOptions<K extends keyof ApiMap> {
     /** 跨进程边界的入参 Zod 校验架构；校验失败时直接抛出显式错误。 */
     schema: z.ZodType<ApiDefinitions[K]['params']>;
+    /** 是否在异常时通过 RendererEvents.error 广播全局错误提示；前端已自行处理错误时传 false。默认 true。 */
+    broadcastError?: boolean;
 }
 
 /**
@@ -129,7 +133,7 @@ export default function registerRoute<K extends keyof ApiMap>(
 export default function registerRoute<K extends keyof ApiMap>(
     path: K,
     func: (params: ApiDefinitions[K]['params']) => Promise<ApiDefinitions[K]['return']>,
-    options?: { schema?: z.ZodType<ApiDefinitions[K]['params']> },
+    options?: { schema?: z.ZodType<ApiDefinitions[K]['params']>; broadcastError?: boolean },
 ): void {
     registerIpcRoute(path, Boolean(options?.schema), async (_event, param: unknown, traceCarrier?: TraceCarrier) => {
         const traceId = resolveTraceId(traceCarrier?.traceId);
@@ -176,18 +180,20 @@ export default function registerRoute<K extends keyof ApiMap>(
                     logger.warn('ipc request failed with no speech', errorData);
                 } else {
                     logger.error('ipc request failed', errorData);
-                    /*
-                      广播给渲染端的错误必须是「人能读的一句话」。
-                      这条通道会直接变成全局 toast，而底层异常常常是上千字符的
-                      C++ stderr（parakeet 的 Segments (0) 就是典型）。原样广播
-                      既会糊满屏幕，也会和调用方自己的 toast 重复弹两次。
-                      日志里仍保留完整 error，排查不受影响。
-                    */
-                    const broadcast = error instanceof Error ? error : new Error(String(error));
-                    const readable = describeAsrFailure(broadcast);
-                    container
-                        .get<RendererEvents>(TYPES.RendererEvents)
-                        .error(new Error(readable));
+                    if (options?.broadcastError !== false) {
+                        /*
+                          广播给渲染端的错误必须是「人能读的一句话」。
+                          这条通道会直接变成全局 toast，而底层异常常常是上千字符的
+                          C++ stderr（parakeet 的 Segments (0) 就是典型）。原样广播
+                          既会糊满屏幕，也会和调用方自己的 toast 重复弹两次。
+                          日志里仍保留完整 error，排查不受影响。
+                        */
+                        const broadcast = error instanceof Error ? error : new Error(String(error));
+                        const readable = describeAsrFailure(broadcast);
+                        container
+                            .get<RendererEvents>(TYPES.RendererEvents)
+                            .error(new Error(readable));
+                    }
                 }
                 throw error;
             }

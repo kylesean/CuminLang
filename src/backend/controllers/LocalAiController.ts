@@ -23,21 +23,25 @@ export class LocalAiController implements Controller {
         registerRoute('local-ai/status', () => this.localAi.getStatus());
         registerRoute('local-ai/use', ({ modelId }) => this.localAi.setActiveModelId(modelId), {
             schema: modelIdParamSchema,
+            broadcastError: false,
         });
         registerRoute('local-ai/download', ({ modelId }) => this.localAi.download(modelId), {
             schema: modelIdParamSchema,
+            broadcastError: false,
         });
-        registerRoute('local-ai/cancel-download', () => this.localAi.cancelDownload());
+        registerRoute('local-ai/cancel-download', () => this.localAi.cancelDownload(), { broadcastError: false });
         registerRoute('local-ai/delete', ({ modelId }) => this.localAi.deleteModel(modelId), {
             schema: modelIdParamSchema,
+            broadcastError: false,
         });
         registerRoute('local-ai/speed-test', ({ modelId }) => this.localAi.speedTest(modelId), {
             schema: modelIdParamSchema,
+            broadcastError: false,
         });
         registerRoute('local-ai/embedding-status', () => this.embedding.getStatus());
-        registerRoute('local-ai/embedding-download', () => this.embedding.download());
-        registerRoute('local-ai/embedding-multimodal-download', () => this.embedding.downloadMultimodal());
-        registerRoute('local-ai/embedding-cancel-download', async () => this.embedding.cancelDownload());
-        registerRoute('local-ai/embedding-remove', () => this.embedding.remove());
+        registerRoute('local-ai/embedding-download', () => this.embedding.download(), { broadcastError: false });
+        registerRoute('local-ai/embedding-multimodal-download', () => this.embedding.downloadMultimodal(), { broadcastError: false });
+        registerRoute('local-ai/embedding-cancel-download', async () => this.embedding.cancelDownload(), { broadcastError: false });
+        registerRoute('local-ai/embedding-remove', () => this.embedding.remove(), { broadcastError: false });
     }
 }

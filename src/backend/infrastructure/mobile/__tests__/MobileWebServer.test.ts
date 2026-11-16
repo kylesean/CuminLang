@@ -251,4 +251,30 @@ describe('手机页的浏览器访问链路', () => {
             error: expect.stringContaining('频繁'),
         });
     });
+
+    it('视频或缩略图文件不存在（ENOENT）时返回 404 而非 500', async () => {
+        await server?.stop();
+        const missingPath = path.join(staticDirectory, 'missing-file.mp4');
+        server = new MobileWebServer({
+            staticDirectory,
+            source: {
+                ...createSource(),
+                resolveVideoFile: async () => missingPath,
+                getThumbnail: async () => missingPath,
+            },
+            token: TEST_TOKEN,
+        });
+        await server.start(0);
+        const testBaseUrl = `http://127.0.0.1:${server.boundPort()}`;
+
+        const videoResp = await fetch(`${testBaseUrl}/api/videos/missing/stream`, {
+            headers: { 'X-CuminLang-Token': TEST_TOKEN },
+        });
+        const thumbResp = await fetch(`${testBaseUrl}/api/videos/missing/thumb`, {
+            headers: { 'X-CuminLang-Token': TEST_TOKEN },
+        });
+
+        expect(videoResp.status).toBe(404);
+        expect(thumbResp.status).toBe(404);
+    });
 });

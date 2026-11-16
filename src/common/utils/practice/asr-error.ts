@@ -19,6 +19,7 @@ import {
     ASR_ERROR_NO_TOKEN_TIMELINE,
     ASR_ERROR_ZERO_SEGMENTS_PATTERN,
 } from '@/common/constants/asr-errors';
+import { stripIpcErrorPrefix } from '@/common/utils/ipc-error';
 
 /** 判定「没有识别出任何语音」的特征串；模式从契约常量派生（空白放宽为 \s+）。 */
 const NO_SPEECH_PATTERNS = [
@@ -27,9 +28,6 @@ const NO_SPEECH_PATTERNS = [
     new RegExp(ASR_ERROR_NO_TOKEN_TIMELINE.replace(/\s+/g, '\\s+')),
     new RegExp(ASR_ERROR_EMPTY_RECORDING),
 ] as const;
-
-/** 剥掉 Electron IPC 在错误消息前面加的固定前缀。 */
-const IPC_PREFIX = /^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i;
 
 /**
  * 判断异常是否属于「没有识别出语音」。
@@ -48,7 +46,7 @@ export const isNoSpeechError = (message: string): boolean =>
  */
 export const describeAsrFailure = (error: unknown): string => {
     const raw = error instanceof Error ? error.message : String(error);
-    const stripped = raw.replace(IPC_PREFIX, '').trim();
+    const stripped = stripIpcErrorPrefix(raw);
 
     if (isNoSpeechError(stripped)) {
         // parakeet 只支持英文；用中文跟读时同样会得到 Segments (0)，

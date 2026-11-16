@@ -266,25 +266,28 @@ export default class SystemController implements Controller {
         registerRoute('system/info', () => this.info());
         registerRoute('system/select-file', (p) => this.selectFile(p), {
             schema: z.array(z.string()),
+            broadcastError: false,
         });
         registerRoute('system/select-folder', (p) => this.selectFolder(p), {
             schema: z.object({
                 defaultPath: z.string().optional(),
                 createDirectory: z.boolean().optional(),
             }),
+            broadcastError: false,
         });
         registerRoute('system/path-info', (p) => this.pathInfo(p), {
             schema: nonEmptyStringSchema,
         });
-        registerRoute('system/reset-db', () => this.resetDb());
+        registerRoute('system/reset-db', () => this.resetDb(), { broadcastError: false });
         registerRoute('system/open-folder', (p) => this.openFolder(p), {
             schema: z.object({
                 path: nonEmptyStringSchema,
                 createDirectory: z.boolean().optional(),
             }),
+            broadcastError: false,
         });
-        registerRoute('system/open-folder/cache', () => this.openCacheDir());
-        registerRoute('system/open-folder/logs', () => this.openLogsDir());
+        registerRoute('system/open-folder/cache', () => this.openCacheDir(), { broadcastError: false });
+        registerRoute('system/open-folder/logs', () => this.openLogsDir(), { broadcastError: false });
         registerRoute('system/window-size/change', (p) => this.changeWindowSize(p), {
             schema: windowStateSchema,
         });
@@ -294,14 +297,17 @@ export default class SystemController implements Controller {
         });
         registerRoute('system/check-update', (p) => this.checkUpdate(p), {
             schema: z.object({ mode: z.enum(['toast']).optional() }).optional(),
+            broadcastError: false,
         });
         registerRoute('system/open-url', (p) => this.openUrl(p), {
             schema: z.url({ protocol: /^https?$/ }),
+            broadcastError: false,
         });
         registerRoute('system/clipboard/write', async (text) => {
             clipboard.writeText(text);
         }, {
             schema: z.string(),
+            broadcastError: false,
         });
         registerRoute('system/app-version', () => this.appVersion());
         registerRoute('system/ensure-microphone', () => this.ensureMicrophone());

@@ -1,4 +1,5 @@
 import type { ContentCompassReason } from '@/common/types/contentCompass';
+import TimeUtil from '@/common/utils/TimeUtil';
 
 /**
  * 推荐的四段因果链。
@@ -48,6 +49,15 @@ export interface AttributionVO {
 
 const stageIndex = (stage: AttributionStage): number => ATTRIBUTION_STAGES.indexOf(stage);
 
+const isAtOrAfter = (later: string, earlier: string): boolean => {
+    const laterMs = TimeUtil.parseUtcTimestampMs(later);
+    const earlierMs = TimeUtil.parseUtcTimestampMs(earlier);
+    if (laterMs === null || earlierMs === null) {
+        return later >= earlier;
+    }
+    return laterMs >= earlierMs;
+};
+
 /**
  * 计算每条记录走到了哪一阶段。
  *
@@ -57,15 +67,15 @@ const stageIndex = (stage: AttributionStage): number => ATTRIBUTION_STAGES.index
 export const reachedStage = (record: AttributionRecord): AttributionStage => {
     let stage: AttributionStage = 'shown';
     if (record.openedAt) stage = 'opened';
-    if (record.openedAt && record.reviewedAt && record.reviewedAt >= record.openedAt) {
+    if (record.openedAt && record.reviewedAt && isAtOrAfter(record.reviewedAt, record.openedAt)) {
         stage = 'reviewed';
     }
     if (
         record.openedAt
         && record.reviewedAt
         && record.recalledAt
-        && record.reviewedAt >= record.openedAt
-        && record.recalledAt >= record.reviewedAt
+        && isAtOrAfter(record.reviewedAt, record.openedAt)
+        && isAtOrAfter(record.recalledAt, record.reviewedAt)
     ) {
         stage = 'recalled';
     }

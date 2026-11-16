@@ -69,6 +69,7 @@ export default class MediaController implements Controller {
                 width: positiveIntSchema.max(4096).optional(),
                 format: z.enum(['jpg', 'png']).optional(),
             }),
+            broadcastError: false,
         });
         registerRoute('media/duration', (params) => this.duration(params), {
             schema: nonEmptyStringSchema,

@@ -373,4 +373,33 @@ describe('跟读录音在面板卸载时的全局状态', () => {
         const tail = resolveVadLimits(16000, 19400);
         expect(tail.trailingSilenceMs).toBe(2200);
     });
+
+    it('new MediaRecorder 或 recorder.start 抛出异常时释放音轨且状态回退 idle，不死锁在 requesting', async () => {
+        const stopTrack = vi.fn();
+        Object.defineProperty(navigator, 'mediaDevices', {
+            configurable: true,
+            value: {
+                getUserMedia: vi.fn().mockResolvedValue({
+                    getTracks: () => [{ stop: stopTrack }],
+                }),
+            },
+        });
+        class ThrowingMediaRecorder extends FakeMediaRecorder {
+            public override start(): void {
+                throw new Error('audio track ended');
+            }
+        }
+        vi.stubGlobal('MediaRecorder', ThrowingMediaRecorder);
+
+        const { result } = renderHook(() => usePracticeRecorder({
+            onRecordingComplete: vi.fn().mockResolvedValue(undefined),
+        }));
+        await act(async () => {
+            await result.current.start();
+        });
+
+        expect(stopTrack).toHaveBeenCalledTimes(1);
+        expect(result.current.phase).toBe('idle');
+        expect(usePracticePanel.getState().recorderPhase).toBe('idle');
+    });
 });

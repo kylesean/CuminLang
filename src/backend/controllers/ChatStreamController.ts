@@ -59,7 +59,7 @@ export default class ChatStreamController implements Controller {
             params: ChatSessionCreateParams,
         ): Promise<ChatSessionCreateResult> => {
             return this.chatSessionService.create(params);
-        }, { schema: chatSessionCreateSchema });
+        }, { schema: chatSessionCreateSchema, broadcastError: false });
 
         registerRoute('chat/session/close', async (params: ChatSessionCloseParams): Promise<void> => {
             this.chatSessionService.close(params.sessionId);
@@ -107,13 +107,13 @@ export default class ChatStreamController implements Controller {
             params: LearningPromptPresetSaveParams,
         ): Promise<LearningPromptPresetVO> => {
             return this.promptPresetService.save(params);
-        }, { schema: learningPromptPresetSaveSchema });
+        }, { schema: learningPromptPresetSaveSchema, broadcastError: false });
 
         registerRoute('chat/prompt-presets/reset', async (
             params: LearningPromptPresetResetParams,
         ): Promise<LearningPromptPresetVO> => {
             return this.promptPresetService.resetBuiltin(params);
-        }, { schema: learningPromptPresetResetSchema });
+        }, { schema: learningPromptPresetResetSchema, broadcastError: false });
 
         registerRoute('chat/transcribe-audio', async (
             params: ChatTranscribeAudioParams,

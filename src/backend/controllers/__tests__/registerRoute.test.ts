@@ -149,4 +149,26 @@ describe('registerRoute IPC 边界语义', () => {
         expect(ipcLogger.error).not.toHaveBeenCalled();
         expect(rendererError).not.toHaveBeenCalled();
     });
+
+    it('broadcastError: false 时（无参路由）只记录 error 并向调用方抛错，不广播 RendererEvents.error', async () => {
+        registerRoute('youtube-import/setting-detail', async () => {
+            throw new Error('upstream failed');
+        }, { broadcastError: false });
+
+        await expect(captured.get('youtube-import/setting-detail')!({}, undefined)).rejects.toThrow('upstream failed');
+
+        expect(ipcLogger.error).toHaveBeenCalledWith('ipc request failed', expect.objectContaining({ path: 'youtube-import/setting-detail' }));
+        expect(rendererError).not.toHaveBeenCalled();
+    });
+
+    it('broadcastError: false 时（有参路由）只记录 error 并向调用方抛错，不广播 RendererEvents.error', async () => {
+        registerRoute('dp-task/detail', async () => {
+            throw new Error('upstream failed');
+        }, { schema: positiveIntSchema, broadcastError: false });
+
+        await expect(captured.get('dp-task/detail')!({}, 21)).rejects.toThrow('upstream failed');
+
+        expect(ipcLogger.error).toHaveBeenCalledWith('ipc request failed', expect.objectContaining({ path: 'dp-task/detail' }));
+        expect(rendererError).not.toHaveBeenCalled();
+    });
 });

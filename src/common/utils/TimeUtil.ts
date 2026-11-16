@@ -75,8 +75,19 @@ export default class TimeUtil {
      * @returns 解析后的 `Date` 对象。
      */
     public static isoToDate(iso: Nullable<string>): Date {
+        const ms = TimeUtil.parseUtcTimestampMs(iso);
+        return ms === null ? new Date() : new Date(ms);
+    }
+
+    /**
+     * 将 ISO 8601 字符串或数据库存储的 UTC `YYYY-MM-DD HH:mm:ss` 字符串解析为 UTC 毫秒时间戳。
+     *
+     * @param iso 待解析的时间字符串。
+     * @returns 有效的 UTC 毫秒数；为空白或格式非法时返回 `null`。
+     */
+    public static parseUtcTimestampMs(iso: Nullable<string>): number | null {
         if (StrUtil.isBlank(iso)) {
-            return new Date();
+            return null;
         }
         const trimmed = iso.trim();
         const normalized = NAIVE_DATETIME_RE.test(trimmed)
@@ -84,9 +95,9 @@ export default class TimeUtil {
             : trimmed;
         const parsed = parseISO(normalized);
         if (!isValid(parsed)) {
-            return new Date();
+            return null;
         }
-        return parsed;
+        return parsed.getTime();
     }
 
     /**

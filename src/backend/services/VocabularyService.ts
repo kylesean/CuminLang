@@ -449,6 +449,7 @@ export class VocabularyServiceImpl implements VocabularyService {
                         status: 'learning',
                         source: nextSource,
                     });
+                    await this.reviewCardRepository.ensureForWords([lemma], new Date().toISOString());
                     this.invalidateVocabularyCaches();
                 }
                 return {
@@ -470,6 +471,7 @@ export class VocabularyServiceImpl implements VocabularyService {
                     status: 'learning',
                     source: 'manual',
                 });
+                await this.reviewCardRepository.ensureForWords([lemma], new Date().toISOString());
             } catch (insertError) {
                 // 并发收藏同一词的不同变体时会撞唯一约束；重新查到记录即转为已存在返回。
                 const raced = await this.wordsRepository.findByWord(lemma);
@@ -610,6 +612,7 @@ export class VocabularyServiceImpl implements VocabularyService {
             await this.wordsRepository.updateByWord(oldWord, { word: newWord, translate });
             if (newWord !== oldWord) {
                 await this.clipWordRepository.renameWord(oldWord, newWord);
+                await this.reviewCardRepository.renameWord(oldWord, newWord);
             }
             this.invalidateVocabularyCaches();
 

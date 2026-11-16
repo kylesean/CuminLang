@@ -150,17 +150,18 @@ export default class EnglishDictionaryService {
         try {
             this.openDb();
             const rows = (this.senseStmt!.all(normalized) as SenseRow[]);
+            const lookupKey = rows.length > 0 ? normalized : lemmatizeWord(normalized);
             const usedRows = rows.length > 0
                 ? rows
-                : (this.senseStmt!.all(lemmatizeWord(normalized)) as SenseRow[]);
+                : (this.senseStmt!.all(lookupKey) as SenseRow[]);
             if (usedRows.length === 0) return null;
             return usedRows.slice(0, 8).map((row) => ({
                 partOfSpeech: row.pos,
                 definition: row.gloss,
                 examples: JSON.parse(row.examples) as string[],
-                synonyms: (this.synonymStmt!.all(row.synset_key, normalized) as Array<{ lemma: string }>)
+                synonyms: (this.synonymStmt!.all(row.synset_key, lookupKey) as Array<{ lemma: string }>)
                     .map((item) => item.lemma),
-                antonyms: (this.antonymStmt!.all(normalized) as Array<{ antonym: string }>)
+                antonyms: (this.antonymStmt!.all(lookupKey) as Array<{ antonym: string }>)
                     .map((item) => item.antonym),
             }));
         } catch (error) {
@@ -408,7 +409,7 @@ export default class EnglishDictionaryService {
 }
 
 /** Worker 线程脚本：独立解析 WordNet data.* 并构建 SQLite 索引库。 */
-const WORDNET_BUILD_WORKER_SCRIPT = `
+export const WORDNET_BUILD_WORKER_SCRIPT = `
 const fs = require('node:fs');
 const path = require('node:path');
 const { parentPort, workerData } = require('node:worker_threads');
@@ -435,7 +436,9 @@ const parseSynsetLine = (raw, defaultPos, synsetWords, pendingAntonyms) => {
     const offset = tokens[cursor++];
     cursor += 1;
     const ssType = tokens[cursor++];
-    const wordCount = Number(tokens[cursor++]);
+    const wordCountHex = tokens[cursor++];
+    if (!wordCountHex || !/^[0-9a-fA-F]+$/u.test(wordCountHex)) return null;
+    const wordCount = Number.parseInt(wordCountHex, 16);
     if (!Number.isInteger(wordCount) || wordCount < 0) return null;
 
     const lemmas = [];
@@ -456,9 +459,9 @@ const parseSynsetLine = (raw, defaultPos, synsetWords, pendingAntonyms) => {
         const targetOffset = tokens[cursor++];
         const targetPosToken = tokens[cursor++];
         const sourceTarget = tokens[cursor++];
-        if (symbol !== '!' || !targetOffset || !sourceTarget || sourceTarget.length !== 4) continue;
-        const sourceIndex = Number(sourceTarget.slice(0, 2)) - 1;
-        const targetIndex = Number(sourceTarget.slice(2, 4)) - 1;
+        if (symbol !== '!' || !targetOffset || !sourceTarget || !/^[0-9a-fA-F]{4}$/u.test(sourceTarget)) continue;
+        const sourceIndex = Number.parseInt(sourceTarget.slice(0, 2), 16) - 1;
+        const targetIndex = Number.parseInt(sourceTarget.slice(2, 4), 16) - 1;
         if (sourceIndex < 0 || targetIndex < 0) continue;
         pendingAntonyms.push({
             sourceKey: key,

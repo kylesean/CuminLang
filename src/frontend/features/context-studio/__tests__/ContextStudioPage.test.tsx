@@ -311,4 +311,83 @@ describe('ContextStudioPage - Three-column workspace (Words & Sentences)', () =>
             expect(within(canvas).getByText('Steve Jobs Stanford')).toBeDefined();
         });
     });
+
+    it('imports vocabulary via native selectVocabularyFile dialog rather than deprecated File.path', async () => {
+        const { videoLearningApi } = await import('@/frontend/features/video-learning/videoLearningApi');
+        (videoLearningApi as unknown as Record<string, unknown>).selectVocabularyFile = vi
+            .fn()
+            .mockResolvedValue(['/tmp/words.xlsx']);
+
+        render(
+            <MemoryRouter initialEntries={['/context-studio']}>
+                <ContextStudioPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /导入/i })).toBeDefined();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: /导入/i }));
+
+        await waitFor(() => {
+            expect(videoLearningApi.importVocabulary).toHaveBeenCalledWith('/tmp/words.xlsx');
+        });
+    });
+
+    it('exports vocabulary template as binary xlsx rather than base64 plain text', async () => {
+        const { videoLearningApi } = await import('@/frontend/features/video-learning/videoLearningApi');
+        // "PK" base64 -> "UEs="
+        vi.mocked(videoLearningApi.exportVocabularyTemplate).mockResolvedValueOnce({
+            success: true,
+            data: 'UExL',
+        });
+
+        const capturedBlobs: Blob[] = [];
+        const createObjectURL = vi.fn((blob: Blob) => {
+            capturedBlobs.push(blob);
+            return 'blob:mock-url';
+        });
+        const revokeObjectURL = vi.fn();
+        vi.stubGlobal('URL', {
+            ...URL,
+            createObjectURL,
+            revokeObjectURL,
+        });
+
+        const anchorClicks: string[] = [];
+        const origCreateElement = document.createElement.bind(document);
+        const createSpy = vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+            const el = origCreateElement(tagName);
+            if (tagName === 'a') {
+                el.click = () => {
+                    anchorClicks.push((el as HTMLAnchorElement).download);
+                };
+            }
+            return el;
+        }) as typeof document.createElement);
+
+        try {
+            render(
+                <MemoryRouter initialEntries={['/context-studio']}>
+                    <ContextStudioPage />
+                </MemoryRouter>,
+            );
+
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /导出/i })).toBeDefined();
+            });
+
+            fireEvent.click(screen.getByRole('button', { name: /导出/i }));
+
+            await waitFor(() => {
+                expect(anchorClicks).toHaveLength(1);
+            });
+            expect(anchorClicks[0]).toMatch(/\.xlsx$/);
+            expect(capturedBlobs[0]?.type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        } finally {
+            createSpy.mockRestore();
+            vi.unstubAllGlobals();
+        }
+    });
 });

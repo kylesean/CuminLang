@@ -20,8 +20,8 @@ export default class MigrationFailureController implements Controller {
 
     registerRoutes(): void {
         registerRoute('migration-failure/detail', async () => this.detail());
-        registerRoute('migration-failure/retry', async () => this.retry());
-        registerRoute('migration-failure/reset-and-relaunch', () => this.resetAndRelaunch());
+        registerRoute('migration-failure/retry', async () => this.retry(), { broadcastError: false });
+        registerRoute('migration-failure/reset-and-relaunch', () => this.resetAndRelaunch(), { broadcastError: false });
     }
 
     /**

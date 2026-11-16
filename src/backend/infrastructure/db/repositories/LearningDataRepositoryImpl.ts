@@ -26,6 +26,7 @@ import type {
 } from '@/common/types/learningData';
 import type { ReviewOutcome } from '@/backend/services/repositories/WordEncounterRepository';
 import { effectiveWordMastery } from '@/common/learning/mastery';
+import TimeUtil from '@/common/utils/TimeUtil';
 
 /**
  * restore 单条多值 INSERT 的每批行数上限。
@@ -165,19 +166,32 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
     }
 
     public async insertRecommendationEvent(value: InsertRecommendationEvent): Promise<void> {
-        await this.db.insert(recommendationEvent).values(value);
+        await this.db.insert(recommendationEvent).values({
+            ...value,
+            created_at: value.created_at ?? new Date().toISOString(),
+        });
     }
 
     public async listRecommendationEventsSince(
         since: string,
         limit = 5000,
     ): Promise<RecommendationEvent[]> {
-        return this.db
+        // 历史存量行可能是 SQLite CURRENT_TIMESTAMP（空格分隔 UTC），新行统一为 ISO 8601（T+Z），
+        // 用 datetime() 规范化到秒后再用毫秒解析做精确下界过滤，防止同日边界漏查。
+        const rows = await this.db
             .select()
             .from(recommendationEvent)
-            .where(gte(recommendationEvent.created_at, since))
+            .where(gte(sql`datetime(${recommendationEvent.created_at})`, sql`datetime(${since})`))
             .orderBy(asc(recommendationEvent.id))
             .limit(limit);
+        const sinceMs = TimeUtil.parseUtcTimestampMs(since);
+        if (sinceMs === null) {
+            return rows;
+        }
+        return rows.filter((row) => {
+            const rowMs = TimeUtil.parseUtcTimestampMs(row.created_at);
+            return rowMs === null || rowMs >= sinceMs;
+        });
     }
 
     public async listRecommendationEvents(): Promise<RecommendationEvent[]> {

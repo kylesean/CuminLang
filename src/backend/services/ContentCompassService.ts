@@ -43,6 +43,7 @@ import {
     type SrtLine,
 } from '@/common/utils/subtitle';
 import MediaUtil from '@/common/utils/MediaUtil';
+import TimeUtil from '@/common/utils/TimeUtil';
 import type {
     ContentCompassEventParams,
     ContentCompassItemVO,
@@ -381,8 +382,16 @@ export class ContentCompassServiceImpl implements ContentCompassService {
                 recalledAt: null,
                 dueWords: [],
             };
-            if (event.action === 'shown' && event.created_at < existing.shownAt) {
-                existing.shownAt = event.created_at;
+            if (event.action === 'shown') {
+                const eventMs = TimeUtil.parseUtcTimestampMs(event.created_at);
+                const existingMs = TimeUtil.parseUtcTimestampMs(existing.shownAt);
+                if (
+                    eventMs !== null && existingMs !== null
+                        ? eventMs < existingMs
+                        : event.created_at < existing.shownAt
+                ) {
+                    existing.shownAt = event.created_at;
+                }
             }
             if (event.action === 'opened' && !existing.openedAt) {
                 existing.openedAt = event.created_at;
@@ -398,15 +407,29 @@ export class ContentCompassServiceImpl implements ContentCompassService {
         // 点击去复习之前完成的复习不能再算作这条推荐链的转化。
         const successfulReviewTimes = outcomes
             .filter((outcome) => outcome.rating === 'good' || outcome.rating === 'easy')
-            .map((outcome) => outcome.createdAt)
-            .sort();
+            .map((outcome) => ({
+                at: outcome.createdAt,
+                ms: TimeUtil.parseUtcTimestampMs(outcome.createdAt),
+            }))
+            .sort((left, right) => {
+                if (left.ms !== null && right.ms !== null) {
+                    return left.ms - right.ms;
+                }
+                return left.at.localeCompare(right.at);
+            });
         const records = Array.from(byKey.values());
         for (const record of records) {
             const reviewedAt = record.reviewedAt;
             if (!reviewedAt) {
                 continue;
             }
-            record.recalledAt = successfulReviewTimes.find((at) => at >= reviewedAt) ?? null;
+            const reviewedMs = TimeUtil.parseUtcTimestampMs(reviewedAt);
+            const matched = successfulReviewTimes.find((item) => (
+                reviewedMs !== null && item.ms !== null
+                    ? item.ms >= reviewedMs
+                    : item.at >= reviewedAt
+            ));
+            record.recalledAt = matched?.at ?? null;
         }
         return records;
     }

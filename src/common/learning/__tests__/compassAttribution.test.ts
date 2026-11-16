@@ -48,6 +48,14 @@ describe('reachedStage', () => {
     it('没有打开却有复习时不算走到复习', () => {
         expect(reachedStage(record({ reviewedAt: '2026-01-01T01:00:00.000Z' }))).toBe('shown');
     });
+
+    it('混用 SQLite CURRENT_TIMESTAMP 空格格式与 ISO T 格式时按真实 UTC 时序比较', () => {
+        expect(reachedStage(record({
+            openedAt: '2026-01-01 06:00:00',
+            reviewedAt: '2026-01-01 12:00:00',
+            recalledAt: '2026-01-01T08:00:00.000Z',
+        }))).toBe('reviewed');
+    });
 });
 
 describe('buildAttribution', () => {

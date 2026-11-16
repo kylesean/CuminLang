@@ -6,6 +6,8 @@ import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { fileBrowserApi } from '@/frontend/features/file-browser/fileBrowserApi';
 import { useTranslation } from 'react-i18next';
 import { Folder } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import i18n from '@/frontend/i18n';
 
 const logger = getRendererLogger('FolderSelector');
 
@@ -18,6 +20,10 @@ export class FolderSelectAction {
     public static defaultAction(onSelected?: (vid: string) => void) {
         return async (fp: string) => {
             const [id] = await fileBrowserApi.createWatchHistory([fp]);
+            if (!id) {
+                toast.error(i18n.t('folderNoMediaFound', { ns: 'common', defaultValue: '所选文件夹下没有找到可播放的音视频文件' }));
+                return;
+            }
             onSelected?.(id);
             await swrMutate(SWR_KEY.PLAYER_P);
             await swrApiMutate('watch-history/list');
@@ -29,6 +35,10 @@ export class FolderSelectAction {
         return async (fp: string) => {
             const [id] = await fileBrowserApi.createWatchHistory([fp]);
             logger.debug('Created watch history', { id });
+            if (!id) {
+                toast.error(i18n.t('folderNoMediaFound', { ns: 'common', defaultValue: '所选文件夹下没有找到可播放的音视频文件' }));
+                return;
+            }
             onSelected(id, fp);
             await swrMutate(SWR_KEY.PLAYER_P);
             await swrApiMutate('watch-history/list');

@@ -19,6 +19,7 @@
     "showInExplorer": "Show in folder",
     "delete": "Delete",
     "openFolder": "Open folder",
+    "folderNoMediaFound": "No playable media files found in the selected folder",
     "folderBadge": "Folder",
     "recentPlayedVideo": "Recently played: {{name}}",
     "deleteConfirmTitle": "Delete watch record?",

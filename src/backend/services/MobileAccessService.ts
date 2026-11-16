@@ -336,15 +336,7 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         const server = new MobileWebServer({
             staticDirectory,
             token: this.getOrCreateToken(),
-            source: {
-                listRecent: () => this.listRecent(),
-                getWatchDetail: (id) => this.getWatchDetail(id),
-                resolveVideoFile: (id) => this.watchHistoryService.videoPath(id),
-                getThumbnail: (id) => this.getThumbnail(id),
-                saveProgress: (id, position) => this.saveProgress(id, position),
-                lookupWord: (word) => this.translateService.transWord(word),
-                translateTexts: (texts) => this.translateTexts(texts),
-            },
+            source: this.createDataSource(),
         });
         if (this.disposed) {
             return;
@@ -404,6 +396,18 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         }
     }
 
+    private createDataSource() {
+        return {
+            listRecent: () => this.listRecent(),
+            getWatchDetail: (id: string) => this.getWatchDetail(id),
+            resolveVideoFile: (id: string) => this.resolveVideoPathOrThrowNotFound(id),
+            getThumbnail: (id: string) => this.getThumbnail(id),
+            saveProgress: (id: string, position: number) => this.saveProgress(id, position),
+            lookupWord: (word: string) => this.translateService.transWord(word),
+            translateTexts: (texts: string[]) => this.translateTexts(texts),
+        };
+    }
+
     /**
      * 读取最近播放列表。
      *
@@ -456,7 +460,7 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         });
         try {
             await previous;
-            const filePath = await this.watchHistoryService.videoPath(id);
+            const filePath = await this.resolveVideoPathOrThrowNotFound(id);
             return await this.mediaService.thumbnail(filePath, undefined, {
                 quality: 'medium',
                 width: 800,
@@ -465,6 +469,19 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         } finally {
             release();
             this.thumbnailQueueLength -= 1;
+        }
+    }
+
+    private async resolveVideoPathOrThrowNotFound(id: string): Promise<string> {
+        try {
+            return await this.watchHistoryService.videoPath(id);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const code = (error as NodeJS.ErrnoException | undefined)?.code;
+            if (code === 'ENOENT' || message.includes('不存在')) {
+                throw new ClientRequestError(message, 404);
+            }
+            throw error;
         }
     }
 
@@ -501,7 +518,7 @@ export class MobileAccessServiceImpl implements MobileAccessService {
     private async getWatchDetail(id: string): Promise<MobileWatchDetail> {
         const detail = await this.watchHistoryService.basicDetail(id);
         if (detail === null) {
-            throw new Error(`观看记录不存在：${id}`);
+            throw new ClientRequestError(`观看记录不存在：${id}`, 404);
         }
 
         const subtitle = await this.watchHistoryService.playerSubtitle(id);
