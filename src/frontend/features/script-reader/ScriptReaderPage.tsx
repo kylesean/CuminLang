@@ -44,7 +44,7 @@ import { playContextAudio, stopActiveAudio } from '@/frontend/infrastructure/aud
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
 import { ScriptArticleParagraph } from './components/ScriptArticleParagraph';
 import { ScriptDocDrawer } from './components/ScriptDocDrawer';
-import { ScriptReaderInspector } from './components/ScriptReaderInspector';
+import { ScriptReaderInspector, type UnitSaveContext } from './components/ScriptReaderInspector';
 import { ScriptReaderToolbar } from './components/ScriptReaderToolbar';
 import { buildReaderMarkdown } from './lib/exportReaderMarkdown';
 import {
@@ -559,7 +559,7 @@ export default function ScriptReaderPage() {
         }
     }, [showTranslation, activeSentences, activeSentenceIndex]);
 
-    const handleToggleSave = useCallback((sentence: Sentence, displayText?: string) => {
+    const handleToggleSave = useCallback((sentence: Sentence, unitContext?: UnitSaveContext) => {
         if (!activeDoc) return;
         const sentenceKey = `${sentence.fileHash}:${sentence.index}`;
         void toggleSavedSentence({
@@ -568,10 +568,10 @@ export default function ScriptReaderPage() {
             videoTitle: activeDoc.title,
             fileHash: sentence.fileHash,
             sentenceIndex: sentence.index,
-            startTime: sentence.adjustedStart ?? sentence.start,
-            endTime: sentence.adjustedEnd ?? sentence.end,
-            text: displayText ?? sentence.text,
-            textZh: sentence.textZH || '',
+            startTime: unitContext?.startTime ?? (sentence.adjustedStart ?? sentence.start),
+            endTime: unitContext?.endTime ?? (sentence.adjustedEnd ?? sentence.end),
+            text: unitContext?.displayText ?? sentence.text,
+            textZh: unitContext?.displayTextZh || sentence.textZH || '',
         })
             .then((saved) => {
                 toast.success(
@@ -594,7 +594,7 @@ export default function ScriptReaderPage() {
 
     const persistNoteForSentence = useCallback(async (
         sentence: Sentence,
-        displayText: string,
+        unitContext: UnitSaveContext,
         tag: SavedSentenceTag,
         note: string,
         silentToast = false,
@@ -609,10 +609,10 @@ export default function ScriptReaderPage() {
                     videoTitle: activeDoc.title,
                     fileHash: sentence.fileHash,
                     sentenceIndex: sentence.index,
-                    startTime: sentence.adjustedStart ?? sentence.start,
-                    endTime: sentence.adjustedEnd ?? sentence.end,
-                    text: displayText || sentence.text,
-                    textZh: sentence.textZH || '',
+                    startTime: unitContext.startTime,
+                    endTime: unitContext.endTime,
+                    text: unitContext.displayText || sentence.text,
+                    textZh: unitContext.displayTextZh || sentence.textZH || '',
                     tag,
                     note,
                 });
@@ -643,16 +643,16 @@ export default function ScriptReaderPage() {
 
     const handleSaveNote = useCallback(async (
         sentence: Sentence,
-        displayText: string,
+        unitContext: UnitSaveContext,
         tag: SavedSentenceTag,
         note: string,
     ) => {
-        await persistNoteForSentence(sentence, displayText, tag, note, false);
+        await persistNoteForSentence(sentence, unitContext, tag, note, false);
     }, [persistNoteForSentence]);
 
     const handleAppendNoteText = useCallback(async (
         sentence: Sentence,
-        displayText: string,
+        unitContext: UnitSaveContext,
         extraText: string,
         inferredTag?: SavedSentenceTag,
     ) => {
@@ -664,7 +664,7 @@ export default function ScriptReaderPage() {
         const resolvedTag = existing?.tag && existing.tag !== 'general'
             ? existing.tag
             : (inferredTag ?? existing?.tag ?? 'general');
-        await persistNoteForSentence(sentence, displayText, resolvedTag, mergedNote, true);
+        await persistNoteForSentence(sentence, unitContext, resolvedTag, mergedNote, true);
     }, [persistNoteForSentence, savedByKey]);
 
     const handleMarkWordKnown = useCallback(async (word: string) => {

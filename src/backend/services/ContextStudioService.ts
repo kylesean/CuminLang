@@ -99,16 +99,40 @@ function matchSubtitleTimeRange(
         if (rawMatch) {
             return { start: rawMatch.start, end: rawMatch.end };
         }
-        // 兼容跨多条 raw cue 合并或截断的句子：用连续子串定位时间段
-        const spanMatches = raw.filter((line) => {
-            const normLine = normalizeSubtitleText(line.contentEn);
-            return normLine.length >= 6 && normTarget.includes(normLine);
-        });
-        if (spanMatches.length > 0) {
-            return {
-                start: spanMatches[0].start,
-                end: spanMatches[spanMatches.length - 1].end,
-            };
+        // 兼容跨多条连续 raw cue 合并或截断的句子：只匹配连续窗口，避免把全片远处重复短语误连成超长片段
+        const anchorIndex = typeof sentenceIndex === 'number' ? sentenceIndex : 0;
+        let bestSpan: { start: number; end: number; score: number; dist: number } | undefined;
+        for (let i = 0; i < raw.length; i += 1) {
+            let combined = '';
+            for (let j = i; j < Math.min(raw.length, i + 6); j += 1) {
+                const normLine = normalizeSubtitleText(raw[j].contentEn);
+                if (!normLine) {
+                    continue;
+                }
+                combined = combined ? `${combined} ${normLine}` : normLine;
+                if (!normTarget.includes(combined)) {
+                    break;
+                }
+                if (combined.length >= 6) {
+                    const score = combined === normTarget ? combined.length + 1000 : combined.length;
+                    const dist = Math.abs((raw[i].index ?? i) - anchorIndex);
+                    if (
+                        !bestSpan
+                        || score > bestSpan.score
+                        || (score === bestSpan.score && dist < bestSpan.dist)
+                    ) {
+                        bestSpan = {
+                            start: raw[i].start,
+                            end: raw[j].end,
+                            score,
+                            dist,
+                        };
+                    }
+                }
+            }
+        }
+        if (bestSpan) {
+            return { start: bestSpan.start, end: bestSpan.end };
         }
     }
 

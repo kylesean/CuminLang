@@ -593,6 +593,8 @@ describe('ScriptReaderPage - Refactored Book & Inspector Intensive Studio', () =
             expect(mockSaveSentence).toHaveBeenCalledWith(
                 expect.objectContaining({
                     text: 'And you have a four-part framework that helps us communicate.',
+                    startTime: 22.24,
+                    endTime: 27.36,
                     note: '完整意群笔记',
                 }),
             );

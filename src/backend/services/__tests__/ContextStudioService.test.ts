@@ -306,4 +306,57 @@ describe('ContextStudioService & SavedSentenceRepository', () => {
         ]);
         expect(registry.isAllowed('/podcasts/episode-01.mp3')).toBe(true);
     });
+
+    it('匹配单词语境时间轴时仅匹配紧邻连续字幕窗口，不会把全片远处重复短语误连成超长片段', async () => {
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dp-ctx-span-'));
+        try {
+            const srtPath = path.join(tmpDir, 'repeat-talk.srt');
+            await fs.writeFile(
+                srtPath,
+                [
+                    '1',
+                    '00:00:10,000 --> 00:00:13,000',
+                    'When you think about framework,',
+                    '',
+                    '2',
+                    '00:00:13,100 --> 00:00:16,000',
+                    'it helps us communicate clearly.',
+                    '',
+                    '3',
+                    '00:20:00,000 --> 00:20:02,000',
+                    'you think about',
+                    '',
+                ].join('\n'),
+                'utf-8',
+            );
+
+            memoryDb = createMemoryDb();
+            const repo = new SavedSentenceRepositoryImpl(memoryDb.db);
+            const service = new ContextStudioService(repo, memoryDb.db);
+
+            await memoryDb.db.insert(watchHistory).values({
+                id: 'vid-span',
+                base_path: tmpDir,
+                file_name: 'repeat-talk.mp4',
+                project_type: 1,
+                srt_file: srtPath,
+            });
+            await memoryDb.db.insert(wordEncounter).values({
+                word: 'framework',
+                lemma: 'framework',
+                action: 'lookup',
+                video_id: 'vid-span',
+                file_hash: 'h-span',
+                sentence_index: 0,
+                context: 'When you think about framework, it helps us communicate clearly.',
+            });
+
+            const contexts = await service.getWordContexts('framework');
+            expect(contexts).toHaveLength(1);
+            expect(contexts[0].startTime).toBe(10);
+            expect(contexts[0].endTime).toBe(16);
+        } finally {
+            await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+    });
 });

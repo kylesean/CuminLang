@@ -110,18 +110,23 @@ export const playMediaSegment = (
         const safeStart = Math.max(0, startTime);
         const effectiveEnd =
             typeof endTime === 'number' && Number.isFinite(endTime) && endTime > safeStart
-                ? endTime + 0.12
+                ? endTime
                 : safeStart + 6;
         const maxDurationMs = Math.max(2000, ((effectiveEnd - safeStart) / safeRate + 2) * 1000);
 
         let settled = false;
         let playbackStarted = false;
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        let rafId: number | null = null;
 
         const cleanup = () => {
             if (timeoutId !== null) {
                 clearTimeout(timeoutId);
                 timeoutId = null;
+            }
+            if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+                cancelAnimationFrame(rafId);
+                rafId = null;
             }
             media.removeEventListener('loadedmetadata', onLoadedMetadata);
             media.removeEventListener('seeked', onSeeked);
@@ -154,10 +159,24 @@ export const playMediaSegment = (
             finishResolve();
         };
 
+        const pollFrame = () => {
+            if (settled) return;
+            if (media.currentTime >= effectiveEnd) {
+                finishResolve();
+                return;
+            }
+            if (typeof requestAnimationFrame === 'function') {
+                rafId = requestAnimationFrame(pollFrame);
+            }
+        };
+
         const startPlayback = () => {
             if (settled || playbackStarted) return;
             playbackStarted = true;
             timeoutId = setTimeout(finishResolve, maxDurationMs);
+            if (typeof requestAnimationFrame === 'function') {
+                rafId = requestAnimationFrame(pollFrame);
+            }
             void media.play().catch(finishReject);
         };
 

@@ -115,6 +115,19 @@ describe('MemoryMapSection', () => {
         await waitFor(() => expect(container.textContent).toBe(''));
     });
 
+    it('独立全屏画布模式下没有用户词时给出清晰引导空态而非空白', async () => {
+        vi.mocked(useSWR).mockReturnValue({
+            data: { ...map, totalWords: 0, topics: [], looseWords: null },
+            error: undefined,
+            isLoading: false,
+            mutate: vi.fn(),
+        } as never);
+        render(<MemoryMapSection defaultExpanded hideCollapseToggle onSelectWord={() => undefined} />);
+
+        expect(await screen.findByText('emptyTitle')).toBeDefined();
+        expect(screen.getByText('emptyDesc')).toBeDefined();
+    });
+
     it('独立画布模式默认直接展开且隐藏折叠按钮，并不重复关键词副标题', () => {
         vi.mocked(useSWR).mockReturnValue({
             data: {

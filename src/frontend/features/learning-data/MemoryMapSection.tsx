@@ -95,7 +95,7 @@ export default function MemoryMapSection({
     const { t } = useTranslation(['memoryMap', 'common']);
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [topicSort, setTopicSort] = useState<'urgency' | 'recent'>('urgency');
-    const { data, error } = useSWR<MemoryMapVO>(
+    const { data, error, isLoading } = useSWR<MemoryMapVO>(
         'learning-data/memory-map',
         () => learningDataApi.getMemoryMap({ limit: 12 }),
         { revalidateOnFocus: false, shouldRetryOnError: false },
@@ -114,7 +114,35 @@ export default function MemoryMapSection({
     }, [data?.topics, topicSort]);
 
     if (error || !data || data.totalWords === 0) {
-        return null;
+        if (!hideCollapseToggle) {
+            return null;
+        }
+        if (isLoading && !data && !error) {
+            return (
+                <div className="h-full flex items-center justify-center p-8 text-sm text-secondary">
+                    {t('loading', { defaultValue: '正在生成个人记忆全景...' })}
+                </div>
+            );
+        }
+        return (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-accent-bg/10 text-accent flex items-center justify-center">
+                    <Brain className="h-5 w-5" />
+                </div>
+                <Text type="body" weight="medium">
+                    {error
+                        ? t('loadFailedTitle', { defaultValue: '暂时无法读取记忆全景' })
+                        : t('emptyTitle', { defaultValue: '暂无个人记忆图谱数据' })}
+                </Text>
+                <Text type="supporting" color="secondary" className="max-w-md leading-relaxed">
+                    {error
+                        ? t('loadFailedDesc', { defaultValue: '请稍后重试，或先回到「语境资产」检查个人词表。' })
+                        : t('emptyDesc', {
+                            defaultValue: '记忆全景只统计你在播放室、精读文稿中标记或导入的个人生词（不含默认基础词库）；查词加入待学后，就会按音视频主题生成记忆图谱与遗忘曲线。',
+                        })}
+                </Text>
+            </div>
+        );
     }
 
     const isExpanded = hideCollapseToggle || expanded;

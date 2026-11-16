@@ -30,6 +30,13 @@ import { playerApi } from '@/frontend/features/player/playerApi';
 import { cn } from '@/frontend/lib/utils';
 import { useReaderSentenceCopilot } from '../hooks/useReaderSentenceCopilot';
 
+export interface UnitSaveContext {
+    displayText: string;
+    displayTextZh?: string;
+    startTime: number;
+    endTime: number;
+}
+
 interface ScriptReaderInspectorProps {
     videoId?: string;
     totalUnits: number;
@@ -43,9 +50,9 @@ interface ScriptReaderInspectorProps {
     onStepUnit: (delta: -1 | 1) => void;
     onPlaySingleUnit: (unit: SentenceBlock) => void;
     onStopAudio: () => void;
-    onToggleSave: (sentence: Sentence, displayText: string) => void;
-    onSaveNote: (sentence: Sentence, displayText: string, tag: SavedSentenceTag, note: string) => Promise<void>;
-    onAppendNoteText: (sentence: Sentence, displayText: string, extraText: string, inferredTag?: SavedSentenceTag) => Promise<void>;
+    onToggleSave: (sentence: Sentence, unitContext: UnitSaveContext) => void;
+    onSaveNote: (sentence: Sentence, unitContext: UnitSaveContext, tag: SavedSentenceTag, note: string) => Promise<void>;
+    onAppendNoteText: (sentence: Sentence, unitContext: UnitSaveContext, extraText: string, inferredTag?: SavedSentenceTag) => Promise<void>;
     onStartEdit: (sentence: Sentence) => void;
     onJumpToPlayer: (sentence: Sentence, withPractice: boolean) => void;
     onMarkWordKnown?: (word: string) => void;
@@ -135,14 +142,14 @@ const OPTIONAL_NOTE_TAGS: readonly Exclude<SavedSentenceTag, 'general'>[] = [
 
 function InspectorNoteEditor({
     sentence,
-    displayText,
+    unitContext,
     savedRecord,
     onSaveNote,
 }: {
     sentence: Sentence;
-    displayText: string;
+    unitContext: UnitSaveContext;
     savedRecord?: SavedSentenceVO;
-    onSaveNote: (sentence: Sentence, displayText: string, tag: SavedSentenceTag, note: string) => Promise<void>;
+    onSaveNote: (sentence: Sentence, unitContext: UnitSaveContext, tag: SavedSentenceTag, note: string) => Promise<void>;
 }) {
     const { t } = useTranslation('pages');
     const [tag, setTag] = useState<SavedSentenceTag>(savedRecord?.tag ?? 'general');
@@ -164,7 +171,7 @@ function InspectorNoteEditor({
     const handleSave = async () => {
         setSaving(true);
         try {
-            await onSaveNote(sentence, displayText, tag, note);
+            await onSaveNote(sentence, unitContext, tag, note);
             setExpanded(false);
         } finally {
             setSaving(false);
@@ -302,6 +309,15 @@ function InspectorActiveBody({
     const [comprehension, setComprehension] = useState<SubtitleComprehensionVO | null>(null);
 
     const displayText = activeUnit.sentences.map((s) => s.text.trim()).filter(Boolean).join(' ');
+    const displayTextZh = activeUnit.sentences.map((s) => s.textZH?.trim() || '').filter(Boolean).join('');
+    const firstUnitSentence = activeUnit.sentences[0] ?? sentence;
+    const lastUnitSentence = activeUnit.sentences[activeUnit.sentences.length - 1] ?? sentence;
+    const unitContext: UnitSaveContext = {
+        displayText,
+        displayTextZh,
+        startTime: firstUnitSentence.adjustedStart ?? firstUnitSentence.start,
+        endTime: lastUnitSentence.adjustedEnd ?? lastUnitSentence.end,
+    };
 
     const copilot = useReaderSentenceCopilot({
         videoId,
@@ -432,7 +448,7 @@ function InspectorActiveBody({
                     >
                         <button
                             type="button"
-                            onClick={() => onToggleSave(sentence, displayText)}
+                            onClick={() => onToggleSave(sentence, unitContext)}
                             className={cn(
                                 'p-1.5 rounded-md transition-colors cursor-pointer',
                                 isSaved
@@ -499,7 +515,7 @@ function InspectorActiveBody({
                 <InspectorNoteEditor
                     key={`${sentence.fileHash}:${sentence.index}:${savedRecord?.tag ?? 'general'}:${savedRecord?.note ?? ''}`}
                     sentence={sentence}
-                    displayText={displayText}
+                    unitContext={unitContext}
                     savedRecord={savedRecord}
                     onSaveNote={onSaveNote}
                 />
@@ -533,7 +549,7 @@ function InspectorActiveBody({
                                 : /长难句|句型|语法/.test(lastUserPrompt)
                                     ? 'grammar'
                                     : undefined;
-                        void onAppendNoteText(sentence, displayText, takeaway, inferredTag);
+                        void onAppendNoteText(sentence, unitContext, takeaway, inferredTag);
                     }}
                     attachedFocusExpr={copilot.attachedFocusExpr}
                     onClearFocusExpr={() => copilot.setAttachedFocusExpr(null)}
