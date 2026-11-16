@@ -1,5 +1,5 @@
-/** 字幕结果来源，本地推理与云端分别缓存。 */
-export type TranslationProvider = 'tencent' | 'openai' | 'local';
+/** 字幕翻译结果来源，与持久化分区一一对应。 */
+export type TranslationProvider = 'tencent' | 'openai';
 
 export type TranslationMode = 'zh' | 'simple_en' | 'custom';
 

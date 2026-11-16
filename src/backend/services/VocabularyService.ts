@@ -1,12 +1,11 @@
 import { Workbook } from 'exceljs';
 import { generateText, Output } from 'ai';
-import { inject, injectable, optional } from 'inversify';
+import { inject, injectable } from 'inversify';
 import { z } from 'zod';
 import TYPES from '@/backend/ioc/types';
 import type { VideoLearningService } from '@/backend/services/VideoLearningService';
 import type { WordMatchService } from '@/backend/services/WordMatchService';
 import type AiProviderService from '@/backend/services/AiProviderService';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import type WordsRepository from '@/backend/services/repositories/WordsRepository';
 import type ReviewCardRepository from '@/backend/services/repositories/ReviewCardRepository';
@@ -206,7 +205,6 @@ export class VocabularyServiceImpl implements VocabularyService {
         @inject(TYPES.SubtitleService) private readonly subtitleService: SubtitleService,
         @inject(TYPES.StorageDirectoryProvider) private readonly storageDirectoryProvider: StorageDirectoryProvider,
         @inject(TYPES.FileSystemGateway) private readonly fileSystemGateway: FileSystemGateway,
-        @optional() @inject(TYPES.LocalAiService) private readonly localAiService?: LocalAiService,
     ) {}
 
     /**
@@ -705,59 +703,24 @@ export class VocabularyServiceImpl implements VocabularyService {
         });
         const prompt = this.buildDefinitionPrompt(word);
 
-        let cloudModel: ReturnType<AiProviderService['getModel']> = null;
-        try {
-            cloudModel = this.aiProviderService.getModel('dictionary');
-        } catch (error) {
-            this.logger.warn('云端词典模型不可用，尝试回退本地模型', { error });
+        const cloudModel = this.aiProviderService.getModel('dictionary');
+        if (!cloudModel) {
+            throw new Error('词典 AI 模型未配置，请先在设置中完成模型配置');
         }
 
-        if (cloudModel) {
-            try {
-                const result = await concurrency.withRateLimit('gpt', () =>
-                    generateText({
-                        model: cloudModel,
-                        output: Output.object({ schema }),
-                        prompt,
-                        maxRetries: 0,
-                        timeout: DEFINITION_REQUEST_TIMEOUT_MS,
-                    }));
-                const translate = result.output?.translate?.trim();
-                if (translate) {
-                    return translate;
-                }
-            } catch (error) {
-                if (!this.localAiService) {
-                    throw error;
-                }
-                this.logger.warn('云端词典释义生成失败，尝试回退本地模型', { error });
-            }
+        const result = await concurrency.withRateLimit('gpt', () =>
+            generateText({
+                model: cloudModel,
+                output: Output.object({ schema }),
+                prompt,
+                maxRetries: 0,
+                timeout: DEFINITION_REQUEST_TIMEOUT_MS,
+            }));
+        const translate = result.output?.translate?.trim();
+        if (!translate) {
+            throw new Error('词典 AI 未返回有效释义');
         }
-
-        if (this.localAiService) {
-            const status = await this.localAiService.getStatus();
-            const activeReady = status.runtimeReady
-                && status.models.some((m) => m.modelId === status.activeModelId && m.ready);
-            if (activeReady && status.activeModelId) {
-                const rawOutput = await this.localAiService.generate(
-                    prompt,
-                    z.toJSONSchema(schema),
-                    status.activeModelId,
-                    AbortSignal.timeout(DEFINITION_REQUEST_TIMEOUT_MS),
-                );
-                const parsedPayload = typeof rawOutput === 'string'
-                    ? JSON.parse(rawOutput)
-                    : rawOutput;
-                const parsed = schema.safeParse(parsedPayload);
-                const translate = parsed.success ? parsed.data.translate.trim() : '';
-                if (!translate) {
-                    throw new Error('本地 AI 未返回有效释义');
-                }
-                return translate;
-            }
-        }
-
-        throw new Error('词典 AI 模型未配置，请先在设置中配置云端或本地模型');
+        return translate;
     }
 
     /**

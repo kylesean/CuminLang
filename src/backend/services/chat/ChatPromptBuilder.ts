@@ -1,5 +1,4 @@
 import type { ModelMessage } from 'ai';
-import type { LocalChatMessage } from '@/backend/services/LocalAiService';
 import { BUILTIN_LEARNING_PROMPT_PRESETS } from '@/backend/services/chat/LearningPromptPresets';
 
 /**
@@ -112,54 +111,6 @@ export const ensureChatRoleMessage = (
     const systemContent = composeChatSystemPrompt(options?.personaPrompt, options);
     const nonSystem = messages.filter((message) => message.role !== 'system');
     return [{ role: 'system', content: systemContent }, ...nonSystem];
-};
-
-/**
- * 为本地大模型（每 slot 上下文约 4096 token）裁剪多轮历史，
- * 保留 system 人设 + 首轮上下文摘要锚点 + 尽量多的最近对话轮次，防止触顶截断。
- */
-export const toLocalChatMessagesWithWindow = (
-    messages: ModelMessage[],
-    maxHistoryChars = 6500,
-): LocalChatMessage[] => {
-    const { system, messages: turns } = splitSystemMessages(messages);
-    const normalized: LocalChatMessage[] = turns
-        .filter((msg): msg is ModelMessage & { role: 'user' | 'assistant' } => (
-            msg.role === 'user' || msg.role === 'assistant'
-        ))
-        .map((msg) => ({
-            role: msg.role,
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-        }));
-
-    if (normalized.length === 0) {
-        return system ? [{ role: 'system', content: system }] : [];
-    }
-
-    // 保留最近完整尾部窗口
-    const kept: LocalChatMessage[] = [];
-    let usedChars = system ? system.length : 0;
-    for (let i = normalized.length - 1; i >= 0; i -= 1) {
-        const item = normalized[i];
-        if (usedChars + item.content.length > maxHistoryChars && kept.length >= 2) {
-            break;
-        }
-        kept.unshift(item);
-        usedChars += item.content.length;
-    }
-
-    // 若窗口丢弃了最前面那条含【字幕参考材料】的用户消息，把锚点摘录补回第一条 user 顶部
-    const firstTurn = normalized[0];
-    if (kept[0] !== firstTurn && firstTurn.role === 'user' && firstTurn.content.startsWith(SUBTITLE_CONTEXT_PREFIX)) {
-        const anchorSnippet = firstTurn.content.split('\n\n').slice(0, 2).join('\n\n').slice(0, 800);
-        if (kept[0].role === 'user') {
-            kept[0] = { role: 'user', content: `${anchorSnippet}\n\n${kept[0].content}` };
-        } else {
-            kept.unshift({ role: 'user', content: anchorSnippet });
-        }
-    }
-
-    return system ? [{ role: 'system', content: system }, ...kept] : kept;
 };
 
 /** 字幕参考材料的固定前缀。 */

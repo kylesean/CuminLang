@@ -6,7 +6,6 @@ vi.mock('@/backend/infrastructure/logger', () => ({
 
 import { SubtitleTranslationServiceImpl } from '@/backend/services/subtitle-translation/SubtitleTranslationService';
 import type SettingService from '@/backend/services/SettingService';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import type CacheService from '@/backend/services/CacheService';
 import type ModelRoutingService from '@/backend/services/ModelRoutingService';
 import type SentenceTranslatesRepository from '@/backend/services/repositories/SentenceTranslatesRepository';
@@ -14,8 +13,6 @@ import type RendererGateway from '@/backend/services/gateways/renderer/RendererG
 import type ClientProviderService from '@/backend/services/ClientProviderService';
 import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
 import type OpenAiSubtitleBatchTranslator from '@/backend/services/gateways/translate/OpenAiSubtitleBatchTranslator';
-import type LocalSubtitleBatchTranslator from '@/backend/services/gateways/translate/LocalSubtitleBatchTranslator';
-import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
 
 function createHarness(getCurrentTranslationProvider: SettingService['getCurrentTranslationProvider']) {
     const batchTrans = vi.fn().mockResolvedValue(new Map([['hello', '你好']]));
@@ -26,7 +23,6 @@ function createHarness(getCurrentTranslationProvider: SettingService['getCurrent
 
     const service = new SubtitleTranslationServiceImpl(
         { getCurrentTranslationProvider } as unknown as SettingService,
-        {} as LocalAiService,
         {
             get: vi.fn().mockReturnValue({
                 sentences: [{
@@ -43,8 +39,6 @@ function createHarness(getCurrentTranslationProvider: SettingService['getCurrent
         { fireAndForget } as unknown as RendererGateway,
         { getClient } as unknown as ClientProviderService<TencentTranslateClient>,
         {} as OpenAiSubtitleBatchTranslator,
-        {} as LocalSubtitleBatchTranslator,
-        { clear: vi.fn(), markFallback: vi.fn() } as unknown as ResourceFallbackService,
     );
 
     return { service, batchTrans, getClient, findBySentencesAndMode, upsertMany, fireAndForget };

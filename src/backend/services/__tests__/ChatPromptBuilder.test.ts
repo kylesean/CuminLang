@@ -4,7 +4,6 @@ import {
     composeChatSystemPrompt,
     ensureChatRoleMessage,
     splitSystemMessages,
-    toLocalChatMessagesWithWindow,
 } from '@/backend/services/chat/ChatPromptBuilder';
 
 describe('ChatPromptBuilder 双层提示词与上下文保护', () => {
@@ -67,21 +66,5 @@ describe('ChatPromptBuilder 双层提示词与上下文保护', () => {
         expect(updated[0].content).toContain('new persona focus');
         expect(updated[0].content).not.toContain('old persona');
         expect(updated).toHaveLength(2);
-    });
-
-    it('toLocalChatMessagesWithWindow 在超长多轮后裁剪中间旧轮次并保留字幕参考材料锚点', () => {
-        const longText = 'word '.repeat(500);
-        const messages: ModelMessage[] = [
-            { role: 'system', content: '系统人设' },
-            { role: 'user', content: '【字幕参考材料】\n\n当前学习句：Hang in there!\n\n首轮问题' },
-            { role: 'assistant', content: longText },
-            { role: 'user', content: longText },
-            { role: 'assistant', content: longText },
-            { role: 'user', content: '最新一轮追问' },
-        ];
-        const trimmed = toLocalChatMessagesWithWindow(messages, 3000);
-        expect(trimmed[0].role).toBe('system');
-        expect(trimmed.at(-1)?.content).toBe('最新一轮追问');
-        expect(trimmed.some((m) => typeof m.content === 'string' && m.content.includes('Hang in there!'))).toBe(true);
     });
 });

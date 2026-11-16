@@ -20,9 +20,9 @@ export type EngineSelectionSettingVO = {
     };
     providers: {
         /** 字幕翻译引擎；`'invalid'` 表示存储值非法，等待用户重新选择。 */
-        subtitleTranslationEngine: 'openai' | 'local' | 'local-mt' | 'tencent' | 'none' | 'invalid';
-        /** 词典引擎；`'invalid'` 表示存储值非法（含已移除的 youdao 旧值），等待用户重新选择。 */
-        dictionaryEngine: 'openai' | 'local' | 'none' | 'invalid';
+        subtitleTranslationEngine: 'openai' | 'tencent' | 'none' | 'invalid';
+        /** 词典引擎；`'invalid'` 表示存储值非法（含已移除旧值），等待用户重新选择。 */
+        dictionaryEngine: 'openai' | 'none' | 'invalid';
         /** 语义向量路由策略；缺省按 `'auto'` 处理。 */
         embeddingEngine?: 'auto' | 'local' | 'openai' | 'none' | 'invalid';
     };

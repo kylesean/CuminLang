@@ -16,8 +16,6 @@ import type BuiltinDictionaryStore from '@/backend/services/gateways/translate/B
 import type ImportedDictionaryService from '@/backend/services/ImportedDictionaryService';
 import type EnglishDictionaryService from '@/backend/services/EnglishDictionaryService';
 import { getMainLogger } from '@/backend/infrastructure/logger';
-import type LocalAiService from '@/backend/services/LocalAiService';
-import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
 import {
     rankDefinitionsByContextPos,
     rankEnglishSensesByContextPos,
@@ -231,21 +229,9 @@ export class TranslateServiceImpl implements TranslateService {
     private readonly builtinDictionaryStore: BuiltinDictionaryStore;
     private readonly importedDictionaryService: ImportedDictionaryService;
     private readonly englishDictionaryService: EnglishDictionaryService;
-    private readonly localAiService: LocalAiService;
-    private readonly resourceFallback: ResourceFallbackService;
 
     /**
      * 构造单词翻译与词典查询服务。
-     *
-     * @param rendererGateway 渲染进程 API 网关。
-     * @param aiProviderService 云端模型提供服务。
-     * @param settingService 设置业务服务。
-     * @param wordTranslatesRepository 单词翻译缓存仓储。
-     * @param builtinDictionaryStore 预置本地词典存储端口。
-     * @param importedDictionaryService 用户导入词典服务。
-     * @param englishDictionaryService 英英释义增强包服务。
-     * @param localAiService 本地大模型推理服务。
-     * @param resourceFallback 资源回退状态服务。
      */
     constructor(
         @inject(TYPES.RendererGateway) rendererGateway: RendererGateway,
@@ -255,8 +241,6 @@ export class TranslateServiceImpl implements TranslateService {
         @inject(TYPES.BuiltinDictionaryStore) builtinDictionaryStore: BuiltinDictionaryStore,
         @inject(TYPES.ImportedDictionaryService) importedDictionaryService: ImportedDictionaryService,
         @inject(TYPES.EnglishDictionaryService) englishDictionaryService: EnglishDictionaryService,
-        @inject(TYPES.LocalAiService) localAiService: LocalAiService,
-        @inject(TYPES.ResourceFallbackService) resourceFallback: ResourceFallbackService,
     ) {
         this.rendererGateway = rendererGateway;
         this.aiProviderService = aiProviderService;
@@ -265,8 +249,6 @@ export class TranslateServiceImpl implements TranslateService {
         this.builtinDictionaryStore = builtinDictionaryStore;
         this.importedDictionaryService = importedDictionaryService;
         this.englishDictionaryService = englishDictionaryService;
-        this.localAiService = localAiService;
-        this.resourceFallback = resourceFallback;
     }
 
     /**
@@ -376,7 +358,7 @@ export class TranslateServiceImpl implements TranslateService {
      * @param forceRefresh 是否强制刷新；强制刷新单飞键独立，既防连点重复请求也不复用带缓存命中路径的旧请求。
      * @returns 可用于 in-flight 映射的稳定 key。
      */
-    private buildWordLookupKey(provider: 'openai' | 'local', word: string, context?: string, forceRefresh = false): string {
+    private buildWordLookupKey(provider: 'openai', word: string, context?: string, forceRefresh = false): string {
         // 语境参与键:同一个词在不同句子里义项不同,语境解释必须按句隔离缓存。
         const contextSuffix = context?.trim() ? `#ctx:${ObjUtil.hash(context.trim())}` : '';
         const refreshSuffix = forceRefresh ? '#refresh' : '';
@@ -408,7 +390,7 @@ export class TranslateServiceImpl implements TranslateService {
      */
     private async executeWordLookup(
         str: string,
-        currentProvider: 'openai' | 'local',
+        currentProvider: 'openai',
         forceRefresh: boolean,
         requestId?: string,
         context?: string
@@ -426,41 +408,7 @@ export class TranslateServiceImpl implements TranslateService {
             this.logger.info('强制刷新单词', { provider: currentProvider, word: str });
         }
 
-        if (currentProvider === 'local') {
-            // 补充资源处于本引擎回退冷却时不再调用（用户显式 forceRefresh 时放行探测恢复）。
-            if (!forceRefresh && this.isProviderInFallback('local')) {
-                return null;
-            }
-            try {
-                const result = await this.translateWordWithLocal(str, requestId, context);
-                if (result) {
-                    this.resourceFallback.clear('dictionary');
-                    await this.wordRecordOpenAI(cacheTerm, result, 'local');
-                }
-                return result;
-            } catch (error) {
-                this.resourceFallback.markFallback(
-                    'dictionary',
-                    'local',
-                    'builtinDictionary',
-                    error instanceof Error ? error.message : String(error)
-                );
-                // 引擎失败回预置词典:静态义项虽可能不合语境,也比空卡片强
-                return this.importedDictionaryService.lookup(str)
-                    ?? this.builtinDictionaryStore.lookup(str);
-            }
-        }
-        if (!forceRefresh && this.isProviderInFallback('openai')) {
-            return null;
-        }
         return await this.translateWordWithOpenAI(str, requestId, context);
-    }
-
-    private isProviderInFallback(provider: 'openai' | 'local'): boolean {
-        if (typeof this.resourceFallback.getState === 'function') {
-            return this.resourceFallback.getState('dictionary')?.from === provider;
-        }
-        return this.resourceFallback.isFallbackActive('dictionary');
     }
 
     /**
@@ -476,8 +424,7 @@ export class TranslateServiceImpl implements TranslateService {
         try {
             const model = this.aiProviderService.getModel('dictionary');
             if (!model) {
-                this.logger.error('OpenAI 模型未配置');
-                this.resourceFallback.markFallback('dictionary', 'openai', 'builtinDictionary', '云端模型未配置');
+                this.logger.error('词典 AI 模型未配置');
                 return null;
             }
 
@@ -544,7 +491,6 @@ export class TranslateServiceImpl implements TranslateService {
             finalResult.source = 'ai';
 
             if (finalResult.definitions.length > 0) {
-                this.resourceFallback.clear('dictionary');
                 if (requestId) {
                     await this.emitOpenAIDictionaryUpdate(streamId, finalResult.word, finalResult, true);
                 }
@@ -560,13 +506,7 @@ export class TranslateServiceImpl implements TranslateService {
 
             return null;
         } catch (error) {
-            this.logger.error('OpenAI 字典查询失败', { word, error });
-            this.resourceFallback.markFallback(
-                'dictionary',
-                'openai',
-                'builtinDictionary',
-                error instanceof Error ? error.message : String(error)
-            );
+            this.logger.error('AI 字典查询失败', { word, error });
             if (requestId) {
                 try {
                     await this.emitOpenAIDictionaryUpdate(
@@ -581,18 +521,6 @@ export class TranslateServiceImpl implements TranslateService {
             }
             return null;
         }
-    }
-
-    /** 使用使用中的本地模型生成同一份词典结构，复用现有清洗与缓存格式。 */
-    private async translateWordWithLocal(word: string, requestId?: string, context?: string): Promise<OpenAIDictionaryResult | null> {
-        const modelId = await this.localAiService.getActiveModelId();
-        const result = await this.localAiService.generate(buildDictionaryPrompt(word, context), z.toJSONSchema(openAIDictionaryResultSchema), modelId);
-        const parsed = openAIDictionaryResultSchema.safeParse(result);
-        if (!parsed.success) {
-            this.logger.error('本地字典模型返回结构无效', { word, issues: parsed.error.issues, requestId });
-            return null;
-        }
-        return { ...sanitizeDictionaryResult(parsed.data), source: 'ai' };
     }
 
     /**
@@ -640,7 +568,7 @@ export class TranslateServiceImpl implements TranslateService {
         }
     }
 
-    private async wordLoad(word: string, provider: 'openai' | 'local'): Promise<OpenAIDictionaryResult | undefined> {
+    private async wordLoad(word: string, provider: 'openai'): Promise<OpenAIDictionaryResult | undefined> {
         const value: WordTranslate | null = await this.wordTranslatesRepository.findOne(p(word), provider);
         if (!value) return undefined;
 
@@ -671,7 +599,7 @@ export class TranslateServiceImpl implements TranslateService {
         }
     }
 
-    private async wordRecordOpenAI(word: string, translate: OpenAIDictionaryResult, provider: 'openai' | 'local' = 'openai'): Promise<void> {
+    private async wordRecordOpenAI(word: string, translate: OpenAIDictionaryResult, provider: 'openai' = 'openai'): Promise<void> {
         const sanitized = sanitizeDictionaryResult(translate);
         const value = JSON.stringify(sanitized);
         const wt: InsertWordTranslate = { word: p(word), provider, translate: value };

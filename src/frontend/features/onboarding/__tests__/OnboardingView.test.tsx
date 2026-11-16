@@ -5,7 +5,7 @@ import { getSystemInfo, markOnboardingCompleted } from '../onboardingApi';
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
 import { englishDictionaryApi } from '@/frontend/features/settings/englishDictionaryApi';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
-import type { LocalAiModelStatus, LocalAiStatus, LocalEmbeddingStatus } from '@/common/contracts/local-ai';
+import type { LocalEmbeddingStatus } from '@/common/contracts/local-ai';
 
 vi.mock('@/frontend/features/onboarding/onboardingApi', () => ({
     markOnboardingCompleted: vi.fn(),
@@ -29,7 +29,6 @@ vi.mock('@/frontend/app/stores/dpTaskStore', () => ({
 vi.mock('@/frontend/features/settings/settingsEvents', () => ({
     subscribeArchiveDownloadProgress: vi.fn(() => () => {}),
     subscribeEmbeddingDownloadProgress: vi.fn(() => () => {}),
-    subscribeLocalAiDownloadProgress: vi.fn(() => () => {}),
 }));
 
 vi.mock('@/frontend/features/settings/settingsApi', () => ({
@@ -48,10 +47,6 @@ vi.mock('@/frontend/features/settings/settingsApi', () => ({
         cancelSherpaTtsModelDownload: vi.fn(),
         cancelWhisperCppModelDownload: vi.fn(),
         cancelParakeetModelDownload: vi.fn(),
-        getLocalAiStatus: vi.fn(),
-        downloadLocalAi: vi.fn(),
-        cancelLocalAiDownload: vi.fn(),
-        useLocalAiModel: vi.fn(),
         getEmbeddingModelStatus: vi.fn(),
         downloadEmbeddingModel: vi.fn(),
         cancelEmbeddingModelDownload: vi.fn(),
@@ -86,42 +81,6 @@ const NOT_READY = {
 
 const READY = { ...NOT_READY, ready: true };
 
-const makeLocalModel = (
-    modelId: string,
-    tier: 'light' | 'standard' | 'pro',
-    minMem: number,
-    ready = false,
-): LocalAiModelStatus => ({
-    modelId,
-    name: modelId,
-    file: `${modelId}.gguf`,
-    bytes: 1_000_000_000,
-    sizeLabel: '1 GB',
-    memoryEstimateGb: '2.0',
-    ready,
-    phase: 'idle',
-    downloaded: ready ? 1_000_000_000 : 0,
-    total: 1_000_000_000,
-    modelPath: `/models/${modelId}.gguf`,
-    downloadUrls: [`https://example.com/${modelId}.gguf`],
-    error: null,
-    custom: false,
-    tier,
-    recommendedMinMemoryGb: minMem,
-});
-
-const makeLocalAiStatus = (readyIds: string[] = []): LocalAiStatus => ({
-    runtimeReady: true,
-    running: false,
-    activeModelId: readyIds[0] ?? '',
-    modelsDirectory: '/models',
-    models: [
-        makeLocalModel('qwen3.5-0.8b-q4_k_m', 'light', 6, readyIds.includes('qwen3.5-0.8b-q4_k_m')),
-        makeLocalModel('qwen3.5-2b-q4_k_m', 'standard', 8, readyIds.includes('qwen3.5-2b-q4_k_m')),
-        makeLocalModel('qwen3.5-4b-q4_k_m', 'pro', 16, readyIds.includes('qwen3.5-4b-q4_k_m')),
-    ],
-});
-
 const makeEmbeddingStatus = (ready = false): LocalEmbeddingStatus => ({
     ready,
     name: 'EmbeddingGemma 2 Q4_K_XL',
@@ -147,12 +106,10 @@ describe('OnboardingView Component', () => {
         });
         vi.mocked(settingsApi.saveTranscriptionEngine).mockResolvedValue();
         vi.mocked(settingsApi.saveEngineSelection).mockResolvedValue();
-        vi.mocked(settingsApi.useLocalAiModel).mockResolvedValue();
         vi.mocked(settingsApi.downloadSherpaTtsModel).mockResolvedValue({ success: true, message: '' });
         vi.mocked(settingsApi.downloadWhisperCppModel).mockResolvedValue({ success: true, message: '' });
         vi.mocked(settingsApi.downloadParakeetModel).mockResolvedValue({ success: true, message: '' });
         vi.mocked(settingsApi.downloadEmbeddingModel).mockResolvedValue(undefined);
-        vi.mocked(settingsApi.downloadLocalAi).mockResolvedValue(undefined);
         vi.mocked(settingsApi.cancelSherpaTtsModelDownload).mockResolvedValue({ cancelled: true });
         vi.mocked(settingsApi.getStorageStatus).mockResolvedValue({
             configuredPath: '',
@@ -168,7 +125,6 @@ describe('OnboardingView Component', () => {
         vi.mocked(settingsApi.getSherpaTtsModelStatus).mockResolvedValue(NOT_READY);
         vi.mocked(settingsApi.getWhisperCppModelStatus).mockResolvedValue(NOT_READY);
         vi.mocked(settingsApi.getParakeetModelStatus).mockResolvedValue(NOT_READY);
-        vi.mocked(settingsApi.getLocalAiStatus).mockResolvedValue(makeLocalAiStatus());
         vi.mocked(settingsApi.getEmbeddingModelStatus).mockResolvedValue(makeEmbeddingStatus(false));
         vi.mocked(settingsApi.getServiceCredentials).mockResolvedValue({
             openai: {
@@ -258,7 +214,6 @@ describe('OnboardingView Component', () => {
             expect(settingsApi.downloadSherpaTtsModel).toHaveBeenCalled();
             expect(settingsApi.downloadWhisperCppModel).toHaveBeenCalled();
             expect(settingsApi.downloadEmbeddingModel).toHaveBeenCalled();
-            expect(settingsApi.downloadLocalAi).not.toHaveBeenCalled();
             expect(settingsApi.saveTranscriptionEngine).toHaveBeenCalledWith('whisper-cpp');
             expect(settingsApi.saveEngineSelection).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -314,7 +269,6 @@ describe('OnboardingView Component', () => {
             expect(settingsApi.downloadSherpaTtsModel).toHaveBeenCalled();
             expect(settingsApi.downloadParakeetModel).toHaveBeenCalled();
             expect(settingsApi.downloadWhisperCppModel).not.toHaveBeenCalled();
-            expect(settingsApi.downloadLocalAi).not.toHaveBeenCalled();
             expect(settingsApi.saveTranscriptionEngine).toHaveBeenCalledWith('sherpa-onnx');
             expect(markOnboardingCompleted).toHaveBeenCalledWith(CURRENT_ONBOARDING_VERSION);
         });
@@ -385,7 +339,6 @@ describe('OnboardingView Component', () => {
         vi.mocked(settingsApi.getSherpaTtsModelStatus).mockResolvedValue(READY);
         vi.mocked(settingsApi.getWhisperCppModelStatus).mockResolvedValue(READY);
         vi.mocked(settingsApi.getEmbeddingModelStatus).mockResolvedValue(makeEmbeddingStatus(true));
-        vi.mocked(settingsApi.getLocalAiStatus).mockResolvedValue(makeLocalAiStatus(['qwen3.5-4b-q4_k_m']));
 
         const onCompleted = vi.fn();
         render(<OnboardingView onCompleted={onCompleted} />);

@@ -1,5 +1,3 @@
-import { LOCAL_AI_DEFAULT_MODEL_ID } from '@/common/contracts/local-ai';
-
 export const SettingKeyObj = {
     'shortcut.previousSentence': 'left,a',
     'shortcut.nextSentence': 'right,d',
@@ -51,7 +49,6 @@ export const SettingKeyObj = {
     'models.openai.dictionary': '',
     /** 可选云端语义向量模型标识（如 text-embedding-3-small / gemini-embedding-001）。 */
     'models.openai.embedding': '',
-    'models.local.active': LOCAL_AI_DEFAULT_MODEL_ID,
     'subtitleTranslation.engine': 'none',
     'dictionary.engine': 'none',
     // Service function enablement

@@ -281,22 +281,10 @@ export const settingsApi = {
      */
     selectTtsVoice: (voiceId: string) =>
         backendClient.call('sherpa-tts/voices/select', { voiceId }),
-    /** 查询本地对话模型与运行时状态。 */
-    getLocalAiStatus: () => backendClient.call('local-ai/status'),
-    /** 将全部本地功能切换到指定模型。 */
-    useLocalAiModel: (modelId: string) => backendClient.call('local-ai/use', { modelId }),
     /** 清除当前字幕翻译配置（引擎、模型、风格一致）的翻译缓存，返回删除条数。 */
     clearSubtitleTranslationCache: () => backendClient.call('ai-trans/clear-subtitle-translation-cache'),
     /** 清除当前词典配置的查询缓存，返回删除条数。 */
     clearDictionaryCache: () => backendClient.call('ai-trans/clear-dictionary-cache'),
-    /** 下载指定本地 Qwen 模型。 */
-    downloadLocalAi: (modelId: string) => backendClient.call('local-ai/download', { modelId }),
-    /** 取消本地 Qwen 模型下载。 */
-    cancelLocalAiDownload: () => backendClient.call('local-ai/cancel-download'),
-    /** 删除指定本地 Qwen 模型。 */
-    deleteLocalAi: (modelId: string) => backendClient.call('local-ai/delete', { modelId }),
-    /** 对指定本地模型执行稳态速度测试（两轮固定批量生成，取热身轮吞吐）。 */
-    speedTestLocalAi: (modelId: string) => backendClient.call('local-ai/speed-test', { modelId }),
     /** 查询可选的本地语义向量模型是否已安装。 */
     getEmbeddingModelStatus: () => backendClient.call('local-ai/embedding-status'),
     /** 下载并校验本地语义向量模型。 */

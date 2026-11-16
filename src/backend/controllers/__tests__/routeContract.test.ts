@@ -79,14 +79,14 @@ function registerAllControllers(): void {
     new DpTaskController(stub()).registerRoutes();
     new EnglishDictionaryController(stub()).registerRoutes();
     new LearningDataController(stub(), stub(), stub(), stub()).registerRoutes();
-    new LocalAiController(stub(), stub()).registerRoutes();
+    new LocalAiController(stub()).registerRoutes();
     new MediaController(stub()).registerRoutes();
     new MigrationFailureController().registerRoutes();
     new ParakeetModelController(stub()).registerRoutes();
     new PhonemeGopModelController(stub()).registerRoutes();
     new SenseVoiceModelController(stub()).registerRoutes();
     new SentencePracticeController(stub()).registerRoutes();
-    new SettingsController(stub(), stub(), stub(), stub(), stub(), stub(), stub(), stub(), stub()).registerRoutes();
+    new SettingsController(stub(), stub(), stub(), stub(), stub(), stub(), stub()).registerRoutes();
     new SherpaTtsModelController(stub(), stub(), stub(), stub()).registerRoutes();
     new SpeakerDiarizationModelController(stub()).registerRoutes();
     new SrtTimeAdjustController(stub()).registerRoutes();

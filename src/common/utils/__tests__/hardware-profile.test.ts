@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-    assessLocalModelFit,
     evaluateHardwareProfile,
     isHardwareSuitableForLocalAi,
     isWhisperCppSupportedPlatform,
@@ -57,28 +56,25 @@ describe('hardware-profile', () => {
     });
 
     describe('evaluateHardwareProfile', () => {
-        it('recommends 4b, standard tier, and whisper-cpp on 16GB+ GPU hardware', () => {
+        it('recommends standard tier and whisper-cpp on 16GB+ GPU hardware', () => {
             const advice = evaluateHardwareProfile(macM3);
             expect(advice.whisperCppSupported).toBe(true);
             expect(advice.recommendedTranscriptionEngine).toBe('whisper-cpp');
             expect(advice.recommendedOnboardingTier).toBe('standard');
-            expect(advice.recommendedLocalModelId).toBe('qwen3.5-4b-q4_k_m');
             expect(advice.preferCloudLlm).toBe(false);
         });
 
-        it('recommends 2b, standard tier, and whisper-cpp on 8GB GPU hardware', () => {
+        it('recommends standard tier and whisper-cpp on 8GB GPU hardware', () => {
             const advice = evaluateHardwareProfile(midWinGpu);
             expect(advice.recommendedTranscriptionEngine).toBe('whisper-cpp');
             expect(advice.recommendedOnboardingTier).toBe('standard');
-            expect(advice.recommendedLocalModelId).toBe('qwen3.5-2b-q4_k_m');
             expect(advice.preferCloudLlm).toBe(false);
         });
 
-        it('recommends light tier, 0.8b, preferCloudLlm, and sherpa-onnx on <8GB no-GPU hardware', () => {
+        it('recommends light tier, preferCloudLlm, and sherpa-onnx on <8GB no-GPU hardware', () => {
             const advice = evaluateHardwareProfile(lowRamNoGpu);
             expect(advice.recommendedTranscriptionEngine).toBe('sherpa-onnx');
             expect(advice.recommendedOnboardingTier).toBe('light');
-            expect(advice.recommendedLocalModelId).toBe('qwen3.5-0.8b-q4_k_m');
             expect(advice.preferCloudLlm).toBe(true);
         });
 
@@ -87,15 +83,6 @@ describe('hardware-profile', () => {
             expect(advice.whisperCppSupported).toBe(false);
             expect(advice.recommendedTranscriptionEngine).toBe('sherpa-onnx');
             expect(advice.recommendedOnboardingTier).toBe('standard');
-        });
-    });
-
-    describe('assessLocalModelFit', () => {
-        it('returns recommended, compatible, and heavy accurately against device memory & GPU', () => {
-            expect(assessLocalModelFit('qwen3.5-2b-q4_k_m', 'standard', 8, midWinGpu)).toBe('recommended');
-            expect(assessLocalModelFit('qwen3.5-0.8b-q4_k_m', 'light', 6, midWinGpu)).toBe('compatible');
-            expect(assessLocalModelFit('qwen3.5-4b-q4_k_m', 'pro', 16, midWinGpu)).toBe('heavy');
-            expect(assessLocalModelFit('qwen3.5-4b-q4_k_m', 'pro', 16, { ...midWinGpu, totalMemoryGb: 12, gpuAcceleration: 'none' })).toBe('heavy');
         });
     });
 

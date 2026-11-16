@@ -82,7 +82,7 @@ const WordContextInsight: React.FC<WordContextInsightProps> = ({
     const { t } = useTranslation('common');
     const [requested, setRequested] = useState(false);
     const dictionaryEngine = useSetting((state) => state.values.get('providers.dictionary') ?? '');
-    const aiEnabled = dictionaryEngine === 'openai' || dictionaryEngine === 'local';
+    const aiEnabled = dictionaryEngine === 'openai';
     const sentenceText = sentence?.trim() ?? '';
     const definitionsKey = definitions.join('\u0000');
     const shouldFetch = requested && aiEnabled && !!word.trim() && !!sentenceText;
@@ -186,11 +186,6 @@ const WordContextInsight: React.FC<WordContextInsightProps> = ({
         >
             <div className="flex items-center gap-1.5 text-metadata font-semibold uppercase tracking-wider text-secondary select-none">
                 <span>{t('aiContextInsightInSentence')}</span>
-                {insight.source === 'local' && (
-                    <span className="font-normal normal-case tracking-normal text-secondary/70">
-                        · {t('aiContextInsightLocal')}
-                    </span>
-                )}
             </div>
             <div className="text-sm font-medium leading-snug text-primary select-text">
                 {insight.meaning}

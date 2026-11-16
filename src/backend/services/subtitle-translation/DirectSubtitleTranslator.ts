@@ -25,8 +25,7 @@ export interface DirectTranslationTarget {
 }
 
 /**
- * 直译器宿主能力：缓存读写、按模式清空与批量翻译（含云端失败回退本地）
- * 由编排服务提供，直译器只保留独立文本批次的编排逻辑。
+ * 直译器宿主能力：缓存读写、按模式清空与批量翻译。
  */
 export interface DirectSubtitleTranslatorHost {
     /** 批量查询当前模式下的句级翻译缓存，键为数据库存储键。 */
@@ -35,13 +34,11 @@ export interface DirectSubtitleTranslatorHost {
     saveTranslations(translations: Map<string, string>, storageMode: SubtitleTranslationStorageMode): Promise<void>;
     /** 删除当前模式下的全部句级翻译缓存，返回删除行数。 */
     deleteTranslationsByMode(storageMode: SubtitleTranslationStorageMode): Promise<number>;
-    /** 按当前引擎批量翻译，云端失败时对这一批回退本地大模型。 */
-    translateWithFallback(
+    /** 按当前配置的 AI 模型批量翻译。 */
+    translateWithGateway(
         input: SubtitleBatchTranslationInput,
-        provider: 'openai' | 'local',
-        localModelId: string | null,
         targets: SubtitleTranslationTarget[]
-    ): Promise<{ translations: Map<string, string>; fellBackToLocal: boolean }>;
+    ): Promise<Map<string, string>>;
 }
 
 /**
@@ -96,7 +93,7 @@ export class DirectSubtitleTranslator {
         }
         const provider = normalizeTranslationProvider(rawProvider);
 
-        const { mode, storageMode, style, localModelId } = await this.deps.resolveContext(provider);
+        const { mode, storageMode, style } = await this.deps.resolveContext(provider);
 
         const targets = Array.from(targetsByKey.values());
         const cached = await this.deps.host.getTranslations(
@@ -114,24 +111,12 @@ export class DirectSubtitleTranslator {
         const onlineTargets = pending.filter(
             (target) => shouldTranslateSubtitleText(target.text)
         );
-        let fellBackToLocal = false;
         if (onlineTargets.length > 0) {
             const batchId = `direct-${Date.now()}`;
             const startedAt = Date.now();
-            let onlineResults: Map<string, string>;
-            if (provider === 'tencent') {
-                onlineResults = await this.translateWithTencent(onlineTargets, batchId);
-            } else {
-                const gatewayOutcome = await this.translateWithGateway(
-                    onlineTargets,
-                    mode,
-                    style,
-                    localModelId,
-                    provider as 'openai' | 'local',
-                );
-                onlineResults = gatewayOutcome.translations;
-                fellBackToLocal = gatewayOutcome.fellBackToLocal;
-            }
+            const onlineResults = provider === 'tencent'
+                ? await this.translateWithTencent(onlineTargets, batchId)
+                : await this.translateWithGateway(onlineTargets, mode, style);
             onlineResults.forEach((translation, key) => {
                 result.set(key, translation);
                 freshResults.set(key, translation);
@@ -140,16 +125,13 @@ export class DirectSubtitleTranslator {
                 batchId,
                 provider,
                 mode,
-                fellBackToLocal,
                 cacheHitCount: cached.size,
                 targetCount: onlineTargets.length,
                 elapsedMs: Date.now() - startedAt,
             });
         }
 
-        if (!fellBackToLocal) {
-            await this.deps.host.saveTranslations(freshResults, storageMode);
-        }
+        await this.deps.host.saveTranslations(freshResults, storageMode);
         return result;
     }
 
@@ -218,9 +200,7 @@ export class DirectSubtitleTranslator {
         targets: DirectTranslationTarget[],
         mode: ResolvedSubtitleTranslationContext['mode'],
         style: string | undefined,
-        localModelId: string | null,
-        provider: 'openai' | 'local'
-    ): Promise<{ translations: Map<string, string>; fellBackToLocal: boolean }> {
+    ): Promise<Map<string, string>> {
         if (!style) {
             throw new Error('OpenAI 字幕翻译风格配置缺失');
         }
@@ -233,6 +213,6 @@ export class DirectSubtitleTranslator {
             style: style ?? '',
             signal: new AbortController().signal,
         };
-        return this.deps.host.translateWithFallback(input, provider, localModelId, input.targets);
+        return this.deps.host.translateWithGateway(input, input.targets);
     }
 }

@@ -13,7 +13,7 @@ import { rendererSessionId } from '@/frontend/infrastructure/electron/rendererSe
  */
 export interface TranslationState {
     /** 当前启用的翻译引擎。 */
-    engine: 'tencent' | 'openai' | 'local' | 'none';
+    engine: 'tencent' | 'openai' | 'none';
     /** OpenAI 字幕模式。 */
     openAiMode: TranslationMode;
     /** 当前激活字幕文件哈希。 */
@@ -36,7 +36,7 @@ export interface TranslationActions {
      * @param mode 启动快照中的 OpenAI 字幕模式。
      */
     initializeRuntimeSettings: (
-        engine: 'tencent' | 'openai' | 'local' | 'none',
+        engine: 'tencent' | 'openai' | 'none',
         mode: TranslationMode
     ) => void;
 
@@ -68,7 +68,7 @@ export interface TranslationActions {
      *
      * @param engine 新翻译引擎。
      */
-    setEngine: (engine: 'tencent' | 'openai' | 'local' | 'none') => void;
+    setEngine: (engine: 'tencent' | 'openai' | 'none') => void;
 
     /**
      * 设置 OpenAI 字幕模式。
@@ -263,14 +263,14 @@ const useTranslation = create(
             if (state.openAiMode === mode) {
                 return;
             }
-            if ((state.engine === 'openai' || state.engine === 'local')) {
+            if (state.engine === 'openai') {
                 cancelPendingDemand();
                 releaseSession(state.activeFileHash);
             }
             set({
                 ...state,
                 openAiMode: mode,
-                translations: (state.engine === 'openai' || state.engine === 'local')
+                translations: state.engine === 'openai'
                     ? new Map()
                     : state.translations,
             });
@@ -306,7 +306,7 @@ const shouldAcceptTranslation = (
     if (item.provider !== state.engine || state.activeFileHash !== item.fileHash) {
         return false;
     }
-    if ((item.provider === 'openai' || item.provider === 'local')) {
+    if (item.provider === 'openai') {
         return (item.mode ?? 'zh') === state.openAiMode;
     }
     return true;

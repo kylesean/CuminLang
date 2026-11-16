@@ -15,13 +15,13 @@ import type StorageDirectoryProvider from '@/backend/services/gateways/storage/S
 import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
 import {
+    LOCAL_AI_INTEGRITY_MARKER_SUFFIX,
     LOCAL_EMBEDDING_DIMENSION,
     LOCAL_EMBEDDING_MODEL,
     LOCAL_EMBEDDING_MMPROJ,
     LLAMA_RUNTIME_VERSION,
     type LocalEmbeddingStatus,
 } from '@/common/contracts/local-ai';
-import { LOCAL_AI_INTEGRITY_MARKER_SUFFIX } from './LocalModelInstaller';
 import { probeReachableDownloadUrl } from '@/backend/utils/probeDownloadUrl';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';

@@ -56,29 +56,19 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
             getOpenAiSubtitleTranslationMode: vi.fn().mockResolvedValue('zh'),
             getOpenAiSubtitleCustomStyle: vi.fn().mockResolvedValue(''),
         };
-        const localAiService = {
-            getActiveModelId: vi.fn().mockResolvedValue('qwen3.5-2b-q4_k_m'),
-        };
         const sentenceTranslatesRepository = {
             findByStorageKeys: vi.fn().mockResolvedValue(new Map()),
             saveTranslations: vi.fn().mockResolvedValue(undefined),
         };
-        const resourceFallback = {
-            clear: vi.fn(),
-            markFallback: vi.fn(),
-        };
 
         const service = new SubtitleTranslationServiceImpl(
             settingService as never,
-            localAiService as never,
             { get: vi.fn(), set: vi.fn(), delete: vi.fn() } as never,
             modelRoutingService as never,
             sentenceTranslatesRepository as never,
             rendererGateway as never,
             {} as never,
             openAiTranslator,
-            { translate: vi.fn().mockRejectedValue(new Error('local not installed')) } as never,
-            resourceFallback as never,
         );
 
         return { service, rendererGateway, sentenceTranslatesRepository };
@@ -107,18 +97,15 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
         const { service } = createService({ translate: translateMock });
         const targets = makeTargets();
 
-        const result = await service.translateWithFallback(
+        const translations = await service.translateWithGateway(
             { targets, contextBefore: [], contextAfter: [], mode: 'zh', style: '自然简洁', signal: new AbortController().signal },
-            'openai',
-            null,
             targets,
         );
 
         expect(translateMock).toHaveBeenCalledTimes(2);
         expect(translateMock.mock.calls[1][0].targets).toEqual([{ key: 'k:3', text: 'Line three' }]);
-        expect(result.fellBackToLocal).toBe(false);
-        expect(result.translations.size).toBe(5);
-        expect(result.translations.get('k:3')).toBe('第三句');
+        expect(translations.size).toBe(5);
+        expect(translations.get('k:3')).toBe('第三句');
     });
 
     it('补译仍未能找回缺失条时，保留其余已译好的 4 条结果而不是整批丢弃', async () => {
@@ -134,16 +121,14 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
         const { service } = createService({ translate: translateMock });
         const targets = makeTargets();
 
-        const result = await service.translateWithFallback(
+        const translations = await service.translateWithGateway(
             { targets, contextBefore: [], contextAfter: [], mode: 'zh', style: '自然简洁', signal: new AbortController().signal },
-            'openai',
-            null,
             targets,
         );
 
-        expect(result.translations.size).toBe(4);
-        expect(result.translations.get('k:0')).toBe('第零句');
-        expect(result.translations.has('k:3')).toBe(false);
+        expect(translations.size).toBe(4);
+        expect(translations.get('k:0')).toBe('第零句');
+        expect(translations.has('k:3')).toBe(false);
     });
 
     it('错误提示里的引擎名称使用服务凭据配置的真实供应商名称，而非写死的 OpenAI', async () => {

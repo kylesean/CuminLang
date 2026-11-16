@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { LocalEmbeddingRuntime } from '@/backend/infrastructure/ai/LocalEmbeddingRuntime';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import { app, BrowserWindow, protocol, type Session } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
 import fs from 'fs';
@@ -402,10 +401,6 @@ app.on('ready', async () => {
         container.get<MobileAccessService>(TYPES.MobileAccessService).startFromSettings()
     ));
     logStartupPhase('mobile access');
-    // 本地引擎启用时后台预加载模型常驻内存；失败只记日志，不阻塞也不影响启动流程。
-    await runStartupStep('local ai residency', () => (
-        container.get<LocalAiService>(TYPES.LocalAiService).syncEngineResidency()
-    ));
     // 生命周期标记：会话何时开始、以什么配置运行，便于回溯“有活动却无日志”的问题。
     logger.info('app ready', {
         version: app.getVersion(),
@@ -481,10 +476,6 @@ app.on('before-quit', (event) => {
         destroyAppTray();
         disposeProxyFeature();
         terminateAllActiveChildProcesses();
-        const localAiShutdown = container.get<LocalAiService>(TYPES.LocalAiService).shutdown()
-            .catch((error) => {
-                logger.error('local AI shutdown failed', { error });
-            });
         // 语义向量运行时是独立的 llama-server 进程，不接入退出链会在每次正常
         // 退出后留下一个常驻孤儿进程（空闲卸载窗口内使用过语义推荐即触发）。
         const embeddingShutdown = container.get<LocalEmbeddingRuntime>(TYPES.LocalEmbeddingRuntime).shutdown()
@@ -495,7 +486,7 @@ app.on('before-quit', (event) => {
             .catch((error) => {
                 logger.error('mobile access shutdown failed', { error });
             });
-        void Promise.allSettled([localAiShutdown, embeddingShutdown, mobileAccessShutdown]).finally(() => {
+        void Promise.allSettled([embeddingShutdown, mobileAccessShutdown]).finally(() => {
             shutdownPhase = 'ready';
             app.quit();
         });

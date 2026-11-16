@@ -28,7 +28,6 @@ import {
     buildRolePlayFeedbackPrompt,
     LearningRecapServiceImpl,
 } from '@/backend/services/LearningRecapService';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import type LearningDataRepository from '@/backend/services/repositories/LearningDataRepository';
 import type ProductionPracticeRecordRepository from '@/backend/services/repositories/ProductionPracticeRecordRepository';
 import type RolePlayTurnRepository from '@/backend/services/repositories/RolePlayTurnRepository';
@@ -37,7 +36,6 @@ import type WordEncounterService from '@/backend/services/WordEncounterService';
 import type { WordEncounter } from '@/backend/infrastructure/db/tables/wordEncounter';
 import type { LearningSessionSummaryVO } from '@/common/types/learningSession';
 
-const LOCAL_MODEL_ID = 'qwen3.5-2b-q4_k_m';
 const CLOUD_MODEL = { modelId: 'gpt-test' } as unknown as LanguageModel;
 const SINCE = '2026-01-01T10:00:00.000Z';
 /** 多轮场景对话的会话键。 */
@@ -102,8 +100,6 @@ const buildService = (options: {
     summary?: LearningSessionSummaryVO;
     events?: WordEncounter[];
     cloudModel?: LanguageModel | null;
-    localReady?: boolean;
-    localGenerate?: () => unknown;
 }) => {
     const learningDataService = {
         getSessionSummary: vi.fn().mockResolvedValue(options.summary ?? summary),
@@ -114,14 +110,6 @@ const buildService = (options: {
     const aiProviderService = {
         getModel: vi.fn(() => options.cloudModel ?? null),
     } as unknown as AiProviderService;
-    const localAiService = {
-        getStatus: vi.fn(async () => ({
-            runtimeReady: !!options.localReady,
-            models: options.localReady ? [{ modelId: LOCAL_MODEL_ID, ready: true }] : [],
-            activeModelId: options.localReady ? LOCAL_MODEL_ID : '',
-        })),
-        generate: vi.fn(async () => options.localGenerate?.() ?? {}),
-    } as unknown as LocalAiService;
     const cache = new CacheServiceImpl();
     const productionPractice: { mode: string; [key: string]: unknown }[] = [];
     const productionPracticeRepository = {
@@ -168,7 +156,6 @@ const buildService = (options: {
         learningDataService,
         learningDataRepository,
         aiProviderService,
-        localAiService,
         cache,
         productionPracticeRepository,
         rolePlayTurnRepository,
@@ -178,7 +165,6 @@ const buildService = (options: {
     return {
         service,
         aiProviderService,
-        localAiService,
         cache,
         productionPractice,
         rolePlayTurns,

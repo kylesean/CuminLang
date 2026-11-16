@@ -63,9 +63,6 @@ export interface ConcurrencyProfiles {
  */
 export const defaultConcurrencyProfiles: ConcurrencyProfiles = {
     semaphore: {
-        // 与 LocalAiRuntime 的 llama-server 并行 slot 数一致：
-        // 多组字幕翻译请求可并发发出，多 slot 走连续批处理。
-        localAi: { capacity: 4 },
         ffmpeg: { capacity: 5 },
         ffprobe: { capacity: 5 },
         whisper: { capacity: 10 },
@@ -86,7 +83,6 @@ export const defaultConcurrencyProfiles: ConcurrencyProfiles = {
         // 业务串行互斥锁：始终在底层资源信号量之前获取，禁止在持有信号量后反向加互斥锁。
         'video-learning-sync',
         // 底层工具与推理信号量：按依赖链路与约定顺序排列。
-        'localAi',
         'yt-dlp',
         'ffmpeg',
         'ffprobe',

@@ -88,7 +88,7 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
 }) => {
     const { t, i18n } = useTranslation('common');
     const dictionaryEngine = useSetting((state) => state.values.get('providers.dictionary') ?? '');
-    const aiEnabled = dictionaryEngine === 'openai' || dictionaryEngine === 'local';
+    const aiEnabled = dictionaryEngine === 'openai';
     /**
      * 当前朗读音色（美音/英音）。
      *

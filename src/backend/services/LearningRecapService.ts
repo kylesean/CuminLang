@@ -11,7 +11,6 @@ import type AiProviderService from '@/backend/services/AiProviderService';
 import type CacheService from '@/backend/services/CacheService';
 import type LearningDataService from '@/backend/services/LearningDataService';
 import { LEARNING_SESSION_ACTIONS } from '@/backend/services/LearningDataService';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import type WordEncounterService from '@/backend/services/WordEncounterService';
 
 import type LearningDataRepository from '@/backend/services/repositories/LearningDataRepository';
@@ -19,7 +18,6 @@ import type ProductionPracticeRecordRepository from '@/backend/services/reposito
 import type RolePlayTurnRepository from '@/backend/services/repositories/RolePlayTurnRepository';
 import type SentencePracticeService from '@/backend/services/SentencePracticeService';
 import { isContentLemma } from '@/common/learning/contentWords';
-import { parseMaybeJson } from '@/common/utils/ai/parseMaybeJson';
 import { ASR_ERROR_EMPTY_RECORDING } from '@/common/constants/asr-errors';
 import type {
     LearningRecapExpressionVO,
@@ -65,7 +63,6 @@ const RECAP_CACHE_TTL_MS = 60 * 60 * 1000;
 const RETELL_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const ROLE_PLAY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CLOUD_TIMEOUT_MS = 30_000;
-const LOCAL_TIMEOUT_MS = 60_000;
 const MAX_CONTEXTS = 6;
 const MAX_RECAP_WORDS = 3;
 const MAX_CONTEXT_CHARS = 400;
@@ -199,7 +196,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         @inject(TYPES.LearningDataService) private readonly learningDataService: LearningDataService,
         @inject(TYPES.LearningDataRepository) private readonly learningDataRepository: LearningDataRepository,
         @inject(TYPES.AiProviderService) private readonly aiProviderService: AiProviderService,
-        @inject(TYPES.LocalAiService) private readonly localAiService: LocalAiService,
         @inject(TYPES.CacheService) private readonly cacheService: CacheService,
         @inject(TYPES.ProductionPracticeRecordRepository)
         private readonly productionPracticeRepository: ProductionPracticeRecordRepository,
@@ -240,8 +236,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         }
 
         const cloudModel = this.resolveCloudModel();
-        const localModelId = await this.resolveLocalModelId();
-        if (!cloudModel && !localModelId) {
+        if (!cloudModel) {
             return localRecap;
         }
 
@@ -251,7 +246,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             summary,
             contexts,
             cloudModelId: this.modelIdOf(cloudModel),
-            localModelId: localModelId ?? '',
         });
         if (!params.forceRefresh) {
             const cached = this.cacheService.get('cache:learning-recap', cacheKey);
@@ -272,7 +266,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             localRecap,
             cacheKey,
             cloudModel,
-            localModelId,
         }).finally(() => {
             this.recapInFlight.delete(cacheKey);
         });
@@ -292,8 +285,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
 
         const localResult = this.buildLocalRetell(original, response);
         const cloudModel = this.resolveCloudModel();
-        const localModelId = await this.resolveLocalModelId();
-        if (!cloudModel && !localModelId) {
+        if (!cloudModel) {
             await this.recordRetellAttempt(params, original, response, localResult);
             return localResult;
         }
@@ -303,7 +295,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             original,
             response,
             cloudModelId: this.modelIdOf(cloudModel),
-            localModelId: localModelId ?? '',
         });
         if (!params.forceRefresh) {
             const cached = this.cacheService.get('cache:retell-feedback', cacheKey);
@@ -328,7 +319,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             localResult,
             cacheKey,
             cloudModel,
-            localModelId,
         }).finally(() => {
             this.retellInFlight.delete(cacheKey);
         });
@@ -352,8 +342,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
 
         const localResult = this.buildLocalRolePlay(response, targetExpressions);
         const cloudModel = this.resolveCloudModel();
-        const localModelId = await this.resolveLocalModelId();
-        if (!cloudModel && !localModelId) {
+        if (!cloudModel) {
             await this.recordRolePlayAttempt(params, openingLine, response, localResult);
             return localResult;
         }
@@ -365,7 +354,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             response,
             targetExpressions,
             cloudModelId: this.modelIdOf(cloudModel),
-            localModelId: localModelId ?? '',
         });
         if (!params.forceRefresh) {
             const cached = this.cacheService.get('cache:role-play-feedback', cacheKey);
@@ -392,7 +380,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             localResult,
             cacheKey,
             cloudModel,
-            localModelId,
         }).finally(() => {
             this.rolePlayInFlight.delete(cacheKey);
         });
@@ -742,7 +729,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
     }
 
     /**
-     * 依次尝试云端与本地模型；两者都失败时保留本地确定性复盘。
+     * 调用当前配置的 AI 模型生成复盘；失败时保留本地确定性复盘。
      */
     private async generateRecap(args: {
         params: LearningRecapParams;
@@ -750,81 +737,38 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         contexts: RecapContext[];
         localRecap: LearningRecapVO;
         cacheKey: string;
-        cloudModel: LanguageModel | null;
-        localModelId: string | null;
+        cloudModel: LanguageModel;
     }): Promise<LearningRecapVO> {
         const prompt = buildLearningRecapPrompt({
             summary: args.summary,
             contexts: args.contexts,
             locale: this.resolveLocale(args.params.locale),
         });
-        const failures: string[] = [];
-
-        if (args.cloudModel) {
-            const startedAt = Date.now();
-            try {
-                const result = await concurrency.withRateLimit('gpt', () => generateObject({
-                    model: args.cloudModel!,
-                    schema: recapSchema,
-                    prompt,
-                    maxRetries: 0,
-                    abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
-                }));
-                const recap = this.groundRecap(result.object, args.summary, args.contexts, args.localRecap, 'ai');
-                this.cacheService.set('cache:learning-recap', args.cacheKey, recap, RECAP_CACHE_TTL_MS);
-                this.logger.info('learning recap ready', {
-                    source: 'ai',
-                    durationMs: Date.now() - startedAt,
-                    words: recap.words.length,
-                });
-                return recap;
-            } catch (error) {
-                failures.push(`cloud: ${this.errorMessage(error)}`);
-                this.logger.warn('learning recap cloud failed, trying local model', {
-                    durationMs: Date.now() - startedAt,
-                    error: this.errorMessage(error),
-                });
-            }
+        const startedAt = Date.now();
+        try {
+            const result = await concurrency.withRateLimit('gpt', () => generateObject({
+                model: args.cloudModel,
+                schema: recapSchema,
+                prompt,
+                maxRetries: 0,
+                abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
+            }));
+            const recap = this.groundRecap(result.object, args.summary, args.contexts, args.localRecap, 'ai');
+            this.cacheService.set('cache:learning-recap', args.cacheKey, recap, RECAP_CACHE_TTL_MS);
+            this.logger.info('learning recap ready', {
+                source: 'ai',
+                durationMs: Date.now() - startedAt,
+                words: recap.words.length,
+            });
+            return recap;
+        } catch (error) {
+            const message = this.errorMessage(error);
+            this.logger.warn('learning recap failed, using deterministic summary', {
+                durationMs: Date.now() - startedAt,
+                error: message,
+            });
+            return args.localRecap;
         }
-
-        if (args.localModelId) {
-            const startedAt = Date.now();
-            try {
-                const output = await this.localAiService.generate(
-                    prompt,
-                    z.toJSONSchema(recapSchema),
-                    args.localModelId,
-                    AbortSignal.timeout(LOCAL_TIMEOUT_MS),
-                );
-                const parsed = recapSchema.safeParse(parseMaybeJson(output));
-                if (!parsed.success) {
-                    this.logger.error('learning recap local output invalid', {
-                        issues: parsed.error.issues,
-                        rawText: JSON.stringify(output)?.slice(0, 500),
-                    });
-                    throw new Error('本地模型复盘输出不符合契约');
-                }
-                const recap = this.groundRecap(parsed.data, args.summary, args.contexts, args.localRecap, 'local');
-                this.cacheService.set('cache:learning-recap', args.cacheKey, recap, RECAP_CACHE_TTL_MS);
-                this.logger.info('learning recap ready', {
-                    source: 'local-model',
-                    durationMs: Date.now() - startedAt,
-                    words: recap.words.length,
-                });
-                return recap;
-            } catch (error) {
-                failures.push(`local: ${this.errorMessage(error)}`);
-                this.logger.error('learning recap local model failed', {
-                    durationMs: Date.now() - startedAt,
-                    error: this.errorMessage(error),
-                });
-            }
-        }
-
-        this.logger.warn('learning recap fell back to deterministic summary', {
-            failures: failures.join('; '),
-        });
-        return args.localRecap;
     }
 
     /**
@@ -1048,8 +992,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         response: string;
         localResult: RetellEvaluationVO;
         cacheKey: string;
-        cloudModel: LanguageModel | null;
-        localModelId: string | null;
+        cloudModel: LanguageModel;
     }): Promise<RetellEvaluationVO> {
         const prompt = buildRetellPrompt({
             original: args.original,
@@ -1059,48 +1002,21 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             locale: this.resolveLocale(args.params.locale),
         });
 
-        if (args.cloudModel) {
-            try {
-                const result = await concurrency.withRateLimit('gpt', () => generateObject({
-                    model: args.cloudModel!,
-                    schema: retellSchema,
-                    prompt,
-                    maxRetries: 0,
-                    abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
-                }));
-                return this.finishRetell(result.object, args.localResult, args.cacheKey, 'ai', args.original);
-            } catch (error) {
-                this.logger.warn('retell feedback cloud failed, trying local model', {
-                    error: this.errorMessage(error),
-                });
-            }
+        try {
+            const result = await concurrency.withRateLimit('gpt', () => generateObject({
+                model: args.cloudModel,
+                schema: retellSchema,
+                prompt,
+                maxRetries: 0,
+                abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
+            }));
+            return this.finishRetell(result.object, args.localResult, args.cacheKey, 'ai', args.original);
+        } catch (error) {
+            this.logger.warn('retell feedback failed, using deterministic result', {
+                error: this.errorMessage(error),
+            });
+            return args.localResult;
         }
-
-        if (args.localModelId) {
-            try {
-                const output = await this.localAiService.generate(
-                    prompt,
-                    z.toJSONSchema(retellSchema),
-                    args.localModelId,
-                    AbortSignal.timeout(LOCAL_TIMEOUT_MS),
-                );
-                const parsed = retellSchema.safeParse(parseMaybeJson(output));
-                if (!parsed.success) {
-                    this.logger.error('retell feedback local output invalid', {
-                        issues: parsed.error.issues,
-                        rawText: JSON.stringify(output)?.slice(0, 500),
-                    });
-                    throw new Error('本地模型复述反馈输出不符合契约');
-                }
-                return this.finishRetell(parsed.data, args.localResult, args.cacheKey, 'local', args.original);
-            } catch (error) {
-                this.logger.error('retell feedback local model failed', {
-                    error: this.errorMessage(error),
-                });
-            }
-        }
-
-        return args.localResult;
     }
 
     /**
@@ -1138,7 +1054,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
     }
 
     /**
-     * 依次尝试云端与本地模型；两者都失败时保留本地长度/表达信号。
+     * 调用当前配置的 AI 模型生成角色扮演反馈；失败时保留本地长度/表达信号。
      */
     private async generateRolePlay(args: {
         params: RolePlayFeedbackParams;
@@ -1148,8 +1064,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         targetExpressions: string[];
         localResult: RolePlayFeedbackVO;
         cacheKey: string;
-        cloudModel: LanguageModel | null;
-        localModelId: string | null;
+        cloudModel: LanguageModel;
     }): Promise<RolePlayFeedbackVO> {
         const prompt = buildRolePlayFeedbackPrompt({
             scenario: args.scenario,
@@ -1160,48 +1075,21 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             locale: this.resolveLocale(args.params.locale),
         });
 
-        if (args.cloudModel) {
-            try {
-                const result = await concurrency.withRateLimit('gpt', () => generateObject({
-                    model: args.cloudModel!,
-                    schema: rolePlayFeedbackSchema,
-                    prompt,
-                    maxRetries: 0,
-                    abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
-                }));
-                return this.finishRolePlay(result.object, args.localResult, args.cacheKey, 'ai', args.response);
-            } catch (error) {
-                this.logger.warn('role play feedback cloud failed, trying local model', {
-                    error: this.errorMessage(error),
-                });
-            }
+        try {
+            const result = await concurrency.withRateLimit('gpt', () => generateObject({
+                model: args.cloudModel,
+                schema: rolePlayFeedbackSchema,
+                prompt,
+                maxRetries: 0,
+                abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
+            }));
+            return this.finishRolePlay(result.object, args.localResult, args.cacheKey, 'ai', args.response);
+        } catch (error) {
+            this.logger.warn('role play feedback failed, using deterministic result', {
+                error: this.errorMessage(error),
+            });
+            return args.localResult;
         }
-
-        if (args.localModelId) {
-            try {
-                const output = await this.localAiService.generate(
-                    prompt,
-                    z.toJSONSchema(rolePlayFeedbackSchema),
-                    args.localModelId,
-                    AbortSignal.timeout(LOCAL_TIMEOUT_MS),
-                );
-                const parsed = rolePlayFeedbackSchema.safeParse(parseMaybeJson(output));
-                if (!parsed.success) {
-                    this.logger.error('role play feedback local output invalid', {
-                        issues: parsed.error.issues,
-                        rawText: JSON.stringify(output)?.slice(0, 500),
-                    });
-                    throw new Error('本地模型场景回应输出不符合契约');
-                }
-                return this.finishRolePlay(parsed.data, args.localResult, args.cacheKey, 'local', args.response);
-            } catch (error) {
-                this.logger.error('role play feedback local model failed', {
-                    error: this.errorMessage(error),
-                });
-            }
-        }
-
-        return args.localResult;
     }
 
     /**
@@ -1244,7 +1132,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         summary: LearningSessionSummaryVO;
         contexts: RecapContext[];
         cloudModelId: string;
-        localModelId: string;
     }): string {
         return ObjUtil.hash({
             mode: 'learning-recap',
@@ -1256,7 +1143,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             words: args.summary.words.map((word) => word.word).sort(),
             contexts: args.contexts.map((context) => context.text).sort(),
             cloudModelId: args.cloudModelId,
-            localModelId: args.localModelId,
         });
     }
 
@@ -1268,7 +1154,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         original: string;
         response: string;
         cloudModelId: string;
-        localModelId: string;
     }): string {
         return ObjUtil.hash({
             mode: 'retell-feedback',
@@ -1277,7 +1162,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             response: args.response.trim(),
             locale: this.resolveLocale(args.params.locale),
             cloudModelId: args.cloudModelId,
-            localModelId: args.localModelId,
         });
     }
 
@@ -1291,7 +1175,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         response: string;
         targetExpressions: string[];
         cloudModelId: string;
-        localModelId: string;
     }): string {
         return ObjUtil.hash({
             mode: 'role-play-feedback',
@@ -1302,7 +1185,6 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             targetExpressions: args.targetExpressions,
             locale: this.resolveLocale(args.params.locale),
             cloudModelId: args.cloudModelId,
-            localModelId: args.localModelId,
         });
     }
 
@@ -1348,25 +1230,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         try {
             return this.aiProviderService.getModel('sentenceLearning');
         } catch (error) {
-            this.logger.warn('learning recap cloud model unavailable', {
-                error: this.errorMessage(error),
-            });
-            return null;
-        }
-    }
-
-    /**
-     * 解析本地推理可用的模型 id；运行时缺失或使用中模型未安装时返回 null。
-     */
-    private async resolveLocalModelId(): Promise<string | null> {
-        try {
-            const status = await this.localAiService.getStatus();
-            if (!status.runtimeReady) return null;
-            return status.models.find((model) => model.modelId === status.activeModelId)?.ready
-                ? status.activeModelId
-                : null;
-        } catch (error) {
-            this.logger.warn('learning recap local model resolve failed', {
+            this.logger.warn('learning recap model unavailable', {
                 error: this.errorMessage(error),
             });
             return null;
@@ -1419,11 +1283,15 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         if (!value) {
             return [];
         }
-        const parsed = parseMaybeJson(value);
-        if (!Array.isArray(parsed)) {
+        try {
+            const parsed: unknown = JSON.parse(value);
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+            return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+        } catch {
             return [];
         }
-        return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
     }
 
     /**

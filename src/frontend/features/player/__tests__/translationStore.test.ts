@@ -145,10 +145,10 @@ describe('translationStore 需求防抖与会话生命周期（特征化钉住�
 
     it('initializeRuntimeSettings 只改配置：不释放当前字幕会话（首屏竞态保护）', () => {
         seedActiveOpenAi();
-        useTranslation.getState().initializeRuntimeSettings('local', 'simple_en');
+        useTranslation.getState().initializeRuntimeSettings('openai', 'simple_en');
 
         expect(playerApiMock.releaseSubtitleTranslationSession).not.toHaveBeenCalled();
-        expect(useTranslation.getState().engine).toBe('local');
+        expect(useTranslation.getState().engine).toBe('openai');
         expect(useTranslation.getState().openAiMode).toBe('simple_en');
     });
 

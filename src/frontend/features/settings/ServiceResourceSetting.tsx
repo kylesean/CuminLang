@@ -37,7 +37,6 @@ import { OpenAiCredentialCard } from '@/frontend/features/settings/components/Op
 import { SETTINGS_DETAIL_SWR_OPTIONS, settingsApi } from '@/frontend/features/settings/settingsApi';
 import { useAutoSaveSettingsForm } from '@/frontend/features/settings/useAutoSaveSettingsForm';
 import { useServiceResourceActions } from '@/frontend/features/settings/hooks/useServiceResourceActions';
-import { subscribeLocalAiDownloadProgress } from '@/frontend/features/settings/settingsEvents';
 import { SETTING_ROW_TESTIDS } from '@/common/constants/qa-testids';
 import type { EngineSelectionSettingVO } from '@/common/types/vo/engine-selection-setting-vo';
 import type { ServiceCredentialSettingFormValues } from '@/common/types/vo/service-credentials-setting-vo';
@@ -99,8 +98,6 @@ const ServiceResourceSetting: React.FC = () => {
     );
     const hardware = resourceStatus?.hardware;
     const suitableForLocalAi = React.useMemo(() => isHardwareSuitableForLocalAi(hardware), [hardware]);
-    const fallbackState = resourceStatus?.fallback ?? null;
-    const localAiStatus = resourceStatus?.localAi ?? null;
 
     const credentialForm = useForm<ServiceCredentialSettingFormValues>();
     const preferenceForm = useForm<EngineSelectionSettingVO>();
@@ -201,7 +198,6 @@ const ServiceResourceSetting: React.FC = () => {
         t,
         refreshResourceStatus,
         flushCredentials,
-        localAiStatus,
         cacheTargets,
     });
 
@@ -257,29 +253,13 @@ const ServiceResourceSetting: React.FC = () => {
         return models.filter((model) => !disabled.has(model));
     }, [watchedProviders, watchedCredentialModels, watchedDisabledModels]);
 
-    React.useEffect(() => {
-        const unsubscribe = subscribeLocalAiDownloadProgress((progress) => {
-            void refreshResourceStatus((current) => current ? {
-                ...current,
-                localAi: {
-                    ...current.localAi,
-                    models: current.localAi.models.map((model) => model.modelId === progress.modelId
-                        ? { ...model, downloaded: progress.downloaded, total: progress.total, phase: progress.phase }
-                        : model),
-                },
-            } : current, { revalidate: false });
-            if (progress.phase === 'idle') void refreshResourceStatus();
-        });
-        return unsubscribe;
-    }, [refreshResourceStatus]);
-
     const applyEngineValue = (
         value: string,
         engineKey: 'providers.subtitleTranslationEngine' | 'providers.dictionaryEngine',
         modelField: 'openai.featureModels.subtitleTranslation' | 'openai.featureModels.dictionary',
     ) => {
         const { engine, model } = parseEngineValue(value);
-        setValue(engineKey, engine as 'openai' | 'local' | 'tencent' | 'none', { shouldDirty: true });
+        setValue(engineKey, engine as 'openai' | 'tencent' | 'none', { shouldDirty: true });
         setValue(modelField, model ?? '', { shouldDirty: true });
     };
 
@@ -291,24 +271,15 @@ const ServiceResourceSetting: React.FC = () => {
     const sentenceLearningModel = watched.openai?.featureModels?.sentenceLearning ?? '';
     const sentenceLearningValue = !watched.openai?.enableSentenceLearning
         ? 'none'
-        : sentenceLearningModel === 'local'
-            ? 'local'
-            : availableModels.length > 0
-                ? `openai:${sentenceLearningModel}`
-                : 'none';
+        : availableModels.length > 0
+            ? `openai:${sentenceLearningModel}`
+            : 'none';
 
     const applySentenceLearningValue = (value: string) => {
-        if (value === 'local') {
-            setValue('openai.enableSentenceLearning', true, { shouldDirty: true });
-            setValue('openai.featureModels.sentenceLearning', 'local', { shouldDirty: true });
-            return;
-        }
         const { model } = parseEngineValue(value);
         setValue('openai.enableSentenceLearning', model !== null, { shouldDirty: true });
         setValue('openai.featureModels.sentenceLearning', model ?? '', { shouldDirty: true });
     };
-
-    const cloudFallback = Boolean(fallbackState?.subtitleTranslation || fallbackState?.dictionary);
 
     const modelOptionItems = React.useMemo(() => {
         if (watchedProviders && watchedProviders.length > 0) {
@@ -338,12 +309,6 @@ const ServiceResourceSetting: React.FC = () => {
         ...(subtitleEngine === 'openai' && !!watched.openai?.featureModels?.subtitleTranslation && !availableModels.includes(watched.openai.featureModels.subtitleTranslation)
             ? [{ value: `openai:${watched.openai.featureModels.subtitleTranslation}`, label: watched.openai.featureModels.subtitleTranslation, disabled: true }]
             : []),
-        ...(subtitleEngine === 'local'
-            ? [{ value: 'local', label: t('resources.preference.engineLocalAi'), disabled: true }]
-            : []),
-        ...(subtitleEngine === 'local-mt'
-            ? [{ value: 'local-mt', label: t('resources.preference.engineLocalMtLegacy'), disabled: true }]
-            : []),
         { value: 'none', label: t('resources.preference.engineNone') },
     ], [modelOptionItems, availableModels, subtitleEngine, watched.openai, t]);
 
@@ -352,17 +317,11 @@ const ServiceResourceSetting: React.FC = () => {
         ...(watched.providers?.dictionaryEngine === 'openai' && !!watched.openai?.featureModels?.dictionary && !availableModels.includes(watched.openai.featureModels.dictionary)
             ? [{ value: `openai:${watched.openai.featureModels.dictionary}`, label: watched.openai.featureModels.dictionary, disabled: true }]
             : []),
-        ...(watched.providers?.dictionaryEngine === 'local'
-            ? [{ value: 'local', label: t('resources.preference.engineLocalAi'), disabled: true }]
-            : []),
         { value: 'none', label: t('resources.preference.engineNoSupplement') },
     ], [modelOptionItems, availableModels, watched.providers?.dictionaryEngine, watched.openai, t]);
 
     const sentenceOptions = React.useMemo(() => [
         { value: 'none', label: t('resources.preference.engineDisabled') },
-        ...(sentenceLearningValue === 'local'
-            ? [{ value: 'local', label: t('resources.preference.engineLocalAi'), disabled: true }]
-            : []),
         ...modelOptionItems,
         ...(sentenceLearningValue.startsWith('openai:') && !availableModels.includes(sentenceLearningValue.slice('openai:'.length))
             ? [{ value: sentenceLearningValue, label: sentenceLearningValue.slice('openai:'.length), disabled: true }]
@@ -600,9 +559,6 @@ const ServiceResourceSetting: React.FC = () => {
 
                 {activeTab === 'cloud' && (
                     <VStack id={TAB_PANEL_IDS.cloud} role="tabpanel" gap={4} width="100%">
-                        {cloudFallback && (
-                            <Banner status="warning" title={t('resources.cloud.fallbackHint')} />
-                        )}
                         <SettingSection
                             title={t('resources.cloud.title')}
                             description={t('resources.cloud.description')}

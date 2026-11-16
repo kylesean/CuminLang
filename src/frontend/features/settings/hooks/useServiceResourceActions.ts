@@ -3,7 +3,6 @@ import { toast } from 'react-hot-toast';
 import type { KeyedMutator } from 'swr';
 import type { TFunction } from 'i18next';
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
-import type { LocalAiModelStatus } from '@/common/contracts/local-ai';
 import type { TranscriptionEngine } from '@/common/contracts/transcription-engine';
 
 type ResourceStatus = Awaited<ReturnType<typeof settingsApi.getResourceStatus>>;
@@ -15,23 +14,17 @@ export interface ServiceResourceActionsOptions {
     refreshResourceStatus: KeyedMutator<ResourceStatus>;
     /** 云端密钥表单的即时落盘；测试连通性前必须先保存。 */
     flushCredentials: () => Promise<void>;
-    /** 当前本地增强模型状态，用于补全下载失败时的模型名。 */
-    localAiStatus: ResourceStatus['localAi'] | null;
     /** 当前哪些缓存会被"清空缓存"命中。 */
     cacheTargets: { subtitle: boolean; dictionary: boolean };
 }
 
 /**
- * 服务与资源页的动作层：译/识引擎切换、缓存清理、本地模型下载与测速、云端测试。
- *
- * 这些动作只依赖 settingsApi、toast 与 SWR 的刷新函数，属于页面副作用而不是 UI 状态；
- * 抽到 hook 后组件只保留表单与分区展示，不再内联 try/catch/toast 流程。
+ * 服务与资源页的动作层：译/识引擎切换、缓存清理、AI 模型连通性测试。
  */
 export function useServiceResourceActions({
     t,
     refreshResourceStatus,
     flushCredentials,
-    localAiStatus,
     cacheTargets,
 }: ServiceResourceActionsOptions) {
     const mountedRef = React.useRef(true);
@@ -42,7 +35,7 @@ export function useServiceResourceActions({
         };
     }, []);
 
-    // 云端密钥的连通性测试
+    // 模型连通性测试
     const [testingOpenAiModel, setTestingOpenAiModel] = React.useState<string | null>(null);
     const [openAiTestResults, setOpenAiTestResults] = React.useState<Record<string, {
         success: boolean;
@@ -51,21 +44,10 @@ export function useServiceResourceActions({
     const testingOpenAiModelsRef = React.useRef(new Set<string>());
     const openAiEpochRef = React.useRef(new Map<string, number>());
 
-    // 本地增强模型
-    const [localAiBusy, setLocalAiBusy] = React.useState(false);
-    const localAiBusyRef = React.useRef(false);
     const [clearingCache, setClearingCache] = React.useState(false);
     const clearingCacheRef = React.useRef(false);
     /** 清缓存确认弹窗是否打开。 */
     const [cacheConfirmOpen, setCacheConfirmOpen] = React.useState(false);
-    const [testingModelId, setTestingModelId] = React.useState<string | null>(null);
-    const testingModelIdRef = React.useRef<string | null>(null);
-    const [testResultsMap, setTestResultsMap] = React.useState<Record<string, {
-        success: boolean;
-        warmSec: string;
-        tps: string;
-        errorMessage?: string;
-    } | null>>({});
 
     const changeTranscriptionEngine = async (engine: TranscriptionEngine) => {
         try {
@@ -100,84 +82,6 @@ export function useServiceResourceActions({
         }
     };
 
-    const localAiDisplayName = (model: LocalAiModelStatus): string =>
-        model.custom ? model.name : t('serviceCredentials.localAi.builtinModelName');
-
-    const runLocalAiAction = async (model: LocalAiModelStatus, action: () => Promise<unknown>, successMessage: string) => {
-        if (localAiBusyRef.current) return false;
-        localAiBusyRef.current = true;
-        setLocalAiBusy(true);
-        try {
-            await action();
-            toast.success(`${localAiDisplayName(model)}: ${successMessage}`);
-            return true;
-        } catch (error) {
-            toast.error(`${localAiDisplayName(model)}: ${error instanceof Error ? error.message : String(error)}`);
-            return false;
-        } finally {
-            localAiBusyRef.current = false;
-            if (mountedRef.current) {
-                setLocalAiBusy(false);
-            }
-            await refreshResourceStatus();
-        }
-    };
-
-    const downloadLocalAi = async (modelId: string) => {
-        const model = localAiStatus?.models.find((item) => item.modelId === modelId);
-        void refreshResourceStatus((current) => current ? {
-            ...current,
-            localAi: {
-                ...current.localAi,
-                models: current.localAi.models.map((item) => item.modelId === modelId ? { ...item, phase: 'downloading' } : item),
-            },
-        } : current, { revalidate: false });
-        try {
-            await settingsApi.downloadLocalAi(modelId);
-            toast.success(t('common.downloadDone'));
-        } catch (error) {
-            const prefix = model ? `${localAiDisplayName(model)}: ` : '';
-            toast.error(`${prefix}${error instanceof Error ? error.message : String(error)}`);
-        } finally {
-            await refreshResourceStatus();
-        }
-    };
-
-    const testLocalAiModel = async (modelId: string) => {
-        if (testingModelIdRef.current) return;
-        testingModelIdRef.current = modelId;
-        setTestingModelId(modelId);
-        try {
-            const result = await settingsApi.speedTestLocalAi(modelId);
-            if (!mountedRef.current) return;
-            setTestResultsMap((prev) => ({
-                ...prev,
-                [modelId]: {
-                    success: true,
-                    warmSec: (result.warmMs / 1000).toFixed(1),
-                    tps: result.tokensPerSecond === null ? '—' : result.tokensPerSecond.toFixed(1),
-                },
-            }));
-        } catch (error) {
-            if (!mountedRef.current) return;
-            setTestResultsMap((prev) => ({
-                ...prev,
-                [modelId]: {
-                    success: false,
-                    warmSec: '—',
-                    tps: '—',
-                    errorMessage: error instanceof Error ? error.message : String(error),
-                },
-            }));
-        } finally {
-            testingModelIdRef.current = null;
-            if (mountedRef.current) {
-                setTestingModelId(null);
-            }
-            await refreshResourceStatus();
-        }
-    };
-
     const copyText = async (value: string) => {
         try {
             if (settingsApi.copyText) {
@@ -206,22 +110,6 @@ export function useServiceResourceActions({
         } catch (error) {
             toast.error(error instanceof Error ? error.message : String(error));
         }
-    };
-
-    /** 取消本地模型下载：与下载共用忙碌态，结束后刷新资源状态。 */
-    const cancelLocalAiDownload = () => {
-        if (localAiBusyRef.current) return;
-        localAiBusyRef.current = true;
-        setLocalAiBusy(true);
-        void settingsApi.cancelLocalAiDownload()
-            .catch((error) => toast.error(error instanceof Error ? error.message : String(error)))
-            .finally(() => {
-                localAiBusyRef.current = false;
-                if (mountedRef.current) {
-                    setLocalAiBusy(false);
-                }
-                void refreshResourceStatus();
-            });
     };
 
     /** 模型被删除后清掉它的连通性测试结果，并递增值代数使在途测试响应失效。 */
@@ -287,22 +175,15 @@ export function useServiceResourceActions({
     return {
         testingOpenAiModel,
         openAiTestResults,
-        localAiBusy,
         clearingCache,
         cacheConfirmOpen,
         setCacheConfirmOpen,
-        testingModelId,
-        testResultsMap,
         changeTranscriptionEngine,
         clearCaches,
-        runLocalAiAction,
-        downloadLocalAi,
-        testLocalAiModel,
         copyText,
         openUrl,
         openFolder,
         testOpenAiModel,
-        cancelLocalAiDownload,
         forgetOpenAiTestResult,
     };
 }

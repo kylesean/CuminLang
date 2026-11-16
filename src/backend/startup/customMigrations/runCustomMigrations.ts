@@ -11,6 +11,7 @@ import { storeSchemaCloudAiEndpointMigrationV3 } from './migrations/storeSchemaC
 import { storeSchemaSubtitleEngineLocalMtMigrationV1 } from './migrations/storeSchemaSubtitleEngineLocalMtMigrationV1';
 import { defaultVocabularySourceMigrationV1 } from './migrations/defaultVocabularySourceMigrationV1';
 import { legacyEmbeddingVectorPurgeMigrationV1 } from './migrations/legacyEmbeddingVectorPurgeMigrationV1';
+import { storeSchemaRemoveLocalLlmMigrationV1 } from './migrations/storeSchemaRemoveLocalLlmMigrationV1';
 
 const logger = getMainLogger('custom-migrations');
 
@@ -28,6 +29,7 @@ const customMigrations: CustomMigration[] = [
     storeSchemaSubtitleEngineLocalMtMigrationV1,
     defaultVocabularySourceMigrationV1,
     legacyEmbeddingVectorPurgeMigrationV1,
+    storeSchemaRemoveLocalLlmMigrationV1,
 ];
 
 /**

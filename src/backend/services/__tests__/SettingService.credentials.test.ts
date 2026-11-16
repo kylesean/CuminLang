@@ -48,13 +48,6 @@ const createService = (store: ReturnType<typeof createStore>): SettingServiceImp
         { get: vi.fn() } as never,
         store as unknown as SettingsStore,
         { getDirectory: vi.fn() } as never,
-        {
-            status: vi.fn(),
-            download: vi.fn(),
-            cancelDownload: vi.fn(),
-            deleteModel: vi.fn(),
-            syncEngineResidency: vi.fn(),
-        } as never,
     );
 };
 
@@ -148,23 +141,23 @@ describe('服务凭据：不把明文送进渲染进程', () => {
                 subtitleTranslationMode: 'zh',
                 subtitleCustomStyle: '',
                 featureModels: {
-                    sentenceLearning: 'local',
+                    sentenceLearning: 'gpt-4o-mini',
                     subtitleTranslation: 'gpt-4o-mini',
                     dictionary: 'gpt-4o-mini',
                 },
             },
             providers: {
-                subtitleTranslationEngine: 'local',
-                dictionaryEngine: 'local',
+                subtitleTranslationEngine: 'openai',
+                dictionaryEngine: 'none',
                 embeddingEngine: 'openai',
             },
             invalidValues: {},
         });
 
         const selection = await service.getEngineSelectionDetail();
-        expect(selection.providers.subtitleTranslationEngine).toBe('local');
-        expect(selection.providers.dictionaryEngine).toBe('local');
+        expect(selection.providers.subtitleTranslationEngine).toBe('openai');
+        expect(selection.providers.dictionaryEngine).toBe('none');
         expect(selection.providers.embeddingEngine).toBe('openai');
-        expect(selection.openai.featureModels.sentenceLearning).toBe('local');
+        expect(selection.openai.featureModels.sentenceLearning).toBe('gpt-4o-mini');
     });
 });

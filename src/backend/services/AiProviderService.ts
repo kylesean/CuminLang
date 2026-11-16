@@ -18,9 +18,9 @@ import TYPES from '@/backend/ioc/types';
 
 export type AiModelScene = 'sentenceLearning' | 'subtitleTranslation' | 'dictionary';
 
-/** 云端模型未配置时推给用户的引导文案：说明去哪配、可以用预设。即 getModel 返回 null 的用户可读形式。 */
+/** 模型未配置时推给用户的引导文案：说明去哪配、可以用预设。即 getModel 返回 null 的用户可读形式。 */
 export const CLOUD_AI_NOT_CONFIGURED_MESSAGE =
-    '云端 AI 未配置：请到「设置 → 服务与资源」填写 API Key、接口地址与模型，或点「使用预设」快速填入';
+    'AI 模型未配置：请到「设置 → 服务与资源」填写接口地址、API Key（本地服务可留空）与模型，或点「使用预设」快速填入';
 
 export default interface AiProviderService {
     getModel(scene: AiModelScene): LanguageModel | null;
@@ -94,9 +94,6 @@ export class AiProviderServiceImpl implements AiProviderService {
         if (scene === 'sentenceLearning') {
             if (storeGet('features.openai.enableSentenceLearning') !== 'true') {
                 throw new Error('整句学习功能未启用，请先在功能设置中启用');
-            }
-            if (storeGet('models.openai.sentenceLearning') === 'local') {
-                return null;
             }
         }
         const routedModel = this.modelRoutingService.resolveOpenAiModel(scene);

@@ -22,7 +22,6 @@ vi.mock('ai', async (importOriginal) => {
 import { generateObject, type LanguageModel } from 'ai';
 import type AiProviderService from '@/backend/services/AiProviderService';
 import { CacheServiceImpl } from '@/backend/services/CacheService';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import type SettingService from '@/backend/services/SettingService';
 import {
     buildWordContextInsightPrompt,
@@ -30,7 +29,6 @@ import {
 } from '@/backend/services/WordContextInsightService';
 import type { WordContextInsightParams } from '@/common/types/wordInsight';
 
-const LOCAL_MODEL_ID = 'qwen3.5-2b-q4_k_m';
 const CLOUD_MODEL = { modelId: 'gpt-test' } as unknown as LanguageModel;
 
 const PARAMS: WordContextInsightParams = {
@@ -43,10 +41,8 @@ const PARAMS: WordContextInsightParams = {
  * 装配语境解读服务：其余依赖用边界桩，缓存使用真实实现以覆盖命中与并发合并。
  */
 const buildService = (options: {
-    provider: 'openai' | 'local' | null;
+    provider: 'openai' | null;
     cloudModel?: LanguageModel | null;
-    localReady?: boolean;
-    localGenerate?: () => unknown;
 }) => {
     const settingService = {
         getCurrentDictionaryProvider: vi.fn().mockResolvedValue(options.provider),
@@ -54,24 +50,13 @@ const buildService = (options: {
     const aiProviderService = {
         getModel: vi.fn(() => options.cloudModel ?? null),
     } as unknown as AiProviderService;
-    const localAiService = {
-        getStatus: vi.fn(async () => ({
-            runtimeReady: !!options.localReady,
-            models: options.localReady
-                ? [{ modelId: LOCAL_MODEL_ID, ready: true }]
-                : [],
-            activeModelId: options.localReady ? LOCAL_MODEL_ID : '',
-        })),
-        generate: vi.fn(async () => options.localGenerate?.() ?? {}),
-    } as unknown as LocalAiService;
     const cache = new CacheServiceImpl();
     const service = new WordContextInsightServiceImpl(
         settingService,
         aiProviderService,
-        localAiService,
         cache,
     );
-    return { service, aiProviderService, localAiService, cache };
+    return { service, aiProviderService, cache };
 };
 
 describe('WordContextInsightService', () => {
@@ -111,38 +96,20 @@ describe('WordContextInsightService', () => {
         expect(generateObject).toHaveBeenCalledTimes(2);
     });
 
-    it('云端失败时回退本地模型并标记来源', async () => {
+    it('请求失败时直接抛出清晰错误且不写缓存', async () => {
         vi.mocked(generateObject).mockRejectedValue(new Error('network down'));
-        const { service, localAiService } = buildService({
+        const { service, cache } = buildService({
             provider: 'openai',
             cloudModel: CLOUD_MODEL,
-            localReady: true,
-            localGenerate: () => ({ meaning: '取消', nuance: '这里作及物动词' }),
-        });
-
-        const result = await service.explain(PARAMS);
-
-        expect(result).toMatchObject({
-            status: 'ok',
-            insight: { meaning: '取消', source: 'local' },
-        });
-        expect(localAiService.generate).toHaveBeenCalledTimes(1);
-    });
-
-    it('本地输出不符合契约时抛错且不写缓存', async () => {
-        const { service, cache, localAiService } = buildService({
-            provider: 'local',
-            localReady: true,
-            localGenerate: () => ({ meaning: '', nuance: '缺少含义' }),
         });
         const setSpy = vi.spyOn(cache, 'set');
 
-        await expect(service.explain(PARAMS)).rejects.toThrow('语境解读生成失败');
+        await expect(service.explain(PARAMS)).rejects.toThrow('语境解读生成失败：network down');
         expect(setSpy).not.toHaveBeenCalled();
 
-        // 未写缓存，第二次仍会重新推理。
+        // 未写缓存，第二次仍会重新请求。
         await expect(service.explain(PARAMS)).rejects.toThrow('语境解读生成失败');
-        expect(localAiService.generate).toHaveBeenCalledTimes(2);
+        expect(generateObject).toHaveBeenCalledTimes(2);
     });
 
     it('同一语境的并发请求只触发一次推理', async () => {
@@ -173,7 +140,7 @@ describe('WordContextInsightService', () => {
             reason: 'ai-disabled',
         });
 
-        const unavailable = buildService({ provider: 'local', localReady: false });
+        const unavailable = buildService({ provider: 'openai', cloudModel: null });
         await expect(unavailable.service.explain(PARAMS)).resolves.toEqual({
             status: 'unavailable',
             reason: 'model-unavailable',

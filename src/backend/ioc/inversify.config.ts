@@ -1,8 +1,6 @@
 import { Container } from 'inversify';
 import { LocalAiController } from '@/backend/controllers/LocalAiController';
-import { LocalAiRuntime } from '@/backend/infrastructure/ai/LocalAiRuntime';
 import { LocalEmbeddingRuntime } from '@/backend/infrastructure/ai/LocalEmbeddingRuntime';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import TYPES from './types';
 import type Controller from '@/backend/controllers/Controller';
 import type SrtTimeAdjustService from '@/backend/services/SrtTimeAdjustService';
@@ -36,8 +34,6 @@ import type MainWindowRegistry from '@/backend/infrastructure/system/MainWindowR
 import MainWindowRegistryImpl from '@/backend/infrastructure/system/MainWindowRegistryImpl';
 import type SettingService from '@/backend/services/SettingService';
 import { SettingServiceImpl } from '@/backend/services/SettingService';
-import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
-import { ResourceFallbackServiceImpl } from '@/backend/services/ResourceFallbackService';
 import type CacheService from '@/backend/services/CacheService';
 import { CacheServiceImpl } from '@/backend/services/CacheService';
 import type { ClipOssService } from '@/backend/services/OssService';
@@ -88,9 +84,7 @@ import type SubtitleTranslationService from '@/backend/services/subtitle-transla
 import { SubtitleTranslationServiceImpl } from '@/backend/services/subtitle-translation/SubtitleTranslationService';
 import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
 import type OpenAiSubtitleBatchTranslator from '@/backend/services/gateways/translate/OpenAiSubtitleBatchTranslator';
-import type LocalSubtitleBatchTranslator from '@/backend/services/gateways/translate/LocalSubtitleBatchTranslator';
 import OpenAiSubtitleBatchTranslatorImpl from '@/backend/infrastructure/translate/OpenAiSubtitleBatchTranslatorImpl';
-import LocalSubtitleBatchTranslatorImpl from '@/backend/infrastructure/translate/LocalSubtitleBatchTranslatorImpl';
 import type { SettingsStore } from '@/backend/services/gateways/SettingsStore';
 import SettingsStoreImpl from '@/backend/infrastructure/settings/SettingsStoreImpl';
 import type WatchHistoryService from '@/backend/services/WatchHistoryService';
@@ -238,9 +232,6 @@ container.bind<AiProviderService>(TYPES.AiProviderService).to(AiProviderServiceI
 container.bind<OpenAiSubtitleBatchTranslator>(TYPES.OpenAiSubtitleBatchTranslator)
     .to(OpenAiSubtitleBatchTranslatorImpl)
     .inSingletonScope();
-container.bind<LocalSubtitleBatchTranslator>(TYPES.LocalSubtitleBatchTranslator)
-    .to(LocalSubtitleBatchTranslatorImpl)
-    .inSingletonScope();
 // 预置词典：随应用打包的只读 SQLite，不依赖任何密钥配置。
 container.bind<BuiltinDictionaryStore>(TYPES.BuiltinDictionaryStore).to(BuiltinDictionaryStoreImpl).inSingletonScope();
 container.bind<string>(TYPES.BuiltinDictionaryPath)
@@ -264,7 +255,6 @@ container.bind<Controller>(TYPES.Controller).to(ParakeetModelController).inSingl
 container.bind<Controller>(TYPES.Controller).to(YoutubeImportController).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(WhisperCppModelController).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(LocalAiController).inSingletonScope();
-container.bind<LocalAiService>(TYPES.LocalAiService).to(LocalAiRuntime).inSingletonScope();
 container.bind<LocalEmbeddingRuntime>(TYPES.LocalEmbeddingRuntime).to(LocalEmbeddingRuntime).inSingletonScope();
 container.bind<TopicVectorRepository>(TYPES.TopicVectorRepository).to(TopicVectorRepositoryImpl).inSingletonScope();
 container.bind<TopicEmbeddingService>(TYPES.TopicEmbeddingService).to(TopicEmbeddingServiceImpl).inSingletonScope();
@@ -277,7 +267,6 @@ container.bind<VisualSceneService>(TYPES.VisualSceneService).to(VisualSceneServi
 container.bind<ProsodySignalService>(TYPES.ProsodySignalService).to(ProsodySignalServiceImpl).inSingletonScope();
 container.bind<SpeakerDiarizationModelService>(TYPES.SpeakerDiarizationModelService).to(SpeakerDiarizationModelServiceImpl).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(SpeakerDiarizationModelController).inSingletonScope();
-container.bind<ResourceFallbackService>(TYPES.ResourceFallbackService).to(ResourceFallbackServiceImpl).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(SherpaTtsModelController).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(PhonemeGopModelController).inSingletonScope();
 container.bind<Controller>(TYPES.Controller).to(SenseVoiceModelController).inSingletonScope();

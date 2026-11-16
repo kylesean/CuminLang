@@ -16,8 +16,6 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { ChatSessionServiceImpl } from '@/backend/services/ChatSessionService';
 import { InMemoryChatSessionStore } from '@/backend/services/chat/ChatSessionStore';
 import type AiProviderService from '@/backend/services/AiProviderService';
-import type LocalAiService from '@/backend/services/LocalAiService';
-import type SentenceLearningService from '@/backend/services/SentenceLearningService';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
 import type CacheService from '@/backend/services/CacheService';
 
@@ -198,8 +196,6 @@ describe('ChatSessionService OpenAI Responses 多轮工具调用兼容性', () =
 
         const service = new ChatSessionServiceImpl(
             { getModel: vi.fn().mockReturnValue(model) } as unknown as AiProviderService,
-            {} as LocalAiService,
-            {} as SentenceLearningService,
             rendererGateway,
             store,
             cacheService,
@@ -317,8 +313,6 @@ describe('ChatSessionService OpenAI Responses 多轮工具调用兼容性', () =
 
         const service = new ChatSessionServiceImpl(
             { getModel: vi.fn().mockReturnValue(model) } as unknown as AiProviderService,
-            {} as LocalAiService,
-            {} as SentenceLearningService,
             rendererGateway,
             store,
             { get: vi.fn().mockReturnValue(null) } as unknown as CacheService,

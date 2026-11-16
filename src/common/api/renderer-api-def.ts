@@ -28,10 +28,6 @@ interface UIRendererDef {
     'settings/phoneme-gop-model-download-progress': { params: { percent: number; downloaded: number; total: number; phase: ModelDownloadPhase }, return: void };
     'settings/sense-voice-model-download-progress': { params: { percent: number; downloaded: number; total: number; phase: ModelDownloadPhase }, return: void };
     'settings/whisper-cpp-model-download-progress': { params: { percent: number; downloaded: number; total: number; phase: ModelDownloadPhase }, return: void };
-    'settings/local-ai-model-download-progress': {
-        params: { modelId: string; percent: number; downloaded: number; total: number; phase: CommonDownloadPhase },
-        return: void
-    };
     'settings/embedding-model-download-progress': {
         params: { target: 'base' | 'multimodal'; percent: number; downloaded: number; total: number; phase: CommonDownloadPhase },
         return: void

@@ -145,7 +145,7 @@ describe('WordContextInsight', () => {
             insight: {
                 meaning: '吸引人的地方',
                 nuance: '特质或事物',
-                source: 'local',
+                source: 'cloud',
                 cached: false,
             },
         });

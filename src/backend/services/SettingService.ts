@@ -41,7 +41,6 @@ import { getSubtitleDefaultStyle } from '@/common/constants/openaiSubtitlePrompt
 import { readSystemProxy } from '@/backend/infrastructure/system/proxy/readSystemProxy';
 import { AI_API_FORMATS } from '@/common/utils/cloud-ai-api-format';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import {
     isRuntimeSettingKey,
     runtimeSettingKeys,
@@ -52,9 +51,9 @@ import { TRANSCRIPTION_ENGINES, type TranscriptionEngine } from '@/common/contra
 import { SHERPA_TTS_VOICES, resolveSherpaTtsVoice } from '@/backend/services/models/sherpaTtsModel';
 
 /** 字幕翻译引擎的合法取值；设置校验与运行时查询共用，避免各处字面量漂移。 */
-const SUBTITLE_TRANSLATION_ENGINES = ['openai', 'local', 'local-mt', 'tencent', 'none'] as const;
+const SUBTITLE_TRANSLATION_ENGINES = ['openai', 'tencent', 'none'] as const;
 /** 词典引擎的合法取值。 */
-const DICTIONARY_ENGINES = ['openai', 'local', 'none'] as const;
+const DICTIONARY_ENGINES = ['openai', 'none'] as const;
 /** 主题语义向量引擎的合法取值。 */
 const EMBEDDING_ENGINES = ['auto', 'local', 'openai', 'none'] as const;
 
@@ -96,10 +95,10 @@ export default interface SettingService {
     getProxySettingDetail(): Promise<ProxySettingDetailVO>;
     saveProxySettings(settings: ProxySettingSaveVO): Promise<void>;
     getCurrentSentenceLearningProvider(): Promise<'openai' | null>;
-    getCurrentTranslationProvider(): Promise<'openai' | 'local' | 'local-mt' | 'tencent' | null>;
+    getCurrentTranslationProvider(): Promise<'openai' | 'tencent' | null>;
     getOpenAiSubtitleTranslationMode(): Promise<'zh' | 'simple_en' | 'custom'>;
     getOpenAiSubtitleCustomStyle(): Promise<string>;
-    getCurrentDictionaryProvider(): Promise<'openai' | 'local' | null>;
+    getCurrentDictionaryProvider(): Promise<'openai' | null>;
     /**
      * 读取离线朗读音色标识（见 SHERPA_TTS_VOICES）。
      *
@@ -143,7 +142,6 @@ export class SettingServiceImpl implements SettingService {
         @inject(TYPES.TencentClientProvider) private readonly tencentProvider: ClientProviderService<TencentTranslateClient>,
         @inject(TYPES.SettingsStore) private readonly settingsStore: SettingsStore,
         @inject(TYPES.StorageDirectoryProvider) private readonly storageDirectoryProvider: StorageDirectoryProvider,
-        @inject(TYPES.LocalAiService) private readonly localAi: LocalAiService,
     ) {}
 
     /**
@@ -716,16 +714,12 @@ export class SettingServiceImpl implements SettingService {
                 'openai.subtitleTranslationMode',
             );
         const availableModels = this.parseOpenAiModels(this.getValue('models.openai.available'));
-        const sentenceLearningUsesLocal = settings.openai.enableSentenceLearning
-            && settings.openai.featureModels.sentenceLearning === 'local';
-        const sentenceLearningSlot = sentenceLearningUsesLocal
-            ? 'local'
-            : this.resolveFeatureModelSlot(
-                settings.openai.featureModels.sentenceLearning,
-                availableModels,
-                settings.openai.enableSentenceLearning,
-                '整句讲解',
-            );
+        const sentenceLearningSlot = this.resolveFeatureModelSlot(
+            settings.openai.featureModels.sentenceLearning,
+            availableModels,
+            settings.openai.enableSentenceLearning,
+            '整句讲解',
+        );
         const subtitleTranslationSlot = this.resolveFeatureModelSlot(
             settings.openai.featureModels.subtitleTranslation,
             availableModels,
@@ -754,8 +748,6 @@ export class SettingServiceImpl implements SettingService {
         } else if (embeddingEngine !== undefined) {
             await this.setValue('providers.embedding', embeddingEngine);
         }
-        // 引擎切换即时反映到本地模型常驻策略：切到 local 后台预加载，切走后恢复空闲卸载。
-        this.localAi.syncEngineResidency();
 
         await this.setValue('features.openai.enableSentenceLearning', settings.openai.enableSentenceLearning ? 'true' : 'false');
         if (subtitleTranslationMode === null) {
@@ -987,13 +979,13 @@ export class SettingServiceImpl implements SettingService {
         return openaiEnabled ? 'openai' : null;
     }
 
-    public async getCurrentTranslationProvider(): Promise<'openai' | 'local' | 'local-mt' | 'tencent' | null> {
+    public async getCurrentTranslationProvider(): Promise<'openai' | 'tencent' | null> {
         const engine = this.requireEnumValue(
             this.getValue('providers.subtitleTranslation'),
             SUBTITLE_TRANSLATION_ENGINES,
             'providers.subtitleTranslation',
         );
-        if (engine === 'local' || engine === 'local-mt' || engine === 'openai' || engine === 'tencent') {
+        if (engine === 'openai' || engine === 'tencent') {
             return engine;
         }
         return null;
@@ -1015,13 +1007,13 @@ export class SettingServiceImpl implements SettingService {
         return getSubtitleDefaultStyle('custom');
     }
 
-    public async getCurrentDictionaryProvider(): Promise<'openai' | 'local' | null> {
+    public async getCurrentDictionaryProvider(): Promise<'openai' | null> {
         const engine = this.requireEnumValue(
             this.getValue('providers.dictionary'),
             DICTIONARY_ENGINES,
             'providers.dictionary',
         );
-        if (engine === 'local' || engine === 'openai') {
+        if (engine === 'openai') {
             return engine;
         }
         return null;

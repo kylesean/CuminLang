@@ -7,21 +7,14 @@ import type { RendererApiDefinitions } from '@/common/api/renderer-api-def';
 export type ArchiveDownloadProgressEvent = RendererApiDefinitions['settings/sherpa-tts-model-download-progress']['params'];
 
 /**
- * LocalAI 模型下载进度事件负载。
- */
-export type LocalAiDownloadProgressEvent = RendererApiDefinitions['settings/local-ai-model-download-progress']['params'];
-
-/**
  * 语义向量模型下载进度事件负载。
  */
 export type EmbeddingDownloadProgressEvent = RendererApiDefinitions['settings/embedding-model-download-progress']['params'];
 
 type ArchiveProgressListener = (progress: ArchiveDownloadProgressEvent) => void;
-type LocalAiProgressListener = (progress: LocalAiDownloadProgressEvent) => void;
 type EmbeddingProgressListener = (progress: EmbeddingDownloadProgressEvent) => void;
 
 const archiveListeners = new Set<ArchiveProgressListener>();
-const localAiListeners = new Set<LocalAiProgressListener>();
 const embeddingListeners = new Set<EmbeddingProgressListener>();
 
 /**
@@ -34,19 +27,6 @@ export function subscribeArchiveDownloadProgress(listener: ArchiveProgressListen
     archiveListeners.add(listener);
     return () => {
         archiveListeners.delete(listener);
-    };
-}
-
-/**
- * 订阅 LocalAI 模型下载进度事件。
- *
- * @param listener 进度回调函数。
- * @returns 取消订阅函数。
- */
-export function subscribeLocalAiDownloadProgress(listener: LocalAiProgressListener): () => void {
-    localAiListeners.add(listener);
-    return () => {
-        localAiListeners.delete(listener);
     };
 }
 
@@ -101,16 +81,6 @@ export function registerSettingsRendererApis(register: RegisterRendererApi): voi
 
     register('settings/sense-voice-model-download-progress', async (params) => {
         notifyArchive(params);
-    });
-
-    register('settings/local-ai-model-download-progress', async (params) => {
-        localAiListeners.forEach((listener) => {
-            try {
-                listener(params);
-            } catch {
-                // 忽略单个监听器的异常
-            }
-        });
     });
 
     register('settings/embedding-model-download-progress', async (params) => {

@@ -17,10 +17,8 @@ import { buildDictionaryPrompt, TranslateServiceImpl } from '@/backend/services/
 import type SettingService from '@/backend/services/SettingService';
 import type WordTranslatesRepository from '@/backend/services/repositories/WordTranslatesRepository';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import type ImportedDictionaryService from '@/backend/services/ImportedDictionaryService';
 import type EnglishDictionaryService from '@/backend/services/EnglishDictionaryService';
-import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
 import { BuiltinDictionaryStoreImpl } from '@/backend/infrastructure/translate/BuiltinDictionaryStoreImpl';
 import { createBuiltinDictionaryFixture } from '@/test/builtinDictionaryFixture';
 
@@ -42,10 +40,8 @@ describe('单词查询的预置词典优先链路', () => {
      * @param options getCurrentDictionaryProvider 的返回值、预置词表及可选本地模型/回退桩。
      */
     const buildService = (options: {
-        dictionaryProvider: Promise<'openai' | 'local' | null>;
+        dictionaryProvider: Promise<'openai' | null>;
         words: Parameters<typeof createBuiltinDictionaryFixture>[0];
-        localAiService?: Partial<LocalAiService>;
-        resourceFallback?: Partial<ResourceFallbackService>;
     }) => {
         const fixture = createBuiltinDictionaryFixture(options.words);
         closeFixture = fixture.close;
@@ -71,17 +67,6 @@ describe('单词查询的预置词典优先链路', () => {
         const englishDictionaryService = {
             lookup: vi.fn().mockReturnValue(null),
         } as unknown as EnglishDictionaryService;
-        const localAiService = {
-            getActiveModelId: vi.fn().mockResolvedValue(''),
-            generate: vi.fn().mockRejectedValue(new Error('本地模型未配置')),
-            ...options.localAiService,
-        } as unknown as LocalAiService;
-        const resourceFallback = {
-            isFallbackActive: vi.fn().mockReturnValue(false),
-            clear: vi.fn(),
-            markFallback: vi.fn(),
-            ...options.resourceFallback,
-        } as unknown as ResourceFallbackService;
 
         const service = new TranslateServiceImpl(
             rendererGateway,
@@ -91,8 +76,6 @@ describe('单词查询的预置词典优先链路', () => {
             builtinDictionaryStore,
             importedDictionaryService,
             englishDictionaryService,
-            localAiService,
-            resourceFallback,
         );
         return { service, aiProviderService, wordTranslatesRepository };
     };
@@ -145,12 +128,8 @@ describe('单词查询的预置词典优先链路', () => {
 
     it('带语境时预置词典仍然优先，不触发引擎', async () => {
         const { service, aiProviderService } = buildService({
-            dictionaryProvider: Promise.resolve('local'),
+            dictionaryProvider: Promise.resolve('openai'),
             words: [{ word: 'cancel', phonetic: '', translation: 'n. 取消' }],
-            localAiService: {
-                getActiveModelId: vi.fn().mockResolvedValue('custom:gemma-4-E4B_q4_0-it.gguf'),
-                generate: vi.fn().mockRejectedValue(new Error('模型未就绪')),
-            },
         });
 
         const result = await service.transWord('cancel', false, undefined, 'Please cancel the meeting.');
@@ -159,28 +138,15 @@ describe('单词查询的预置词典优先链路', () => {
         expect(aiProviderService.getModel).not.toHaveBeenCalled();
     });
 
-    it('带语境但词典未命中时，引擎按语境哈希独立缓存', async () => {
-        const { service, wordTranslatesRepository } = buildService({
-            dictionaryProvider: Promise.resolve('local'),
+    it('未配置任何 AI 模型且预置词典未命中时返回 null', async () => {
+        const { service, aiProviderService } = buildService({
+            dictionaryProvider: Promise.resolve('openai'),
             words: [],
-            localAiService: {
-                getActiveModelId: vi.fn().mockResolvedValue('custom:gemma-4-E4B_q4_0-it.gguf'),
-                generate: vi.fn().mockResolvedValue({
-                    word: 'cues',
-                    phonetic: '/kjuːz/',
-                    definitions: [{ partOfSpeech: 'n.', meaning: '（倾听中的）提示信号', examples: [] }],
-                }),
-            },
         });
 
-        const result = await service.transWord('cues', false, undefined, 'All of the cues that the person is giving to you.');
-        expect(result).toMatchObject({ word: 'cues' });
-        expect(wordTranslatesRepository.upsert).toHaveBeenCalledWith(
-            expect.stringContaining('#ctx:'),
-            'local',
-            expect.any(String),
-            expect.any(String),
-        );
+        const result = await service.transWord('ephemeral', true);
+        expect(result).toBeNull();
+        expect(aiProviderService.getModel).toHaveBeenCalledWith('dictionary');
     });
 
     it('词典提示词带语境时包含句子与消歧指令，无语境时不含', () => {
@@ -189,46 +155,6 @@ describe('单词查询的预置词典优先链路', () => {
         expect(withContext).toContain('All of the cues that the person is giving to you.');
         const withoutContext = buildDictionaryPrompt('cues');
         expect(withoutContext).not.toContain('AS USED IN THIS SENTENCE');
-    });
-
-    it('ResourceFallback 按提供方隔离且并发 forceRefresh 会合流单飞', async () => {
-        const generateMock = vi.fn().mockImplementation(
-            () => new Promise((resolve) => setTimeout(() => resolve({
-                word: 'ephemeral',
-                phonetic: '/ɪˈfemərəl/',
-                definitions: [{ partOfSpeech: 'adj.', meaning: '短暂的', examples: [] }],
-            }), 10)),
-        );
-        const { service } = buildService({
-            dictionaryProvider: Promise.resolve('local'),
-            words: [],
-            localAiService: {
-                getActiveModelId: vi.fn().mockResolvedValue('model-1'),
-                generate: generateMock,
-            },
-            resourceFallback: {
-                // 仅 openai 处于回退，不应阻塞 local 提供方
-                getState: vi.fn().mockReturnValue({
-                    feature: 'dictionary',
-                    from: 'openai',
-                    to: 'builtinDictionary',
-                    reason: 'timeout',
-                    at: Date.now(),
-                    until: Date.now() + 60_000,
-                }),
-                isFallbackActive: vi.fn().mockReturnValue(true),
-                clear: vi.fn(),
-                markFallback: vi.fn(),
-            },
-        });
-
-        const [r1, r2] = await Promise.all([
-            service.transWord('ephemeral', true),
-            service.transWord('ephemeral', true),
-        ]);
-        expect(r1).toMatchObject({ word: 'ephemeral' });
-        expect(r2).toMatchObject({ word: 'ephemeral' });
-        expect(generateMock).toHaveBeenCalledTimes(1);
     });
 
     it('命中预置多词性词条时，根据上下文句子词性优先展示匹配义项', async () => {

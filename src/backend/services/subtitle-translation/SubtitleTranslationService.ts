@@ -5,9 +5,6 @@ import type CacheService from '@/backend/services/CacheService';
 import type ClientProviderService from '@/backend/services/ClientProviderService';
 import type ModelRoutingService from '@/backend/services/ModelRoutingService';
 import type SettingService from '@/backend/services/SettingService';
-import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
-import type LocalAiService from '@/backend/services/LocalAiService';
-import type LocalSubtitleBatchTranslator from '@/backend/services/gateways/translate/LocalSubtitleBatchTranslator';
 import type OpenAiSubtitleBatchTranslator from '@/backend/services/gateways/translate/OpenAiSubtitleBatchTranslator';
 import type {
     SubtitleBatchTranslationInput,
@@ -36,10 +33,7 @@ import {
     resolvePromptNeighbor,
     shouldTranslateSubtitleText,
 } from '@/backend/services/subtitle-translation/SubtitleTranslationCacheKey';
-import {
-    buildSubtitleStorageMode,
-    type SubtitleTranslationStorageMode,
-} from '@/backend/services/subtitle-translation/SubtitleTranslationStorageMode';
+import type { SubtitleTranslationStorageMode } from '@/backend/services/subtitle-translation/SubtitleTranslationStorageMode';
 import { concurrency } from '@/backend/utils/concurrency';
 import type { Sentence } from '@/common/types/SentenceC';
 import type {
@@ -59,8 +53,6 @@ interface SubtitleTranslationExecutionContext {
     storageMode: SubtitleTranslationStorageMode;
     /** 前端用于过滤过期结果的翻译模式。 */
     mode: TranslationMode;
-    /** 本地引擎使用中的模型 ID；云端引擎为 null。网关请求从这里取模型，不再二次读设置。 */
-    localModelId: string | null;
     /**
      * 当前字幕文件按稳定坐标（sentence.index）索引的句子映射。
      * 增量转录会话的坐标为「分片序号 × 100000 + 片内序号」，与数组下标不同，
@@ -71,7 +63,7 @@ interface SubtitleTranslationExecutionContext {
     fileHash: string;
     /** OpenAI 批量提示词使用的风格约束。 */
     style?: string;
-    /** 风格签名：云端回退本地时拼本地持久化分区用。 */
+    /** 风格签名。 */
     styleSignature: string;
 }
 
@@ -203,7 +195,6 @@ const createAbortError = (): Error => {
 
 /** 批次失败提示里的引擎展示名；新引擎接入时在此补一行。 */
 const PROVIDER_LABELS: Partial<Record<TranslationProvider, string>> = {
-    local: '本地模型',
     tencent: '腾讯',
 };
 
@@ -238,15 +229,12 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
      */
     constructor(
         @inject(TYPES.SettingService) private readonly settingService: SettingService,
-        @inject(TYPES.LocalAiService) private readonly localAiService: LocalAiService,
         @inject(TYPES.CacheService) private readonly cacheService: CacheService,
         @inject(TYPES.ModelRoutingService) private readonly modelRoutingService: ModelRoutingService,
         @inject(TYPES.SentenceTranslatesRepository) private readonly sentenceTranslatesRepository: SentenceTranslatesRepository,
         @inject(TYPES.RendererGateway) private readonly rendererGateway: RendererGateway,
         @inject(TYPES.TencentClientProvider) private readonly tencentProvider: ClientProviderService<TencentTranslateClient>,
         @inject(TYPES.OpenAiSubtitleBatchTranslator) private readonly openAiSubtitleTranslator: OpenAiSubtitleBatchTranslator,
-        @inject(TYPES.LocalSubtitleBatchTranslator) private readonly localSubtitleTranslator: LocalSubtitleBatchTranslator,
-        @inject(TYPES.ResourceFallbackService) private readonly resourceFallback: ResourceFallbackService,
     ) {
         this.scheduler = new SubtitleTranslationScheduler<SubtitleTranslationExecutionContext>({
             executeBatch: (request) => this.executeBatch(request),
@@ -349,7 +337,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
         return resolveSubtitleTranslationContext(
             {
                 settingService: this.settingService,
-                localAiService: this.localAiService,
                 modelRoutingService: this.modelRoutingService,
             },
             normalizeTranslationProvider(provider),
@@ -418,7 +405,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                     storageMode: 'tencent',
                     mode: 'zh',
                     styleSignature: '',
-                    localModelId: null,
                     sentencesByIndex: this.buildSentencesByIndex(srtData.sentences),
                     fileHash,
                 },
@@ -439,7 +425,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
         if (this.latestDemandBySession.get(sessionKey) !== input.demandId) {
             return;
         }
-        const { mode, storageMode, style, profileKey, localModelId } = resolvedContext;
+        const { mode, storageMode, style, profileKey } = resolvedContext;
         this.scheduler.updateDemand({
             fileHash,
             currentIndex: input.currentIndex,
@@ -452,7 +438,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 storageMode,
                 mode,
                 styleSignature: resolvedContext.styleSignature,
-                localModelId,
                 sentencesByIndex: this.buildSentencesByIndex(srtData.sentences),
                 fileHash,
                 style,
@@ -504,7 +489,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             batchId: request.batchId,
             demandId: request.demandId,
             provider: request.context.provider,
-            localModelId: request.context.localModelId,
             mode: request.context.mode,
             priority: request.priority,
             requeueCount: request.requeueCount,
@@ -533,7 +517,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                     batchId: request.batchId,
                     demandId: request.demandId,
                     provider: request.context.provider,
-                    localModelId: request.context.localModelId,
                     mode: request.context.mode,
                     priority: request.priority,
                     requeueCount: request.requeueCount,
@@ -552,39 +535,14 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 };
             }
 
-            let onlineResults: Map<string, string>;
-            let fellBackToLocal = false;
-            if (request.context.provider === 'tencent') {
-                onlineResults = await this.translateWithTencent(request, onlineTargets);
-            } else {
-                const gatewayOutcome = await this.translateWithGateway(request, onlineTargets);
-                onlineResults = gatewayOutcome.translations;
-                fellBackToLocal = gatewayOutcome.fellBackToLocal;
-            }
+            const onlineResults = request.context.provider === 'tencent'
+                ? await this.translateWithTencent(request, onlineTargets)
+                : await this.translateBatchWithGateway(request, onlineTargets);
             this.throwIfAborted(request.signal);
-            if (!fellBackToLocal) {
-                await this.saveTranslations(
-                    this.toStorageKeyedTranslations(onlineResults, onlineTargets),
-                    request.context.storageMode
-                );
-            } else {
-                // 本地回退结果按本地引擎自己的持久化分区落库：
-                // - 重启后译文仍在，本地引擎会话可直接命中，不再整批重跑推理；
-                // - 云端分区不被本地质量占用，云端恢复后同一批照常重试并覆盖。
-                const fallbackModelId = await this.localAiService.getActiveModelId();
-                if (fallbackModelId) {
-                    const localStorageMode = buildSubtitleStorageMode(
-                        'local',
-                        fallbackModelId,
-                        request.context.mode,
-                        request.context.styleSignature
-                    );
-                    await this.saveTranslations(
-                        this.toStorageKeyedTranslations(onlineResults, onlineTargets),
-                        localStorageMode
-                    );
-                }
-            }
+            await this.saveTranslations(
+                this.toStorageKeyedTranslations(onlineResults, onlineTargets),
+                request.context.storageMode
+            );
             this.pushTranslations(onlineResults, request.context);
 
             const translatedKeys = new Set(onlineResults.keys());
@@ -601,7 +559,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 batchId: request.batchId,
                 demandId: request.demandId,
                 provider: request.context.provider,
-                localModelId: request.context.localModelId,
                 mode: request.context.mode,
                 priority: request.priority,
                 requeueCount: request.requeueCount,
@@ -651,7 +608,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 priority: request.priority,
                 requeueCount: request.requeueCount,
                 provider: request.context.provider,
-                localModelId: request.context.localModelId,
                 mode: request.context.mode,
                 indexStart: request.indices[0],
                 indexEnd: request.indices[request.indices.length - 1],
@@ -697,8 +653,8 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             .map((sentence) => ({
                 index: sentence.index,
                 publishKey: sentence.translationKey,
-                // 依赖上下文的引擎（OpenAI/本地 LLM）用三句键，独立句翻译引擎（腾讯/轻量 MT）用单句键。
-                storageKey: provider === 'openai' || provider === 'local'
+                // 依赖上下文的引擎（OpenAI）用三句键，独立句翻译引擎（腾讯）用单句键。
+                storageKey: provider === 'openai'
                     ? buildContextStorageKeyForSentence(sentence, sentencesByIndex)
                     : buildSentenceStorageKey(sentence.text),
                 text: sentence.text,
@@ -840,11 +796,10 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
      * @param targets 当前未命中缓存的字幕描述符。
      * @returns 以 renderer 定位键索引的完整翻译结果。
      */
-    private async translateWithGateway(
+    private async translateBatchWithGateway(
         request: SubtitleTranslationBatchRequest<SubtitleTranslationExecutionContext>,
         targets: SubtitleBatchTarget[]
-    ): Promise<{ translations: Map<string, string>; fellBackToLocal: boolean }> {
-        // 腾讯引擎有自己的批量链路，不经过网关；此处只为类型收窄兜底。
+    ): Promise<Map<string, string>> {
         if (request.context.provider === 'tencent') {
             throw new Error('腾讯翻译引擎不经过字幕翻译网关');
         }
@@ -875,101 +830,26 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             signal: request.signal,
         };
         this.throwIfAborted(request.signal);
-        // 引擎路由由已解析的设置决定；提示词拼装与输出细节各自归基础设施。
-        return this.translateWithFallback(
-            input,
-            request.context.provider,
-            request.context.localModelId,
-            targetItems
-        );
+        return this.translateWithGateway(input, targetItems);
     }
 
     /**
-     * 调用对应引擎翻译一批目标，云端失败时对这一批回退到本地大模型。
-     *
-     * 本地大模型是字幕翻译的基础资源：云端不可用时字幕不应直接空掉，
-     * 回退按回退时刻的使用中模型执行。回退只作用于失败的那一批：不设
-     * 冷却窗口，每一批都会重新尝试当前引擎，原引擎恢复后立即生效。
-     * 回退状态仅用于设置页展示，不短路后续批次。
-     *
-     * @param input 本批次的翻译输入。
-     * @param provider 当前配置的引擎。
-     * @param localModelId 本地增强模型标识；云端为 null。
-     * @param targets 本次要校验的目标条目。
-     * @returns 校验后的翻译结果及是否发生了云端到本地的回退。
+     * 调用当前配置的 OpenAI 兼容网关翻译一批目标；若返回缺少部分条目则保留有效译文并对缺失项补译一次。
      */
-    public async translateWithFallback(
+    public async translateWithGateway(
         input: SubtitleBatchTranslationInput,
-        provider: 'openai' | 'local',
-        localModelId: string | null,
         targets: SubtitleTranslationTarget[]
-    ): Promise<{ translations: Map<string, string>; fellBackToLocal: boolean }> {
-        const translateWithLocal = async (localInput: SubtitleBatchTranslationInput, localTargets: SubtitleTranslationTarget[]) => {
-            const fallbackModelId = await this.localAiService.getActiveModelId();
-            return this.resolveGatewayItemsWithPartialRetry(
-                localTargets,
-                await this.localSubtitleTranslator.translate({ ...localInput, modelId: fallbackModelId }),
-                (missingTargets) => this.localSubtitleTranslator.translate({
-                    ...localInput,
-                    targets: missingTargets,
-                    modelId: fallbackModelId,
-                }),
-                localInput.signal,
-            );
-        };
-        if (provider === 'local') {
-            if (!localModelId) {
-                throw new Error('本地字幕翻译缺少模型标识');
-            }
-            const items = await this.localSubtitleTranslator.translate({ ...input, modelId: localModelId });
-            this.resourceFallback.clear('subtitleTranslation');
-            return {
-                translations: await this.resolveGatewayItemsWithPartialRetry(
-                    targets,
-                    items,
-                    (missingTargets) => this.localSubtitleTranslator.translate({
-                        ...input,
-                        targets: missingTargets,
-                        modelId: localModelId,
-                    }),
-                    input.signal,
-                ),
-                fellBackToLocal: false,
-            };
-        }
-        try {
-            const items = await this.openAiSubtitleTranslator.translate(input);
-            this.resourceFallback.clear('subtitleTranslation');
-            return {
-                translations: await this.resolveGatewayItemsWithPartialRetry(
-                    targets,
-                    items,
-                    (missingTargets) => this.openAiSubtitleTranslator.translate({
-                        ...input,
-                        targets: missingTargets,
-                    }),
-                    input.signal,
-                ),
-                fellBackToLocal: false,
-            };
-        } catch (error) {
-            const reason = error instanceof Error ? error.message : String(error);
-            this.logger.warn('字幕翻译引擎失败，回退到本地模型', { provider, from: provider, reason });
-            try {
-                const translations = await translateWithLocal(input, targets);
-                // 仅登记展示状态（设置页可见），不依据它短路后续批次。
-                this.resourceFallback.markFallback('subtitleTranslation', provider, 'local', reason);
-                return {
-                    translations,
-                    fellBackToLocal: true,
-                };
-            } catch (fallbackError) {
-                this.logger.error('回退到本地模型同样失败', {
-                    reason: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
-                });
-                throw error;
-            }
-        }
+    ): Promise<Map<string, string>> {
+        const items = await this.openAiSubtitleTranslator.translate(input);
+        return this.resolveGatewayItemsWithPartialRetry(
+            targets,
+            items,
+            (missingTargets) => this.openAiSubtitleTranslator.translate({
+                ...input,
+                targets: missingTargets,
+            }),
+            input.signal,
+        );
     }
 
     /**

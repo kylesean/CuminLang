@@ -7,9 +7,7 @@ import TYPES from '@/backend/ioc/types';
 import { ObjUtil } from '@/backend/utils/ObjUtil';
 import type AiProviderService from '@/backend/services/AiProviderService';
 import type CacheService from '@/backend/services/CacheService';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import type SettingService from '@/backend/services/SettingService';
-import { parseMaybeJson } from '@/common/utils/ai/parseMaybeJson';
 import type {
     WordContextInsight,
     WordContextInsightParams,
@@ -20,7 +18,6 @@ import type {
 const PROMPT_VERSION = 'word-context-insight-v2';
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CLOUD_TIMEOUT_MS = 20_000;
-const LOCAL_TIMEOUT_MS = 60_000;
 const MAX_WORD_CHARS = 80;
 const MAX_SENTENCE_CHARS = 2_000;
 const MAX_DEFINITIONS = 8;
@@ -57,8 +54,7 @@ export default interface WordContextInsightService {
 /**
  * 词卡语境解读实现。
  *
- * 可用性遵循词典引擎设置：openai 引擎优先云端，失败后回退本地就绪模型；
- * local 引擎只使用本地模型。两条链路共享同一提示词与输出契约。
+ * 仅走当前配置的 AI 模型；未配置或未启用时返回 unavailable，调用失败显式抛错。
  */
 @injectable()
 export class WordContextInsightServiceImpl implements WordContextInsightService {
@@ -69,7 +65,6 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
     constructor(
         @inject(TYPES.SettingService) private readonly settingService: SettingService,
         @inject(TYPES.AiProviderService) private readonly aiProviderService: AiProviderService,
-        @inject(TYPES.LocalAiService) private readonly localAiService: LocalAiService,
         @inject(TYPES.CacheService) private readonly cacheService: CacheService,
     ) {}
 
@@ -91,10 +86,8 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
             return { status: 'unavailable', reason: 'ai-disabled' };
         }
 
-        const cloudModel = provider === 'openai' ? this.resolveCloudModel() : null;
-        // 本地状态查询不加载模型；提前解析让缓存键同时覆盖云端与降级模型。
-        const localModelId = await this.resolveLocalModelId();
-        if (!cloudModel && !localModelId) {
+        const model = this.resolveCloudModel();
+        if (!model) {
             return { status: 'unavailable', reason: 'model-unavailable' };
         }
 
@@ -104,8 +97,7 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
             sentence,
             definitions,
             provider,
-            cloudModelId: this.modelIdOf(cloudModel),
-            localModelId: localModelId ?? '',
+            modelId: this.modelIdOf(model),
         });
 
         if (!params.forceRefresh) {
@@ -125,8 +117,7 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
             sentence,
             definitions,
             cacheKey,
-            cloudModel,
-            localModelId,
+            model,
         }).finally(() => {
             this.inFlight.delete(cacheKey);
         });
@@ -135,85 +126,42 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
     }
 
     /**
-     * 依次尝试云端与本地模型，成功一个即返回并写缓存。
+     * 调用当前配置的 AI 模型生成语境解读并写入缓存。
      */
     private async generate(args: {
         word: string;
         sentence: string;
         definitions: string[];
         cacheKey: string;
-        cloudModel: ReturnType<AiProviderService['getModel']>;
-        localModelId: string | null;
+        model: NonNullable<ReturnType<AiProviderService['getModel']>>;
     }): Promise<WordContextInsightResponse> {
         const prompt = buildWordContextInsightPrompt(args.word, args.sentence, args.definitions);
-        const failures: string[] = [];
-
-        if (args.cloudModel) {
-            const startedAt = Date.now();
-            try {
-                const result = await generateObject({
-                    model: args.cloudModel,
-                    schema: wordContextInsightSchema,
-                    prompt,
-                    maxRetries: 0,
-                    abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
-                });
-                const insight = this.normalizeInsight(result.object, 'cloud');
-                this.cacheService.set('cache:word-insight', args.cacheKey, insight, CACHE_TTL_MS);
-                this.logger.info('word context insight ready', {
-                    word: args.word,
-                    source: 'cloud',
-                    durationMs: Date.now() - startedAt,
-                });
-                return { status: 'ok', insight };
-            } catch (error) {
-                const message = this.errorMessage(error);
-                failures.push(`cloud: ${message}`);
-                this.logger.warn('word context insight cloud failed, trying local fallback', {
-                    word: args.word,
-                    durationMs: Date.now() - startedAt,
-                    error: message,
-                });
-            }
+        const startedAt = Date.now();
+        try {
+            const result = await generateObject({
+                model: args.model,
+                schema: wordContextInsightSchema,
+                prompt,
+                maxRetries: 0,
+                abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
+            });
+            const insight = this.normalizeInsight(result.object, 'cloud');
+            this.cacheService.set('cache:word-insight', args.cacheKey, insight, CACHE_TTL_MS);
+            this.logger.info('word context insight ready', {
+                word: args.word,
+                source: 'cloud',
+                durationMs: Date.now() - startedAt,
+            });
+            return { status: 'ok', insight };
+        } catch (error) {
+            const message = this.errorMessage(error);
+            this.logger.error('word context insight failed', {
+                word: args.word,
+                durationMs: Date.now() - startedAt,
+                error: message,
+            });
+            throw new Error(`语境解读生成失败：${message}`);
         }
-
-        if (args.localModelId) {
-            const startedAt = Date.now();
-            try {
-                const output = await this.localAiService.generate(
-                    prompt,
-                    z.toJSONSchema(wordContextInsightSchema),
-                    args.localModelId,
-                    AbortSignal.timeout(LOCAL_TIMEOUT_MS),
-                );
-                const parsed = wordContextInsightSchema.safeParse(parseMaybeJson(output));
-                if (!parsed.success) {
-                    this.logger.error('word context insight local output invalid', {
-                        word: args.word,
-                        issues: parsed.error.issues,
-                        rawText: JSON.stringify(output)?.slice(0, 500),
-                    });
-                    throw new Error('本地模型语境解读输出不符合契约');
-                }
-                const insight = this.normalizeInsight(parsed.data, 'local');
-                this.cacheService.set('cache:word-insight', args.cacheKey, insight, CACHE_TTL_MS);
-                this.logger.info('word context insight ready', {
-                    word: args.word,
-                    source: 'local',
-                    durationMs: Date.now() - startedAt,
-                });
-                return { status: 'ok', insight };
-            } catch (error) {
-                failures.push(`local: ${this.errorMessage(error)}`);
-                this.logger.error('word context insight local failed', {
-                    word: args.word,
-                    durationMs: Date.now() - startedAt,
-                    error: this.errorMessage(error),
-                });
-            }
-        }
-
-        throw new Error(`语境解读生成失败：${failures.join('; ') || '没有可用模型'}`);
     }
 
     /**
@@ -225,31 +173,13 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
     }
 
     /**
-     * 读取云端词典模型；配置损坏按不可用处理，由本地模型或明确提示兜底。
+     * 读取词典模型；配置不可用时返回 null 由前端提示未配置。
      */
     private resolveCloudModel(): ReturnType<AiProviderService['getModel']> {
         try {
             return this.aiProviderService.getModel('dictionary');
         } catch (error) {
-            this.logger.warn('word context insight cloud model unavailable', {
-                error: this.errorMessage(error),
-            });
-            return null;
-        }
-    }
-
-    /**
-     * 解析本地推理可用的模型 id；运行时缺失或使用中模型未安装时返回 null。
-     */
-    private async resolveLocalModelId(): Promise<string | null> {
-        try {
-            const status = await this.localAiService.getStatus();
-            if (!status.runtimeReady) return null;
-            return status.models.find((model) => model.modelId === status.activeModelId)?.ready
-                ? status.activeModelId
-                : null;
-        } catch (error) {
-            this.logger.warn('word context insight local model resolve failed', {
+            this.logger.warn('word context insight model unavailable', {
                 error: this.errorMessage(error),
             });
             return null;
@@ -288,9 +218,8 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
         word: string;
         sentence: string;
         definitions: string[];
-        provider: 'openai' | 'local';
-        cloudModelId: string;
-        localModelId: string;
+        provider: 'openai';
+        modelId: string;
     }): string {
         return ObjUtil.hash({
             mode: 'word-context-insight',
@@ -299,8 +228,7 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
             sentence: ObjUtil.hash(args.sentence),
             definitions: ObjUtil.hash(args.definitions),
             provider: args.provider,
-            cloudModelId: args.cloudModelId,
-            localModelId: args.localModelId,
+            modelId: args.modelId,
         });
     }
 

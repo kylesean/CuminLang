@@ -11,12 +11,9 @@ import {
     storageSettingSchema,
     transcriptionEngineSchema,
 } from '@/backend/controllers/ipc/routeSchemas';
-import type ResourceFallbackService from '@/backend/services/ResourceFallbackService';
-import type { ResourceFallbackSnapshot } from '@/common/contracts/resource-fallback';
 import type { ResourceStatusSnapshot } from '@/common/contracts/resource-status';
 import type LocalModelService from '@/backend/services/models/LocalModelService';
 import type SpeakerDiarizationModelService from '@/backend/services/SpeakerDiarizationModelService';
-import type LocalAiService from '@/backend/services/LocalAiService';
 import type TranscriptionEngineSelector from '@/backend/services/TranscriptionEngineSelector';
 import type MobileAccessService from '@/backend/services/MobileAccessService';
 import { readSystemInfo } from '@/backend/utils/systemInfo';
@@ -65,13 +62,11 @@ export default class SettingsController implements Controller {
      */
     constructor(
         @inject(TYPES.SettingService) private readonly settingService: SettingService,
-        @inject(TYPES.ResourceFallbackService) private readonly resourceFallback: ResourceFallbackService,
         @inject(TYPES.SherpaTtsModelService) private readonly sherpaTtsModelService: LocalModelService,
         @inject(TYPES.WhisperCppModelService) private readonly whisperCppModelService: LocalModelService,
         @inject(TYPES.ParakeetModelService) private readonly parakeetModelService: LocalModelService,
         @inject(TYPES.SpeakerDiarizationModelService)
         private readonly speakerDiarizationModelService: SpeakerDiarizationModelService,
-        @inject(TYPES.LocalAiService) private readonly localAiService: LocalAiService,
         @inject(TYPES.TranscriptionEngineSelector) private readonly transcriptionEngineSelector: TranscriptionEngineSelector,
         @inject(TYPES.MobileAccessService) private readonly mobileAccessService: MobileAccessService,
     ) {}
@@ -117,27 +112,16 @@ export default class SettingsController implements Controller {
     }
 
     /**
-     * 获取各功能当前的回退状态（云端/增强不可用时落到基础资源）。
-     */
-    public async getResourceFallbackDetail(): Promise<ResourceFallbackSnapshot> {
-        return this.resourceFallback.getSnapshot();
-    }
-
-    /**
-     * 获取资源状态聚合快照：三项资源包、本地增强、硬件与回退状态一次拿齐。
-     *
-     * 识别方式与字幕识别模型状态必须同源：先读引擎再取对应模型的状态，
-     * 避免两次请求之间用户切换了识别方式，出现"引擎说 whisper、状态却是 sherpa"。
+     * 获取资源状态聚合快照：三项资源包与本机硬件概要一次拿齐。
      */
     public async getResourceStatusDetail(): Promise<ResourceStatusSnapshot> {
         const transcriptionEngine = this.transcriptionEngineSelector.currentEngine();
-        const [tts, transcription, diarization, localAi, hardware] = await Promise.all([
+        const [tts, transcription, diarization, hardware] = await Promise.all([
             this.sherpaTtsModelService.getStatus(),
             transcriptionEngine === 'whisper-cpp'
                 ? this.whisperCppModelService.getStatus()
                 : this.parakeetModelService.getStatus(),
             this.speakerDiarizationModelService.getStatus(),
-            this.localAiService.getStatus(),
             readSystemInfo(),
         ]);
         return {
@@ -145,9 +129,7 @@ export default class SettingsController implements Controller {
             tts,
             transcription,
             diarization,
-            localAi,
             hardware,
-            fallback: this.resourceFallback.getSnapshot(),
         };
     }
 
@@ -277,7 +259,6 @@ export default class SettingsController implements Controller {
         });
         registerRoute('settings/service-credentials/test-tencent', () => this.testTencent(), { broadcastError: false });
         registerRoute('settings/engine-selection/detail', () => this.getEngineSelectionDetail());
-        registerRoute('settings/resource-fallback/detail', () => this.getResourceFallbackDetail());
         registerRoute('settings/resource-status/detail', () => this.getResourceStatusDetail());
         registerRoute('settings/engine-selection/save', (p) => this.saveEngineSelection(p), {
             schema: engineSelectionSaveSchema,

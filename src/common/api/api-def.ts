@@ -6,8 +6,7 @@ import type {
     DesktopLyricsWindowState,
 } from '@/common/contracts/desktop-lyrics';
 import type { YoutubeImportSettingDetailVO, YoutubeImportSettingSaveVO, YoutubeImportStartResult } from '@/common/contracts/youtube-import';
-import type { LocalAiSpeedTestResult, LocalAiStatus, LocalEmbeddingStatus } from '@/common/contracts/local-ai';
-import type { ResourceFallbackSnapshot } from '@/common/contracts/resource-fallback';
+import type { LocalEmbeddingStatus } from '@/common/contracts/local-ai';
 import type { ResourceStatusSnapshot } from '@/common/contracts/resource-status';
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
 import type { GpuAcceleration } from '@/common/contracts/system-info';
@@ -135,12 +134,6 @@ import type {
 
 /** 跨进程请求与返回值契约。 */
 interface ApiDefinition {
-    'local-ai/status': { params: void, return: LocalAiStatus };
-    'local-ai/use': { params: { modelId: string }, return: void };
-    'local-ai/download': { params: { modelId: string }, return: void };
-    'local-ai/cancel-download': { params: void, return: void };
-    'local-ai/delete': { params: { modelId: string }, return: void };
-    'local-ai/speed-test': { params: { modelId: string }, return: LocalAiSpeedTestResult };
     'local-ai/embedding-status': {
         params: void;
         return: LocalEmbeddingStatus;
@@ -424,7 +417,6 @@ interface SettingsDef {
     'settings/service-credentials/test-openai': { params: { model: string; providerId?: string }, return: { success: boolean, message: string } };
     'settings/service-credentials/test-tencent': { params: void, return: { success: boolean, message: string } };
     'settings/engine-selection/detail': { params: void, return: EngineSelectionSettingVO };
-    'settings/resource-fallback/detail': { params: void, return: ResourceFallbackSnapshot };
     'settings/resource-status/detail': { params: void, return: ResourceStatusSnapshot };
     'settings/engine-selection/save': { params: EngineSelectionSettingVO, return: void };
     'settings/transcription-engine/save': { params: TranscriptionEngine, return: void };
@@ -858,17 +850,11 @@ export const API_ROUTE_KEYS = [
     'learning-data/role-play-turn',
     'learning-data/role-play-session',
     'learning-data/session-summary',
-    'local-ai/cancel-download',
-    'local-ai/delete',
-    'local-ai/download',
     'local-ai/embedding-cancel-download',
     'local-ai/embedding-download',
     'local-ai/embedding-multimodal-download',
     'local-ai/embedding-remove',
     'local-ai/embedding-status',
-    'local-ai/speed-test',
-    'local-ai/status',
-    'local-ai/use',
     'media/duration',
     'media/info',
     'media/thumbnail',
@@ -901,7 +887,6 @@ export const API_ROUTE_KEYS = [
     'settings/mobile-access/save',
     'settings/proxy/detail',
     'settings/proxy/save',
-    'settings/resource-fallback/detail',
     'settings/resource-status/detail',
     'settings/runtime/detail',
     'settings/runtime/save',

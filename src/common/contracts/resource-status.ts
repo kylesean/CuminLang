@@ -1,5 +1,3 @@
-import type { LocalAiStatus } from '@/common/contracts/local-ai';
-import type { ResourceFallbackSnapshot } from '@/common/contracts/resource-fallback';
 import type { SystemInfo } from '@/common/contracts/system-info';
 import type { TranscriptionEngine } from '@/common/contracts/transcription-engine';
 import type { ModelInstallationStatusVO } from '@/common/types/vo/model-installation-vo';
@@ -32,10 +30,6 @@ export interface ResourceStatusSnapshot {
         /** 声纹分离模型存放目录。 */
         targetPath?: string;
     };
-    /** 本地增强资源包状态。 */
-    localAi: LocalAiStatus;
     /** 本机硬件概要。 */
     hardware: SystemInfo;
-    /** 各功能当前的回退状态。 */
-    fallback: ResourceFallbackSnapshot;
 }

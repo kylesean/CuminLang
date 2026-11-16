@@ -6,8 +6,8 @@ export interface WordContextInsight {
     meaning: string;
     /** 语境差异、搭配、语气或易混淆点；没有值得说明的内容时为空字符串。 */
     nuance: string;
-    /** 本次结果由云端模型还是本地模型生成。 */
-    source: 'cloud' | 'local';
+    /** 本次结果来源标识（统一走配置的 AI 模型）。 */
+    source: 'cloud';
     /** 是否直接命中进程内缓存。 */
     cached: boolean;
 }

@@ -42,10 +42,8 @@ import { AiProviderServiceImpl } from '../AiProviderService';
 import { ModelRoutingServiceImpl } from '../ModelRoutingService';
 import type AiProviderService from '../AiProviderService';
 import type SettingService from '../SettingService';
-import type LocalAiService from '../LocalAiService';
 import type ImportedDictionaryService from '../ImportedDictionaryService';
 import type EnglishDictionaryService from '../EnglishDictionaryService';
-import type ResourceFallbackService from '../ResourceFallbackService';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
 import type WordTranslatesRepository from '@/backend/services/repositories/WordTranslatesRepository';
 
@@ -202,15 +200,6 @@ const runTests = (): void => {
                 const englishDictionaryService = {
                     lookup: vi.fn().mockReturnValue(null),
                 } as unknown as EnglishDictionaryService;
-                const localAiService = {
-                    getActiveModelId: vi.fn().mockResolvedValue(''),
-                    generate: vi.fn().mockRejectedValue(new Error('未配置本地模型')),
-                } as unknown as LocalAiService;
-                const resourceFallback = {
-                    isFallbackActive: vi.fn().mockReturnValue(false),
-                    clear: vi.fn(),
-                    markFallback: vi.fn(),
-                } as unknown as ResourceFallbackService;
                 const service = new TranslateServiceImpl(
                     gateway,
                     aiProvider,
@@ -219,8 +208,6 @@ const runTests = (): void => {
                     new BuiltinDictionaryStoreImpl(builtinFixture.dbPath),
                     importedDictionaryService,
                     englishDictionaryService,
-                    localAiService,
-                    resourceFallback,
                 );
                 return service;
             };

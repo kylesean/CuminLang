@@ -16,8 +16,6 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { ChatSessionServiceImpl } from '@/backend/services/ChatSessionService';
 import { InMemoryChatSessionStore } from '@/backend/services/chat/ChatSessionStore';
 import type AiProviderService from '@/backend/services/AiProviderService';
-import type LocalAiService from '@/backend/services/LocalAiService';
-import type SentenceLearningService from '@/backend/services/SentenceLearningService';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
 import type CacheService from '@/backend/services/CacheService';
 
@@ -95,8 +93,6 @@ const makeService = (
     } as unknown as RendererGateway;
     return new ChatSessionServiceImpl(
         { getModel: vi.fn().mockReturnValue(model) } as unknown as AiProviderService,
-        {} as LocalAiService,
-        {} as SentenceLearningService,
         rendererGateway,
         store,
         { get: vi.fn().mockReturnValue(null) } as unknown as CacheService,
@@ -210,8 +206,6 @@ describe('ChatSessionService 工具降级的会话级记忆', () => {
         } as unknown as RendererGateway;
         const service = new ChatSessionServiceImpl(
             { getModel: vi.fn().mockReturnValue(chatModel) } as unknown as AiProviderService,
-            {} as LocalAiService,
-            {} as SentenceLearningService,
             rendererGateway,
             store,
             { get: vi.fn().mockReturnValue(null) } as unknown as CacheService,

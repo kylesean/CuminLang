@@ -15,8 +15,6 @@ import { getMainLogger } from '@/backend/infrastructure/logger';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
 import TYPES from '@/backend/ioc/types';
 import type AiProviderService from '@/backend/services/AiProviderService';
-import type LocalAiService from '@/backend/services/LocalAiService';
-import type SentenceLearningService from '@/backend/services/SentenceLearningService';
 import { CLOUD_AI_NOT_CONFIGURED_MESSAGE } from '@/backend/services/AiProviderService';
 import type {
     ChatSessionCreateParams,
@@ -35,7 +33,6 @@ import {
     buildSubtitleContext,
     ensureChatRoleMessage,
     splitSystemMessages,
-    toLocalChatMessagesWithWindow,
     type SubtitleOverview,
 } from '@/backend/services/chat/ChatPromptBuilder';
 import type ChatSessionStore from '@/backend/services/chat/ChatSessionStore';
@@ -88,7 +85,7 @@ export default interface ChatSessionService {
 
 /**
  * 整句学习对话会话服务实现：
- * 支持云端 / 本地 `llama-server` 双端真流式首卡与对话、动态双层提示词人设及句级 SQLite 记忆落库。
+ * 基于统一配置的 AI 模型提供真流式首卡与对话、动态双层提示词人设及句级 SQLite 记忆落库。
  */
 @injectable()
 export class ChatSessionServiceImpl implements ChatSessionService {
@@ -96,8 +93,6 @@ export class ChatSessionServiceImpl implements ChatSessionService {
 
     constructor(
         @inject(TYPES.AiProviderService) private readonly aiProviderService: AiProviderService,
-        @inject(TYPES.LocalAiService) private readonly localAiService: LocalAiService,
-        @inject(TYPES.SentenceLearningService) private readonly sentenceLearningService: SentenceLearningService,
         @inject(TYPES.RendererGateway) private readonly rendererGateway: RendererGateway,
         @inject(TYPES.ChatSessionStore) private readonly chatSessionStore: ChatSessionStore,
         @inject(TYPES.CacheService) private readonly cacheService: CacheService,
@@ -155,22 +150,13 @@ export class ChatSessionServiceImpl implements ChatSessionService {
 
         // 首个 await 前原子认领首轮上下文注入权，避免并发 sendMessage 双重注入大段字幕材料。
         const shouldInjectContext = this.chatSessionStore.claimContextInjection(sessionId);
-        let localModelId: string | null = null;
         if (!model) {
-            try {
-                localModelId = await this.sentenceLearningService.resolveLocalModelId();
-            } catch (error) {
-                if (shouldInjectContext) this.chatSessionStore.releaseContextInjection(sessionId);
-                throw error;
-            }
-            if (!localModelId) {
-                if (shouldInjectContext) this.chatSessionStore.releaseContextInjection(sessionId);
-                this.rendererGateway.fireAndForget('chat/stream', {
-                    sessionId,
-                    chunk: { type: 'error', errorText: CLOUD_AI_NOT_CONFIGURED_MESSAGE },
-                });
-                return { messageId };
-            }
+            if (shouldInjectContext) this.chatSessionStore.releaseContextInjection(sessionId);
+            this.rendererGateway.fireAndForget('chat/stream', {
+                sessionId,
+                chunk: { type: 'error', errorText: CLOUD_AI_NOT_CONFIGURED_MESSAGE },
+            });
+            return { messageId };
         }
 
         let personaPrompt: string | undefined;
@@ -199,96 +185,11 @@ export class ChatSessionServiceImpl implements ChatSessionService {
 
         const enrichedMessages = ensureChatRoleMessage([...session.messages], {
             personaPrompt,
-            enableSubtitleTools: Boolean(model),
+            enableSubtitleTools: true,
         });
-
-        if (!model) {
-            this.startTextRunLocal(sessionId, messageId, localModelId as string, enrichedMessages);
-            return { messageId };
-        }
 
         this.startTextRun(sessionId, messageId, model, enrichedMessages, personaPrompt);
         return { messageId };
-    }
-
-    private startTextRunLocal(
-        sessionId: string,
-        messageId: string,
-        modelId: string,
-        messages: ModelMessage[],
-    ): void {
-        const abortSignal = this.chatSessionStore.startRun(sessionId, messageId);
-        this.runTextLocal(sessionId, messageId, modelId, messages, abortSignal)
-            .catch((error) => this.handleTextError(sessionId, error))
-            .finally(() => this.chatSessionStore.finishRun(sessionId, messageId));
-    }
-
-    /**
-     * 本地大模型真流式聊天：将结构化历史滑窗裁剪后以 SSE 逐字推给 UIMessageChunk，
-     * 并在完成后持久化本轮对话。
-     */
-    private async runTextLocal(
-        sessionId: string,
-        messageId: string,
-        modelId: string,
-        messages: ModelMessage[],
-        abortSignal: AbortSignal,
-    ): Promise<void> {
-        const localMessages = toLocalChatMessagesWithWindow(messages);
-        const startedAt = Date.now();
-        this.logger.info('chat local stream start', { sessionId, messageId, modelId, turns: localMessages.length });
-
-        const partId = `${messageId}-text`;
-        const emit = (chunk: UIMessageChunk) => this.rendererGateway.fireAndForget('chat/stream', { sessionId, chunk });
-        let streamStarted = false;
-        const ensureTextStarted = () => {
-            if (streamStarted) return;
-            streamStarted = true;
-            emit({ type: 'start', messageId });
-            emit({ type: 'text-start', id: partId });
-        };
-
-        const content = (await this.localAiService.streamText(
-            localMessages,
-            modelId,
-            {
-                onDelta: (delta) => {
-                    ensureTextStarted();
-                    emit({ type: 'text-delta', id: partId, delta });
-                },
-            },
-            abortSignal,
-        )).trim();
-
-        if (!content) {
-            throw new Error('本地模型返回了空回复');
-        }
-        ensureTextStarted();
-        emit({ type: 'text-end', id: partId });
-        emit({ type: 'finish', finishReason: 'stop' });
-
-        // 停止/关闭发生在流结束与落库之间的窄窗时直接收尾：
-        // 对已关闭会话 appendMessage 会抛错，进而被当成非取消错误再向已关会话推 error chunk
-        // （云端路径 runStream 有 aborted 守卫，本地路径此前缺这一层）。
-        if (abortSignal.aborted) {
-            this.logger.info('chat local stream aborted before persist', { sessionId, messageId });
-            return;
-        }
-        this.chatSessionStore.appendMessage(sessionId, { role: 'assistant', content });
-        this.chatSessionStore.appendPersistedMessage(sessionId, {
-            id: messageId,
-            role: 'assistant',
-            blocks: [{ kind: 'text', text: content }],
-            plainText: content,
-        });
-        await this.persistSessionMessages(sessionId);
-
-        this.logger.info('chat local stream done', {
-            sessionId,
-            messageId,
-            durationMs: Date.now() - startedAt,
-            responseLength: content.length,
-        });
     }
 
     private startTextRun(
