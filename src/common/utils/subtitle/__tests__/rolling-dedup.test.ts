@@ -81,6 +81,24 @@ describe('滚动字幕去重', () => {
         ]);
         expect(result.map((item) => item.index)).toEqual([1, 2]);
     });
+
+    it('忽略行尾舞台标记与行首 >> 对重叠比较的干扰', () => {
+        const result = dedupeRollingLines([
+            line(1, 495.44, 501.8, 'This morning I visited >> [cheering]'),
+            line(2, 498.24, 506.16, '>> This morning I visited with Robo Club.'),
+        ]);
+        expect(result).toHaveLength(2);
+        expect(result[1].contentEn).toBe('with Robo Club.');
+    });
+
+    it('跨 ≥1s 长停顿的重复短语视为演讲重述，不误删', () => {
+        const result = dedupeRollingLines([
+            line(1, 679.36, 685.19, 'Policy makers,'),
+            line(2, 689.84, 696.6, 'policy makers have a responsibility'),
+        ]);
+        expect(result).toHaveLength(2);
+        expect(result[1].contentEn).toBe('policy makers have a responsibility');
+    });
 });
 
 describe('dropLeadingWords 与归一化词口径一致', () => {

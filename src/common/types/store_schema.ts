@@ -84,5 +84,7 @@ export const SettingKeyObj = {
     'mobileAccess.token': '',
     'youtubeImport.enabled': 'true',
     'youtubeImport.cookiesFilePath': '',
+    /** 是否在本地 ASR 模型就绪时，自动在后台为仅有外部字幕的视频生成对齐的 .local.srt 轨道。 */
+    'subtitle.autoRefineWithLocalAsr': 'true',
 }
 export type SettingKey = keyof typeof SettingKeyObj;

@@ -147,6 +147,28 @@ describe('subtitleGenerationStore 跨视频隔离与重连恢复', () => {
         expect(useSubtitleGenerationStore.getState().cancellingVideos['video-a']).toBeUndefined();
     });
 
+    it('以重生成模式启动时透传 regenerate 并在完成后更新轨道诊断', async () => {
+        mockStartSubtitleGeneration.mockResolvedValue(505);
+        mockGetPlayerSubtitle.mockResolvedValue({
+            subtitlePath: '/tmp/a.local.srt',
+            mismatchSuspected: false,
+            origin: 'local_asr',
+            tracks: [{ path: '/tmp/a.local.srt', fileName: 'a.local.srt', origin: 'local_asr', active: true }],
+        });
+
+        await useSubtitleGenerationStore.getState().start('video-a', {
+            done: 'done',
+            formatFailed: (m) => m,
+        }, { regenerate: true });
+
+        expect(mockStartSubtitleGeneration).toHaveBeenCalledWith('video-a', { regenerate: true });
+        pushHandler?.(makeTask(505, DpTaskState.DONE));
+        await vi.waitFor(() => {
+            expect(usePlaybackSession.getState().subtitlePath).toBe('/tmp/a.local.srt');
+            expect(usePlaybackSession.getState().subtitleOrigin).toBe('local_asr');
+        });
+    });
+
     it('取消请求失败时标记同样收口，并提示错误', async () => {
         mockCancelSubtitleGeneration.mockRejectedValue(new Error('ipc down'));
         useSubtitleGenerationStore.setState({

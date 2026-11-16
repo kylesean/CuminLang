@@ -272,6 +272,25 @@
         "done": "字幕生成完成",
         "failed": "字幕生成失败：{{message}}"
     },
+    "subtitleOrigin": {
+        "trackLabel": "字幕轨道",
+        "userEdited": "人工编辑",
+        "localAsr": "本地识别",
+        "author": "人工字幕",
+        "autoAsr": "自动字幕",
+        "external": "外挂字幕",
+        "autoAsrHint": "当前为平台自动字幕，时间轴或拼写可能不够准确",
+        "timingAnomalyHint": "检测到当前字幕存在超长跨度或疑似缺段，建议本地重识",
+        "autoAsrWithLocalReady": "当前为平台自动字幕，已有更准确的本地识别轨",
+        "regenerate": "本地重识",
+        "switchToLocal": "切到本地",
+        "trackSwitched": "已切换字幕轨道",
+        "trackSwitchFailed": "切换字幕失败：{{message}}",
+        "dismissHint": "暂不提示",
+        "autoRefinedDone": "已自动切换至本地声学精修字幕",
+        "autoRefineToggle": "后台自动精修字幕",
+        "autoRefineToggleHint": "播放仅含外部字幕的视频时，若本地模型已就绪则在后台静默生成对齐字幕"
+    },
     "mediaError": {
         "hint": "视频无法播放（错误码 {{code}}）。本地视频建议转成 H.264 + AAC 的 MP4 后重试；YouTube 导入的视频不受影响。"
     },

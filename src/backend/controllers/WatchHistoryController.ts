@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import registerRoute from '@/backend/controllers/ipc/registerRoute';
 import { finiteNonNegativeNumberSchema, nonEmptyStringSchema } from '@/backend/controllers/ipc/routeSchemas';
-import { inject, injectable } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import type Controller from '@/backend/controllers/Controller';
+import type SubtitleGenerationService from '@/backend/services/SubtitleGenerationService';
 import type WatchHistoryService from '@/backend/services/WatchHistoryService';
 import type { SubtitleResolution } from '@/common/contracts/subtitle-resolution';
 import type WatchHistoryVO from '@/common/types/WatchHistoryVO';
@@ -20,6 +21,8 @@ export default class WatchHistoryController implements Controller {
      */
     constructor(
         @inject(TYPES.WatchHistoryService) private readonly watchHistoryService: WatchHistoryService,
+        @optional() @inject(TYPES.SubtitleGenerationService)
+        private readonly subtitleGenerationService?: SubtitleGenerationService,
     ) {}
 
     public async updateProgress({ file, currentPosition }: {
@@ -72,7 +75,11 @@ export default class WatchHistoryController implements Controller {
      * @returns 字幕解析结论；没有匹配字幕时 `subtitlePath` 为空字符串。
      */
     public async playerSubtitle(id: string): Promise<SubtitleResolution> {
-        return this.watchHistoryService.playerSubtitle(id);
+        const result = await this.watchHistoryService.playerSubtitle(id);
+        if (result.origin !== 'local_asr' && result.origin !== 'user_edited') {
+            void this.subtitleGenerationService?.scheduleAutoRefine(id, result);
+        }
+        return result;
     }
 
     public async getNextVideo(currentId: string): Promise<WatchHistoryVO | null> {

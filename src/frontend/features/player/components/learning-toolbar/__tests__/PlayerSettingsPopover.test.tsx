@@ -115,4 +115,26 @@ describe('PlayerSettingsPopover', () => {
 
         expect(screen.getByTestId('player-setting-adaptive-chinese')).toBeInTheDocument();
     });
+
+    it('字幕时间选项卡内展示字幕轨道切换与本地重识入口', async () => {
+        const { usePlaybackSession } = await import('@/frontend/features/player/playbackSessionStore');
+        usePlaybackSession.setState({
+            videoId: 'video-1',
+            videoPath: '/tmp/talk.mp4',
+            subtitlePath: '/tmp/talk.en.srt',
+            subtitleOrigin: 'auto_asr',
+            subtitleTracks: [
+                { path: '/tmp/talk.en.srt', fileName: 'talk.en.srt', origin: 'auto_asr', active: true },
+                { path: '/tmp/talk.local.srt', fileName: 'talk.local.srt', origin: 'local_asr', active: false },
+            ],
+        });
+
+        render(<PlayerSettingsPopover tone="panel" popoverOffset={8} />);
+        fireEvent.click(screen.getByRole('button', { name: /controlBox\.title/i }));
+        fireEvent.click(screen.getByRole('radio', { name: /字幕时间/i }));
+
+        expect(screen.getByTestId('player-subtitle-track-section')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /subtitleOrigin\.regenerate/i })).toBeInTheDocument();
+        usePlaybackSession.getState().clear();
+    });
 });

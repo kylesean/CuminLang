@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { twJoin } from 'tailwind-merge';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
-import { ArrowUpToLine, Play } from 'lucide-react';
+import { ArrowUpToLine, Play, Sparkles, X } from 'lucide-react';
 import SideSentence from '../SideSentence';
 import ArticleBlock from './ArticleBlock';
 import { TranscriptToolbar } from './TranscriptToolbar';
@@ -13,6 +13,7 @@ import { TranscriptSearchBar } from './TranscriptSearchBar';
 import { groupSentencesIntoBlocks, type SentenceBlock } from '@/frontend/features/player/lib/sentence-grouping';
 import { selectSceneDividers, type SceneBoundary } from '@/common/learning/sceneSegmentation';
 import { useSceneBoundaries } from '@/frontend/features/player/hooks/useSceneBoundaries';
+import { useSubtitleTrackActions } from '@/frontend/features/player/hooks/useSubtitleTrackActions';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
 import useLayout from '@/frontend/app/stores/layoutStore';
@@ -75,6 +76,17 @@ export default function Subtitle() {
     );
     const { setBoundaryRef } = useBoundary();
     const activeVideoId = usePlaybackSession((s) => s.videoId);
+    const trackActions = useSubtitleTrackActions();
+    const hasQualityIssue = Boolean(
+        trackActions.subtitleQualityIssue === 'auto_asr'
+        || trackActions.subtitleQualityIssue === 'timing_anomaly'
+        || trackActions.subtitleOrigin === 'auto_asr',
+    );
+    const showAutoAsrHint = Boolean(
+        trackActions.subtitlePath
+        && hasQualityIssue
+        && !trackActions.originHintDismissed,
+    );
     const sceneBoundaries = useSceneBoundaries(subtitle);
     const sceneDividersByIndex = useMemo(() => {
         const map = new Map<number, SceneBoundary>();
@@ -836,6 +848,62 @@ export default function Subtitle() {
                     onNextMatch={handleNextMatch}
                     onClose={handleCloseSearch}
                 />
+            )}
+
+            {showAutoAsrHint && (
+                <div
+                    className="shrink-0 px-3 py-1.5 border-b border-border/40 bg-muted/40 flex items-center justify-between gap-2 text-metadata"
+                    data-testid="transcript-auto-asr-hint"
+                >
+                    <span className="min-w-0 flex-1 text-secondary truncate">
+                        {trackActions.isGenerating
+                            ? (trackActions.generationProgress ?? t('subtitleGeneration.running'))
+                            : trackActions.localAsrTrack
+                                ? t('subtitleOrigin.autoAsrWithLocalReady')
+                                : trackActions.subtitleQualityIssue === 'timing_anomaly'
+                                    ? t('subtitleOrigin.timingAnomalyHint')
+                                    : t('subtitleOrigin.autoAsrHint')}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                        {trackActions.isGenerating ? (
+                            <button
+                                type="button"
+                                disabled={trackActions.cancelling || trackActions.taskId === undefined}
+                                onClick={() => { void trackActions.cancelGeneration(); }}
+                                className="shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                                {t('subtitleGeneration.cancel')}
+                            </button>
+                        ) : trackActions.localAsrTrack ? (
+                            <button
+                                type="button"
+                                disabled={trackActions.switchingTrack}
+                                onClick={() => { void trackActions.switchTrack(trackActions.localAsrTrack!.path); }}
+                                className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-medium text-accent hover:bg-accent-muted/20 transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                <span>{t('subtitleOrigin.switchToLocal')}</span>
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => { void trackActions.regenerateLocalSubtitle(); }}
+                                className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-medium text-accent hover:bg-accent-muted/20 transition-colors cursor-pointer"
+                            >
+                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                <span>{t('subtitleOrigin.regenerate')}</span>
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={trackActions.dismissOriginHint}
+                            aria-label={t('subtitleOrigin.dismissHint')}
+                            className="p-0.5 rounded text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                </div>
             )}
 
             {/*

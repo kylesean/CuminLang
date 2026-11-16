@@ -77,12 +77,24 @@ interface ChatRendererDef {
     'chat/stream': { params: ChatStreamEvent, return: void };
 }
 
+// 字幕精修完成推送给前端热切换轨道
+interface SubtitleRendererDef {
+    'subtitle/track-refined': {
+        params: {
+            videoId: string;
+            subtitlePath: string;
+        };
+        return: void;
+    };
+}
+
 // 使用交叉类型合并所有前端API定义
 export type RendererApiDefinitions = UIRendererDef
     & TranslationRendererDef
     & DictionaryRendererDef
     & VideoLearningRendererDef
-    & ChatRendererDef;
+    & ChatRendererDef
+    & SubtitleRendererDef;
 
 // 定义前端API函数类型
 type RendererApiFunction<P, R> = (params: P) => R | Promise<R>;

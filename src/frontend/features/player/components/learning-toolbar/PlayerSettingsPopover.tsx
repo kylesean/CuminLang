@@ -1,12 +1,13 @@
 /* eslint-disable react-hooks/refs -- Astryx usePopover 把 triggerRef/triggerProps/render 作为渲染期 API 返回，会被 refs 规则误判 */
-import { useCallback, useState } from 'react';
-import { ChevronRight, Eraser, Settings2, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { ChevronRight, Eraser, Settings2, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { Button } from '@astryxdesign/core/Button';
 import { Divider } from '@astryxdesign/core/Divider';
+import { Selector } from '@astryxdesign/core/Selector';
 import { VStack } from '@astryxdesign/core/VStack';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 
@@ -23,6 +24,7 @@ import { usePlaybackSession } from '@/frontend/features/player/playbackSessionSt
 import useLayout from '@/frontend/app/stores/layoutStore';
 import { setPodcastModeForCurrentVideo } from '@/frontend/features/player/podcastMode';
 import { useSourceChineseAvailability } from '@/frontend/features/player/hooks/useSourceChineseAvailability';
+import { useSubtitleTrackActions } from '@/frontend/features/player/hooks/useSubtitleTrackActions';
 import useSetting from '@/frontend/features/settings/settingsStore';
 import { PopoverSwitchRow } from './PopoverSwitchRow';
 import TimeAdjustPanel from './TimeAdjustPanel';
@@ -86,6 +88,7 @@ export default function PlayerSettingsPopover({
     const vocabularyGuidance = useSetting((s) => s.values.get('player.vocabularyGuidance') ?? 'calm');
     const adaptiveChinese = useSetting((s) => s.values.get('player.adaptiveChinese') ?? 'true') === 'true';
     const sceneCues = useSetting((s) => s.values.get('player.sceneCues') ?? 'false') === 'true';
+    const autoRefineWithLocalAsr = useSetting((s) => s.values.get('subtitle.autoRefineWithLocalAsr') ?? 'true') !== 'false';
     const setSetting = useSetting((s) => s.setSetting);
 
     const autoPlayNext = useSetting((s) => s.values.get('player.autoPlayNext')) === 'true';
@@ -94,6 +97,14 @@ export default function PlayerSettingsPopover({
     const adjustDiff = currentSentence && srtTender && srtTender.adjusted(currentSentence)
         ? srtTender.timeDiff(currentSentence)
         : null;
+    const trackActions = useSubtitleTrackActions();
+    const trackOptions = useMemo(
+        () => trackActions.subtitleTracks.map((track) => ({
+            value: track.path,
+            label: `${trackActions.originLabel(track.origin)} · ${track.fileName}`,
+        })),
+        [trackActions],
+    );
 
     const style = TOOLBAR_TONE[tone];
 
@@ -115,6 +126,10 @@ export default function PlayerSettingsPopover({
 
     const changeSceneCues = async (next: boolean) => {
         await setSetting('player.sceneCues', next ? 'true' : 'false');
+    };
+
+    const changeAutoRefineWithLocalAsr = async (next: boolean) => {
+        await setSetting('subtitle.autoRefineWithLocalAsr', next ? 'true' : 'false');
     };
 
     return (
@@ -295,8 +310,74 @@ export default function PlayerSettingsPopover({
                         </button>
                     </div>
                 ) : (
-                    /* 时间微调选项卡：单一任务、原地微调 */
-                    <div className="space-y-3 pt-1">
+                    /* 字幕轨道、本地重识与时间微调选项卡 */
+                    <div className="space-y-2.5 pt-1">
+                        {trackActions.subtitlePath && (
+                            <>
+                                <div className="space-y-1.5 px-1" data-testid="player-subtitle-track-section">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="shrink-0 whitespace-nowrap text-sm text-secondary">
+                                            {t('subtitleOrigin.trackLabel')}
+                                        </span>
+                                        {trackActions.subtitleOrigin && (
+                                            <span className="text-metadata text-secondary truncate">
+                                                {trackActions.originLabel(trackActions.subtitleOrigin)}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        {trackOptions.length > 1 && (
+                                            <div className="min-w-0 flex-1 [--text-body-size:var(--text-supporting-size)]">
+                                                <Selector
+                                                    label={t('subtitleOrigin.trackLabel')}
+                                                    isLabelHidden
+                                                    size="sm"
+                                                    width="100%"
+                                                    value={trackActions.subtitlePath}
+                                                    onChange={(val) => { void trackActions.switchTrack(val); }}
+                                                    isDisabled={trackActions.switchingTrack || trackActions.isGenerating}
+                                                    options={trackOptions}
+                                                />
+                                            </div>
+                                        )}
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            width={trackOptions.length > 1 ? undefined : '100%'}
+                                            icon={trackActions.isGenerating ? undefined : <Sparkles className="h-3.5 w-3.5" />}
+                                            isDisabled={
+                                                trackActions.cancelling
+                                                || (trackActions.isGenerating && trackActions.taskId === undefined)
+                                            }
+                                            label={trackActions.isGenerating
+                                                ? t('subtitleGeneration.cancel')
+                                                : t('subtitleOrigin.regenerate')}
+                                            onClick={() => {
+                                                if (trackActions.isGenerating) {
+                                                    void trackActions.cancelGeneration();
+                                                } else {
+                                                    void trackActions.regenerateLocalSubtitle();
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    {trackActions.isGenerating && (
+                                        <p className="text-metadata text-secondary truncate" role="status" aria-live="polite">
+                                            {trackActions.generationProgress ?? t('subtitleGeneration.running')}
+                                        </p>
+                                    )}
+                                    <PopoverSwitchRow
+                                        label={t('subtitleOrigin.autoRefineToggle')}
+                                        labelTooltip={t('subtitleOrigin.autoRefineToggleHint')}
+                                        checked={autoRefineWithLocalAsr}
+                                        onChange={(next) => { void changeAutoRefineWithLocalAsr(next); }}
+                                        testId="player-setting-auto-refine-subtitle"
+                                    />
+                                </div>
+                                <Divider variant="subtle" />
+                            </>
+                        )}
+
                         <div className="rounded-lg border border-border/40 bg-muted/20 p-2.5">
                             <TimeAdjustPanel />
                         </div>

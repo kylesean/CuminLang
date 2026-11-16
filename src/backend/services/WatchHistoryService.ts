@@ -479,7 +479,7 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
         }
 
         const preferredRecord = await this.findPreferredVideoRecord(record);
-        const subtitle = await this.watchHistoryViewBuilder.resolveSubtitleForPlayback(preferredRecord);
+        const subtitle = await this.watchHistoryViewBuilder.resolveSubtitleWithDiagnostics(preferredRecord);
         if (subtitle === null) {
             throw new Error(`视频文件不存在：${path.join(preferredRecord.base_path, preferredRecord.file_name)}`);
         }

@@ -43,6 +43,7 @@ export const runtimeSettingKeys = [
     'player.vocabularyGuidance',
     'player.adaptiveChinese',
     'player.sceneCues',
+    'subtitle.autoRefineWithLocalAsr',
 ] as const satisfies readonly SettingKey[];
 
 /**
@@ -62,6 +63,7 @@ export type RuntimeWritableSettingKey =
     | 'player.vocabularyGuidance'
     | 'player.adaptiveChinese'
     | 'player.sceneCues'
+    | 'subtitle.autoRefineWithLocalAsr'
     | 'userSelect.playbackRateStack'
     | 'providers.embedding'
     | 'learning.activePromptPresetId';

@@ -272,6 +272,25 @@
         "done": "Subtitles generated",
         "failed": "Subtitle generation failed: {{message}}"
     },
+    "subtitleOrigin": {
+        "trackLabel": "Subtitle track",
+        "userEdited": "Edited",
+        "localAsr": "Local ASR",
+        "author": "Author",
+        "autoAsr": "Auto captions",
+        "external": "External",
+        "autoAsrHint": "Using platform auto-captions; timing or words may be rough",
+        "timingAnomalyHint": "Stretched cues or gaps detected; re-transcribe locally for accuracy",
+        "autoAsrWithLocalReady": "Using platform auto-captions; local ASR track is ready",
+        "regenerate": "Re-transcribe",
+        "switchToLocal": "Use local",
+        "trackSwitched": "Switched subtitle track",
+        "trackSwitchFailed": "Failed to switch subtitle track: {{message}}",
+        "dismissHint": "Dismiss",
+        "autoRefinedDone": "Switched to locally refined subtitle track",
+        "autoRefineToggle": "Auto-refine in background",
+        "autoRefineToggleHint": "Quietly align and refine external subtitles in the background when a local ASR model is ready"
+    },
     "mediaError": {
         "hint": "This video cannot be played (error code {{code}}). For local videos, convert to H.264 + AAC MP4 and retry; YouTube imports are unaffected."
     },

@@ -27,8 +27,11 @@ export default class SubtitleGenerationController implements Controller {
      * @param params.videoId 观看历史记录 ID。
      * @returns 后台任务 ID。
      */
-    public async start({ videoId }: { videoId: string }): Promise<number> {
-        return this.subtitleGenerationService.start(videoId);
+    public async start({ videoId, regenerate }: { videoId: string; regenerate?: boolean }): Promise<number> {
+        return this.subtitleGenerationService.start(
+            videoId,
+            regenerate !== undefined ? { regenerate } : undefined,
+        );
     }
 
     /**
@@ -43,7 +46,10 @@ export default class SubtitleGenerationController implements Controller {
     /** 注册字幕生成路由。 */
     public registerRoutes(): void {
         registerRoute('subtitle-generation/start', (p) => this.start(p), {
-            schema: z.object({ videoId: nonEmptyStringSchema }),
+            schema: z.object({
+                videoId: nonEmptyStringSchema,
+                regenerate: z.boolean().optional(),
+            }),
             broadcastError: false,
         });
         registerRoute('subtitle-generation/cancel', (p) => this.cancel(p), {

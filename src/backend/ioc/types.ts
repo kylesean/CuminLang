@@ -51,6 +51,7 @@ const TYPES = {
     SherpaOnnxGateway: Symbol('SherpaOnnxGateway'),
     WhisperCppGateway: Symbol('WhisperCppGateway'),
     TranscriptionEngineSelector: Symbol('TranscriptionEngineSelector'),
+    SubtitleAssetMigrationService: Symbol('SubtitleAssetMigrationService'),
     SubtitleGenerationService: Symbol('SubtitleGenerationService'),
     ImportedDictionaryService: Symbol('ImportedDictionaryService'),
     EnglishDictionaryService: Symbol('EnglishDictionaryService'),

@@ -9,6 +9,8 @@ import type SubtitleService from '@/backend/services/SubtitleService';
 import { SubtitleServiceImpl } from '@/backend/services/SubtitleService';
 import type SubtitleGenerationService from '@/backend/services/SubtitleGenerationService';
 import { SubtitleGenerationServiceImpl } from '@/backend/services/SubtitleGenerationService';
+import type SubtitleAssetMigrationService from '@/backend/services/SubtitleAssetMigrationService';
+import { SubtitleAssetMigrationServiceImpl } from '@/backend/services/SubtitleAssetMigrationService';
 import SubtitleGenerationController from '@/backend/controllers/SubtitleGenerationController';
 import ImportedDictionaryService from '@/backend/services/ImportedDictionaryService';
 import DictionaryImportController from '@/backend/controllers/DictionaryImportController';
@@ -339,6 +341,9 @@ container.bind<SentencePracticeService>(TYPES.SentencePracticeService).to(Senten
 container.bind<VideoLearningService>(TYPES.VideoLearningService).to(VideoLearningServiceImpl).inSingletonScope();
 container.bind<SrtTimeAdjustService>(TYPES.SrtTimeAdjustService).to(SrtTimeAdjustServiceImpl).inSingletonScope();
 container.bind<SubtitleService>(TYPES.SubtitleService).to(SubtitleServiceImpl).inSingletonScope();
+container.bind<SubtitleAssetMigrationService>(TYPES.SubtitleAssetMigrationService)
+    .to(SubtitleAssetMigrationServiceImpl)
+    .inSingletonScope();
 container.bind<SubtitleGenerationService>(TYPES.SubtitleGenerationService)
     .to(SubtitleGenerationServiceImpl)
     .inSingletonScope();

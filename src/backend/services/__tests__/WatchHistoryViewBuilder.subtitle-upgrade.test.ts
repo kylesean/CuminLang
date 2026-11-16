@@ -121,4 +121,57 @@ describe('播放字幕解析：自动升级到作者轨', () => {
 
         expect(result?.subtitlePath).toBe(path.join(FOLDER, 'talk.en-orig.srt'));
     });
+
+    it('resolveSubtitleWithDiagnostics 识别伪装成 .en.srt 的滚屏 ASR 轨，并聚合去重后的多轨道列表', async () => {
+        const rollingAsr = [
+            '1',
+            '00:00:00,840 --> 00:00:06,800',
+            'Hello everyone',
+            '',
+            '2',
+            '00:00:04,880 --> 00:00:11,640',
+            '>> [applause] welcome here',
+        ].join('\n');
+        const localClean = [
+            '1',
+            '00:00:00,840 --> 00:00:03,800',
+            'Hello everyone, welcome here.',
+        ].join('\n');
+
+        const fs = new MemoryFileSystemGateway();
+        fs.files.set(path.normalize(path.join(FOLDER, VIDEO)), 'video');
+        fs.files.set(path.normalize(path.join(FOLDER, 'talk.en.srt')), rollingAsr);
+        fs.files.set(path.normalize(path.join(FOLDER, 'talk.en-orig.srt')), rollingAsr);
+        fs.files.set(path.normalize(path.join(FOLDER, 'talk.local.srt')), localClean);
+        fs.files.set(path.normalize(path.join(FOLDER, 'other.local.srt')), localClean);
+
+        const builder = new WatchHistoryViewBuilder(
+            { duration: vi.fn().mockResolvedValue(0) } as never,
+            {} as never,
+            { ensurePathAccessPermissionIfExists: vi.fn().mockResolvedValue(undefined) } as never,
+            fs,
+        );
+
+        const result = await builder.resolveSubtitleWithDiagnostics(
+            record(path.join(FOLDER, 'talk.en.srt')),
+        );
+
+        expect(result?.origin).toBe('auto_asr');
+        expect(result?.qualityIssue).toBe('auto_asr');
+        expect(result?.tracks).toEqual([
+            {
+                path: path.normalize(path.join(FOLDER, 'talk.en.srt')),
+                fileName: 'talk.en.srt',
+                origin: 'auto_asr',
+                qualityIssue: 'auto_asr',
+                active: true,
+            },
+            {
+                path: path.normalize(path.join(FOLDER, 'talk.local.srt')),
+                fileName: 'talk.local.srt',
+                origin: 'local_asr',
+                active: false,
+            },
+        ]);
+    });
 });

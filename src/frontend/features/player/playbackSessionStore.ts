@@ -1,5 +1,11 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import type {
+    SubtitleQualityIssue,
+    SubtitleResolution,
+    SubtitleTrackOption,
+    SubtitleTrackOrigin,
+} from '@/common/contracts/subtitle-resolution';
 import MediaUtil from '@/common/utils/MediaUtil';
 import StrUtil from '@/common/utils/str-util';
 
@@ -11,6 +17,14 @@ export type PlaybackSessionState = {
     videoId: string | null;
     /** 当前加载的字幕文件路径。 */
     subtitlePath: string | null;
+    /** 当前激活字幕的来源与质量诊断。 */
+    subtitleOrigin: SubtitleTrackOrigin | null;
+    /** 当前激活字幕的质量告警（如有）。 */
+    subtitleQualityIssue: SubtitleQualityIssue | null;
+    /** 当前视频可用的全部字幕轨道（已按内容去重）。 */
+    subtitleTracks: SubtitleTrackOption[];
+    /** 当前会话内按视频 ID 忽略「自动字幕提示条」的标记。 */
+    dismissedOriginHintVideos: Record<string, boolean>;
     /** 底层媒体元素是否已进入就绪可播状态。 */
     videoLoaded: boolean;
     /** 当前加载字幕对应的内容哈希，用于收藏/生词隔离。 */
@@ -25,6 +39,10 @@ export type PlaybackSessionState = {
 export type PlaybackSessionActions = {
     /** 根据文件路径更新当前视频或字幕路径，并按需重置关联哈希。 */
     updateFile: (file: string) => void;
+    /** 应用后端解析出的字幕与轨道诊断结果。 */
+    updateSubtitleResolution: (resolution: SubtitleResolution) => void;
+    /** 暂时隐藏当前视频顶部的自动字幕质量提示条。 */
+    dismissSubtitleOriginHint: (videoId: string) => void;
     /** 标记目标视频路径已完成媒体就绪。 */
     loadedVideo: (file: string) => void;
     /** 清空当前播放会话的全部媒体与字幕绑定状态。 */
@@ -42,6 +60,10 @@ export const usePlaybackSession = create(
     subscribeWithSelector<PlaybackSessionState & PlaybackSessionActions>((set) => ({
         videoPath: null,
         subtitlePath: null,
+        subtitleOrigin: null,
+        subtitleQualityIssue: null,
+        subtitleTracks: [],
+        dismissedOriginHintVideos: {},
         videoLoaded: false,
         videoId: null,
         srtHash: null,
@@ -66,6 +88,22 @@ export const usePlaybackSession = create(
                 }));
             }
         },
+        updateSubtitleResolution: (resolution: SubtitleResolution) => {
+            set((s) => ({
+                subtitlePath: resolution.subtitlePath || null,
+                subtitleOrigin: resolution.origin ?? null,
+                subtitleQualityIssue: resolution.qualityIssue ?? null,
+                subtitleTracks: resolution.tracks ?? [],
+                srtHash: s.subtitlePath === (resolution.subtitlePath || null) ? s.srtHash : null,
+                subtitleSessionId: s.subtitlePath === (resolution.subtitlePath || null) ? s.subtitleSessionId : null,
+            }));
+        },
+        dismissSubtitleOriginHint: (videoId: string) => {
+            if (!videoId) return;
+            set((s) => ({
+                dismissedOriginHintVideos: { ...s.dismissedOriginHintVideos, [videoId]: true },
+            }));
+        },
         loadedVideo: (ph: string) => {
             set((s) => ({
                 videoLoaded: s.videoPath === ph,
@@ -76,6 +114,9 @@ export const usePlaybackSession = create(
             set({
                 videoPath: null,
                 subtitlePath: null,
+                subtitleOrigin: null,
+                subtitleQualityIssue: null,
+                subtitleTracks: [],
                 videoLoaded: false,
                 videoId: null,
                 srtHash: null,
@@ -85,6 +126,9 @@ export const usePlaybackSession = create(
         clearSrt: () => {
             set({
                 subtitlePath: null,
+                subtitleOrigin: null,
+                subtitleQualityIssue: null,
+                subtitleTracks: [],
                 srtHash: null,
                 subtitleSessionId: null,
             });

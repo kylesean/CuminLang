@@ -15,3 +15,13 @@ export { getAroundLines, findByIndex, buildClipContext } from './context';
 export type { SubtitleClipContext } from './context';
 export { sentenceToSrtLine, srtLineToSentence, clipLinesToSentences } from './sentence';
 export { SPLIT_REGEX, splitWords, isWordToken, cleanWord } from './tokenize';
+export {
+    LOCAL_ASR_TRACK_SUFFIX,
+    USER_EDITED_TRACK_SUFFIX,
+    isLocalAsrSubtitleFile,
+    isUserEditedSubtitleFile,
+    isAuthoritativeSubtitlePath,
+    inspectSubtitleTrackDiagnostics,
+    inspectSubtitleTrackOrigin,
+    buildSubtitleTrackOptions,
+} from './track-diagnostics';

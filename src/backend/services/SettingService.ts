@@ -305,6 +305,11 @@ export class SettingServiceImpl implements SettingService {
         );
         this.warnInvalidEnum(values['player.sceneCues'], ['true', 'false'] as const, 'player.sceneCues');
         this.warnInvalidEnum(
+            values['subtitle.autoRefineWithLocalAsr'],
+            ['true', 'false'] as const,
+            'subtitle.autoRefineWithLocalAsr',
+        );
+        this.warnInvalidEnum(
             values['providers.subtitleTranslation'],
             SUBTITLE_TRANSLATION_ENGINES,
             'providers.subtitleTranslation',
@@ -345,6 +350,7 @@ export class SettingServiceImpl implements SettingService {
             case 'player.pauseOnWordHover':
             case 'player.adaptiveChinese':
             case 'player.sceneCues':
+            case 'subtitle.autoRefineWithLocalAsr':
                 value = this.requireBooleanString(value, request.key) ? 'true' : 'false';
                 break;
             case 'player.vocabularyGuidance':

@@ -270,4 +270,49 @@ describe('英文字幕分段（多块合并）', () => {
         expect(lines).toHaveLength(1);
         expect(lines[0].contentEn).toBe('Hi');
     });
+
+    it('无前导空格的数字 token 在字母词后自动分出空格，且保留 1950s 后缀', () => {
+        const tokens: SpeechRecognitionToken[] = [
+            word('Class', 0, 0.3),
+            word('of', 0.35, 0.5),
+            { text: '2', start: 0.55, end: 0.65 },
+            { text: '026', start: 0.65, end: 0.9 },
+            punct(',', 0.9, 0.92),
+            word('since', 1.0, 1.25),
+            word('the', 1.3, 1.45),
+            { text: '1950', start: 1.5, end: 1.85 },
+            { text: 's', start: 1.85, end: 1.95 },
+            punct('.', 1.95, 1.96),
+        ];
+
+        const lines = segmenter.segmentTimeline(tokens);
+
+        expect(lines).toHaveLength(1);
+        expect(lines[0].contentEn).toBe('Class of 2026, since the 1950s.');
+    });
+
+    it('已完结长句不吞并下一句开头的孤独主语词', () => {
+        const tokens: SpeechRecognitionToken[] = [
+            word('Software', 0, 0.4),
+            word('engineers', 0.45, 0.9),
+            word('and', 0.95, 1.1),
+            word('radiologists', 1.15, 1.8),
+            word('continue', 1.85, 2.2),
+            word('to', 2.25, 2.4),
+            word('grow.', 2.45, 2.8),
+            word('AI', 2.85, 3.1),
+            // 故意插入 ≥0.6s 停顿：旧实现会为了躲避句内停顿而把 AI 拉进上一行末尾。
+            word('is', 4.05, 4.25),
+            word('not', 4.3, 4.5),
+            word('likely', 4.55, 4.9),
+            word('to', 4.95, 5.1),
+            word('replace', 5.15, 5.55),
+            word('you.', 5.6, 5.9),
+        ];
+
+        const lines = segmenter.segmentTimeline(tokens);
+
+        expect(lines[0].contentEn).toBe('Software engineers and radiologists continue to grow.');
+        expect(lines.slice(1).map((item) => item.contentEn).join(' ')).toBe('AI is not likely to replace you.');
+    });
 });

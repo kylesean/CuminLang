@@ -258,13 +258,26 @@ export const playerApi = {
         backendClient.call('ai-trans/word-insight', params),
 
     /**
-     * 为无字幕视频启动本地字幕生成。
+     * 切换并持久化当前视频绑定的字幕轨道。
+     *
+     * @param videoPath 当前视频文件路径。
+     * @param srtPath 目标字幕文件路径。
+     */
+    attachSubtitleTrack: (videoPath: string, srtPath: string) =>
+        backendClient.call('watch-history/attach-srt', { videoPath, srtPath }),
+
+    /**
+     * 为无字幕或需本地重生成字幕的视频启动本地字幕生成。
      *
      * @param videoId 观看历史记录 ID。
+     * @param options 可选重生成参数。
      * @returns 后台任务 ID。
      */
-    startSubtitleGeneration: (videoId: string) =>
-        backendClient.call('subtitle-generation/start', { videoId }),
+    startSubtitleGeneration: (videoId: string, options?: { regenerate?: boolean }) =>
+        backendClient.call(
+            'subtitle-generation/start',
+            options?.regenerate ? { videoId, regenerate: true } : { videoId },
+        ),
 
     /**
      * 取消字幕生成任务。

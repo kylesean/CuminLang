@@ -268,10 +268,12 @@ const PlayerWithControlsPage = () => {
                     logger.info('player subtitle resolved', {
                         videoId: video.id,
                         subtitlePath: resolution.subtitlePath,
+                        origin: resolution.origin,
+                        trackCount: resolution.tracks?.length ?? 0,
                         videoPath,
                         mismatchSuspected: resolution.mismatchSuspected,
                     });
-                    latestFileState.updateFile(resolution.subtitlePath);
+                    latestFileState.updateSubtitleResolution(resolution);
                 } else {
                     logger.info('player subtitle not found', {
                         videoId: video.id,

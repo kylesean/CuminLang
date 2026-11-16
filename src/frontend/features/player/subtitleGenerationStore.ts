@@ -10,11 +10,20 @@ export type SubtitleGenerationMessages = {
     formatFailed: (message: string) => string;
 };
 
+export type SubtitleGenerationStartOptions = {
+    /** 是否以 `.local.srt` 独立轨重生成（不覆盖原有外挂或平台字幕）。 */
+    regenerate?: boolean;
+};
+
 type SubtitleGenerationState = {
     taskIdsByVideo: Record<string, number>;
     startingVideos: Record<string, boolean>;
     cancellingVideos: Record<string, boolean>;
-    start: (videoId: string, messages: SubtitleGenerationMessages) => Promise<void>;
+    start: (
+        videoId: string,
+        messages: SubtitleGenerationMessages,
+        options?: SubtitleGenerationStartOptions,
+    ) => Promise<void>;
     cancel: (videoId: string, formatFailed: (message: string) => string) => Promise<void>;
 };
 
@@ -44,7 +53,7 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
     startingVideos: {},
     cancellingVideos: {},
 
-    start: async (videoId, messages) => {
+    start: async (videoId, messages, options) => {
         if (!videoId) return;
         const current = get();
         if (current.startingVideos[videoId] || current.taskIdsByVideo[videoId] !== undefined) {
@@ -57,7 +66,9 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
 
         try {
             const id = await useDpTaskCenter.getState().register(
-                () => playerApi.startSubtitleGeneration(videoId),
+                () => (options?.regenerate
+                    ? playerApi.startSubtitleGeneration(videoId, { regenerate: true })
+                    : playerApi.startSubtitleGeneration(videoId)),
                 {
                     onFinish: (task: DpTask) => {
                         set((state) => clearVideoEntry(state, videoId));
@@ -74,10 +85,13 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
                                     if (usePlaybackSession.getState().videoId !== videoId) {
                                         return;
                                     }
-                                    if (resolution.subtitlePath) {
-                                        usePlaybackSession.getState().updateFile(resolution.subtitlePath);
+                                    const session = usePlaybackSession.getState();
+                                    if (typeof session.updateSubtitleResolution === 'function') {
+                                        session.updateSubtitleResolution(resolution);
+                                    } else if (resolution.subtitlePath) {
+                                        session.updateFile(resolution.subtitlePath);
                                     }
-                                    usePlaybackSession.getState().reloadSubtitles();
+                                    session.reloadSubtitles();
                                 } catch (error) {
                                     toast.error(messages.formatFailed(
                                         error instanceof Error ? error.message : String(error),

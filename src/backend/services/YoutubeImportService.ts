@@ -1,10 +1,11 @@
 import path from 'path';
-import { inject, injectable } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import TYPES from '@/backend/ioc/types';
 import { concurrency } from '@/backend/utils/concurrency';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import type DpTaskService from '@/backend/services/DpTaskService';
+import type SubtitleGenerationService from '@/backend/services/SubtitleGenerationService';
 import type WatchHistoryService from '@/backend/services/WatchHistoryService';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
@@ -122,6 +123,8 @@ export class YoutubeImportServiceImpl implements YoutubeImportService {
         @inject(TYPES.SettingsStore) private readonly settingsStore: SettingsStore,
         @inject(TYPES.WatchHistoryService) private readonly watchHistoryService: WatchHistoryService,
         @inject(TYPES.RendererGateway) rendererGateway: RendererGateway,
+        @optional() @inject(TYPES.SubtitleGenerationService)
+        private readonly subtitleGenerationService?: SubtitleGenerationService,
     ) {
         this.binaryInstaller = new ModelArchiveInstaller(
             {
@@ -342,6 +345,12 @@ export class YoutubeImportServiceImpl implements YoutubeImportService {
             this.logger.warn('youtube import produced srt but none matched english track', {
                 videoPath,
                 srtFiles: srtPaths.map((p) => path.basename(p)),
+            });
+        }
+        if (videoId) {
+            void this.subtitleGenerationService?.scheduleAutoRefine(videoId, {
+                subtitlePath: englishSrt ?? '',
+                mismatchSuspected: false,
             });
         }
         return {

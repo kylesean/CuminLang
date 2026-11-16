@@ -73,6 +73,7 @@ export const runtimeSettingSaveSchema: z.ZodType<RuntimeSettingSaveRequest> = z.
         'player.vocabularyGuidance',
         'player.adaptiveChinese',
         'player.sceneCues',
+        'subtitle.autoRefineWithLocalAsr',
         'userSelect.playbackRateStack',
         'learning.activePromptPresetId',
     ]),

@@ -286,4 +286,63 @@ describe('意群重切分', () => {
         expect(result[1].end - result[1].start).toBeGreaterThan(2);
         expect(result[1].end).toBe(6);
     });
+
+    it('滚动重叠两条 cue 终点相同时同样截断前句，避免把后句挤到说完之后', () => {
+        const result = resegmentIntoMeaningGroups([
+            line(1, 79.76, 88.2, 'in your life. But for her, this is a dream come true.'),
+            line(2, 85.56, 88.2, 'Please sit down.'),
+        ]);
+        expect(result.map((item) => item.contentEn)).toEqual([
+            'in your life.',
+            'But for her, this is a dream come true.',
+            'Please sit down.',
+        ]);
+        expect(result[1].end).toBeCloseTo(85.56, 2);
+        expect(result[2].start).toBeCloseTo(85.56, 2);
+        expect(result[2].end).toBeCloseTo(88.2, 2);
+    });
+
+    it('剥离行内/多段舞台音效标记，且不被舞台标记旁的 >> 拆碎或阻塞滚屏去重', () => {
+        const result = resegmentIntoMeaningGroups([
+            line(1, 8.76, 15.06, 'the Carnegie Mellon Class of 2026.'),
+            line(2, 13.76, 17.09, '>> [cheering] [applause]'),
+            line(3, 100.0, 105.0, 'Here at Carnegie [laughter] Mellon.'),
+            line(4, 200.0, 206.0, 'This morning I visited >> [cheering]'),
+            line(5, 203.0, 209.0, '>> This morning I visited with Robo Club.'),
+            line(6, 300.0, 304.0, 'how your brain disguises it, >> [music]'),
+            line(7, 302.0, 307.0, '>> and how to break it.'),
+        ]);
+        expect(result.map((item) => item.contentEn)).toEqual([
+            'the Carnegie Mellon Class of 2026.',
+            'Here at Carnegie Mellon.',
+            'This morning I visited with Robo Club.',
+            'how your brain disguises it, and how to break it.',
+        ]);
+        // 第 1 句结尾被随后的 [cheering] [applause] 起点截断，不拖入掌声区间。
+        expect(result[0].end).toBeCloseTo(13.76, 2);
+    });
+
+    it('跨 ≥0.8s 真实停顿即使停在虚词上也不强行合并', () => {
+        const result = resegmentIntoMeaningGroups([
+            line(1, 105.4, 109.8, 'To see your graduate, to see you'),
+            line(2, 110.04, 112.06, '>> [clears throat]'),
+            line(3, 112.08, 115.4, '>> Okay, everybody, focus.'),
+        ]);
+        expect(result.map((item) => item.contentEn)).toEqual([
+            'To see your graduate, to see you',
+            'Okay, everybody, focus.',
+        ]);
+    });
+
+    it('时间跨度异常拉长但字数很少的残缺句保持整句完整，不被 12s 上限切碎成单词碎片', () => {
+        const result = resegmentIntoMeaningGroups([
+            line(1, 54.02, 92.48, 'Because where ever I go I share a'),
+            line(2, 92.48, 114.82, 'story with everyone.'),
+            line(3, 114.82, 159.99, 'I believe in the power of words.'),
+        ]);
+        expect(result.map((item) => item.contentEn)).toEqual([
+            'Because where ever I go I share a story with everyone.',
+            'I believe in the power of words.',
+        ]);
+    });
 });

@@ -13,6 +13,11 @@ import type WatchHistoryVO from '@/common/types/WatchHistoryVO';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
 import type { SubtitleResolution } from '@/common/contracts/subtitle-resolution';
 import { findBetterEnglishSubtitle } from '@/common/utils/subtitle/preferred-track';
+import {
+    buildSubtitleTrackOptions,
+    inspectSubtitleTrackDiagnostics,
+    type RawSubtitleTrackCandidate,
+} from '@/common/utils/subtitle/track-diagnostics';
 
 /**
  * 将观看历史数据库记录转换为 renderer 使用的展示数据。
@@ -197,6 +202,70 @@ export default class WatchHistoryViewBuilder {
             return null;
         }
         return this.resolveSubtitle(history, videoPath);
+    }
+
+    /**
+     * 解析播放记录的字幕，并补充当前轨质量诊断与同目录可选字幕轨列表。
+     *
+     * 仅供播放页加载调用，不在观看历史列表批处理中触发额外的字幕正文读取。
+     *
+     * @param history 观看历史数据库记录。
+     * @returns 含 `origin` 与 `tracks` 的解析结论；媒体不存在时返回 `null`。
+     */
+    public async resolveSubtitleWithDiagnostics(history: WatchHistoryRecord): Promise<SubtitleResolution | null> {
+        const resolution = await this.resolveSubtitleForPlayback(history);
+        if (resolution === null) {
+            return null;
+        }
+        const videoPath = path.join(history.base_path, history.file_name);
+        const trackPaths = await this.collectTrackPathsForVideo(videoPath, resolution.subtitlePath);
+        const candidates: RawSubtitleTrackCandidate[] = await Promise.all(
+            trackPaths.map(async (trackPath) => ({
+                path: trackPath,
+                fileName: path.basename(trackPath),
+                content: await this.readSubtitleTextSafe(trackPath),
+            })),
+        );
+        const tracks = buildSubtitleTrackOptions(candidates, resolution.subtitlePath);
+        const activeCandidate = candidates.find((item) => item.path === resolution.subtitlePath);
+        const activeTrack = tracks.find((t) => t.active);
+        const fallbackDiag = resolution.subtitlePath && !activeTrack
+            ? inspectSubtitleTrackDiagnostics(activeCandidate?.content ?? null, path.basename(resolution.subtitlePath))
+            : null;
+        const origin = activeTrack?.origin ?? fallbackDiag?.origin;
+        const qualityIssue = activeTrack?.qualityIssue ?? fallbackDiag?.qualityIssue;
+        return {
+            ...resolution,
+            ...(origin ? { origin } : {}),
+            ...(qualityIssue ? { qualityIssue } : {}),
+            tracks,
+        };
+    }
+
+    private async collectTrackPathsForVideo(videoPath: string, activePath: string): Promise<string[]> {
+        try {
+            const siblingSubs = await this.listSubtitleFiles(path.dirname(videoPath));
+            const exact = MatchSrt.matchExactTracks(videoPath, siblingSubs);
+            const merged = new Set(exact);
+            if (activePath) {
+                merged.add(activePath);
+            }
+            return Array.from(merged);
+        } catch {
+            return activePath ? [activePath] : [];
+        }
+    }
+
+    private async readSubtitleTextSafe(subtitlePath: string): Promise<string | null> {
+        if (typeof this.fileSystemGateway.readTextFile !== 'function' || !MediaUtil.isSrt(subtitlePath)) {
+            return null;
+        }
+        try {
+            await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(subtitlePath);
+            return await this.fileSystemGateway.readTextFile(subtitlePath);
+        } catch {
+            return null;
+        }
     }
 
     /**

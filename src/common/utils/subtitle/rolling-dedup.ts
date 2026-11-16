@@ -1,22 +1,47 @@
 import type { SrtLine } from './types';
+import {
+    BRACKET_STAGE_CUE_RE,
+    MUSIC_SYMBOL_RE,
+    PAREN_SOUND_CUE_RE,
+    SPEAKER_CHEVRON_TOKEN_RE,
+    stripStageSoundCues,
+} from './stage-cues';
+
+/** 相邻两行间隔达到该阈值（秒）以上时，视为真实停顿而非屏幕滚动重叠。 */
+const MAX_ROLLING_GAP_SECONDS = 1.0;
+
+/** 把阶段性音效标记或普通空白分隔片段切开，保证 `[clears throat]` 等多词舞台标记按单 token 处理。 */
+const TOKEN_OR_STAGE_CUE_RE = new RegExp(
+    `${BRACKET_STAGE_CUE_RE.source}|${PAREN_SOUND_CUE_RE.source}|${MUSIC_SYMBOL_RE.source}|\\S+`,
+    'gi',
+);
 
 /**
- * 把文本切成用于重叠比较的词序列：统一小写，并剥离**每个词**首尾的标点与引号。
+ * 把文本切成用于重叠比较的词序列：剥离非人声舞台标记与 `>>`、统一小写，
+ * 并剥离**每个词**首尾的标点与引号。
  *
- * 滚动式自动字幕的重复尾巴常带不同的标点或大小写（`about.` / `about`、
- * `it.` / `it`）。逐字比较会把同一段语音当成两句，所以比较前逐词抹平。
+ * 滚动式自动字幕的重复尾巴常带不同的标点、大小写或夹杂 `>>` / `[cheering]`
+ * （`about.` / `about`、`it.` / `it`、`visited >> [cheering]`）。逐字比较会把
+ * 同一段语音当成两句，所以比较前逐词抹平。
  * 只剥标点、不剥词内连字符：`well-known` 仍是一个词。
  *
  * @param text 原始文本。
  * @returns 归一化后的词序列。
  */
-const normalizeWords = (text: string): string[] => text
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(' ')
-    .map((word) => word.replace(/^["'“”‘’([\]]+/, '').replace(/["'“”‘’)\],.;:!?…]+$/, ''))
-    .filter(Boolean);
+const normalizeWords = (text: string): string[] => {
+    const clean = stripStageSoundCues(text).text;
+    if (!clean) {
+        return [];
+    }
+    return clean
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .filter((word) => !SPEAKER_CHEVRON_TOKEN_RE.test(word))
+        .map((word) => word.replace(/^["'“”‘’([\]]+/, '').replace(/["'“”‘’)\],.;:!?…]+$/, ''))
+        .filter(Boolean);
+};
 
 /**
  * 找出 `next` 开头与 `previous` 结尾重叠的词数。
@@ -68,11 +93,12 @@ export const dropLeadingWords = (text: string, count: number): string => {
     if (count <= 0) {
         return text.trim();
     }
-    const rawTokens = text.trim().split(/\s+/);
+    const rawTokens = text.trim().match(TOKEN_OR_STAGE_CUE_RE) ?? [];
     let idx = 0;
     while (idx < rawTokens.length && count > 0) {
-        if (normalizeWords(rawTokens[idx]).length > 0) {
-            count -= 1;
+        const wordsInToken = normalizeWords(rawTokens[idx]).length;
+        if (wordsInToken > 0) {
+            count -= wordsInToken;
         }
         idx += 1;
     }
@@ -82,8 +108,8 @@ export const dropLeadingWords = (text: string, count: number): string => {
 /**
  * 去掉相邻字幕行之间的滚动重复尾巴。
  *
- * 只处理**相邻**两行：滚动字幕的重复是局部现象，跨行比较会把正文里
- * 反复出现的短语误判成重叠。
+ * 只处理**相邻**且无明显停顿间隔的两行：滚动字幕的重复是局部现象，
+ * 跨行比较或跨越长停顿（如掌声后演讲者主动重复上一词继续讲）会把真实重述误删。
  *
  * 若后一行完全被前一行覆盖（`next` 是 `previous` 的后缀），整行丢弃；
  * 丢弃后该行的时长并入前一行，避免时间轴出现空洞。
@@ -103,6 +129,11 @@ export const dedupeRollingLines = (lines: readonly SrtLine[]): SrtLine[] => {
         }
         const previous = result[result.length - 1];
         if (!previous) {
+            result.push({ ...line, contentEn: text });
+            continue;
+        }
+        // 中间存在 >= 1s 的静音/掌声间隔时，属于真实重述，不属于滚屏重叠。
+        if (line.start - previous.end >= MAX_ROLLING_GAP_SECONDS) {
             result.push({ ...line, contentEn: text });
             continue;
         }

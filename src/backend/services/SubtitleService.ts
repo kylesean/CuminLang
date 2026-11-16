@@ -12,7 +12,7 @@ import type { SubtitleTimestampAdjustment } from '@/common/contracts/subtitle-ti
 import { ObjUtil } from '@/backend/utils/ObjUtil';
 import { assertSubtitlePath } from '@/backend/utils/file-path-guard';
 import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
-import { parseSrt, parseAss, srtLineToSentence, type SrtLine } from '@/common/utils/subtitle';
+import { isAuthoritativeSubtitlePath, parseSrt, parseAss, srtLineToSentence, type SrtLine } from '@/common/utils/subtitle';
 import { resegmentIntoMeaningGroups } from '@/common/utils/subtitle/meaning-group-segmenter';
 import MediaUtil from '@/common/utils/MediaUtil';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
@@ -205,7 +205,9 @@ export class SubtitleServiceImpl implements SubtitleService {
             };
         }
         const lines: SrtLine[] = MediaUtil.isAss(path) ? parseAss(content) : parseSrt(content);
-        const segmented = resegmentIntoMeaningGroups(lines);
+        const segmented = isAuthoritativeSubtitlePath(path)
+            ? lines.map((line, idx) => ({ ...line, index: idx + 1 }))
+            : resegmentIntoMeaningGroups(lines);
         // Wink 分词是同步 CPU 工作。整部字幕一次性跑完会长时间占住主进程，
         // 拖慢窗口交互和其它 IPC；按固定批次让渡事件循环，把长任务切碎。
         this.scheduler.beginFrame();

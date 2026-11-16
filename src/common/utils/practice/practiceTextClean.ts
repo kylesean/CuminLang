@@ -6,9 +6,12 @@
  * 导致莫名扣分并污染音节/音素对齐。
  */
 
-const BRACKET_STAGE_CUE_RE = /\[[^\]]*\]/g;
-const PAREN_SOUND_CUE_RE = /\([^)]*\b(?:music|applause|laughter|laughing|cheering|sighs?|groans?|coughs?|inaudible|silence|noise|sfx|singing|panting|screaming|crying|whispering|snoring|bleep|beep)\b[^)]*\)/gi;
-const MUSIC_SYMBOL_RE = /[♪♫]+/g;
+import {
+    BRACKET_STAGE_CUE_RE,
+    MUSIC_SYMBOL_RE,
+    PAREN_SOUND_CUE_RE,
+} from '@/common/utils/subtitle/stage-cues';
+
 const SPEAKER_CHEVRON_RE = /(?:^|\s)>>+\s*/g;
 const SPEAKER_PREFIX_RE = /^(?:[A-Z][A-Z0-9 _.-]{0,20}|Speaker\s+\d+)\s*:\s*/;
 

@@ -373,8 +373,8 @@ interface SubtitleTimestampAdjustmentControllerDef {
 }
 
 interface SubtitleGenerationDef {
-    /** 为无字幕视频启动本地 ASR 字幕生成；返回后台任务 ID。 */
-    'subtitle-generation/start': { params: { videoId: string }, return: number };
+    /** 为无字幕或需要重生成字幕的视频启动本地 ASR 字幕生成；返回后台任务 ID。 */
+    'subtitle-generation/start': { params: { videoId: string; regenerate?: boolean }, return: number };
     /** 取消字幕生成任务。 */
     'subtitle-generation/cancel': { params: { taskId: number }, return: void };
 }

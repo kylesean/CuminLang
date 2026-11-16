@@ -174,4 +174,43 @@ describe('SubtitleServiceImpl', () => {
         expect(words.find((w) => w.content === 'dogs')?.lemma).toBe('dog');
         expect(words.find((w) => w.content === 'running')?.lemma).toBe('run');
     });
+
+    it('权威轨（.edited.srt 与 .local.srt）严格 1:1 按行直读，不做意群重切；外部普通 .srt 仍做意群归并', async () => {
+        const twoFragmentsWithoutPunct = [
+            '1',
+            '00:00:01,000 --> 00:00:02,000',
+            'Today we are going to',
+            '',
+            '2',
+            '00:00:02,100 --> 00:00:03,500',
+            'talk about our plan.',
+        ].join('\n');
+
+        const editedPath = '/media/demo/clip.edited.srt';
+        const localPath = '/media/demo/clip.local.srt';
+        const externalPath = '/media/demo/clip.srt';
+        const externalHarness = createServiceHarness({
+            [externalPath]: twoFragmentsWithoutPunct,
+        });
+        const harness = createServiceHarness({
+            [editedPath]: twoFragmentsWithoutPunct,
+            [localPath]: twoFragmentsWithoutPunct,
+        });
+
+        const editedParsed = await harness.service.parseSrt(editedPath);
+        const localParsed = await harness.service.parseSrt(localPath);
+        const externalParsed = await externalHarness.service.parseSrt(externalPath);
+
+        expect(editedParsed.sentences.map((s) => s.text)).toEqual([
+            'Today we are going to',
+            'talk about our plan.',
+        ]);
+        expect(localParsed.sentences.map((s) => s.text)).toEqual([
+            'Today we are going to',
+            'talk about our plan.',
+        ]);
+        expect(externalParsed.sentences.map((s) => s.text)).toEqual([
+            'Today we are going to talk about our plan.',
+        ]);
+    });
 });

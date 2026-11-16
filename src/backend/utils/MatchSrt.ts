@@ -67,8 +67,14 @@ function languageTier(langSuffix: string | null): number {
         return 4;
     }
     const lang = langSuffix.toLowerCase();
+    if (lang === 'edited') {
+        return 6;
+    }
     if (lang === 'eng' || lang === 'en' || lang === 'english') {
         return 5;
+    }
+    if (lang === 'local') {
+        return 4;
     }
     if (lang === 'zh' || lang === 'zh-cn' || lang === 'zh-tw') {
         return 3;
@@ -231,6 +237,20 @@ export default class MatchSrt {
      */
     public static matchAll(videoPath: string, srtPaths: string[]): string[] {
         return MatchSrt.matchAllDetails(videoPath, srtPaths).map(match => match.path);
+    }
+
+    /**
+     * 仅返回严格匹配当前视频基名（同名或带语言/轨道后缀）的字幕文件列表，
+     * 不包含跨文件名的模糊兜底命中，供播放器列出当前视频的可用字幕轨。
+     *
+     * @param videoPath 视频文件绝对路径。
+     * @param srtPaths 同目录候选字幕文件绝对路径列表。
+     * @returns 严格属于当前视频的字幕路径列表。
+     */
+    public static matchExactTracks(videoPath: string, srtPaths: string[]): string[] {
+        return MatchSrt.matchAllDetails(videoPath, srtPaths)
+            .filter((match) => match.kind !== 'fuzzy')
+            .map((match) => match.path);
     }
 
     /**
