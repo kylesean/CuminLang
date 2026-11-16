@@ -6,6 +6,7 @@ import type { OpenAIDictionaryResult, OpenAIDictionaryDefinition, OpenAIDictiona
 
 interface DictionaryEntry {
     requestId: string;
+    key: string;
     word: string;
     data: OpenAIDictionaryResult;
     isComplete: boolean;
@@ -15,11 +16,11 @@ interface DictionaryEntry {
 interface DictionaryState {
     entries: Map<string, DictionaryEntry>;
     wordActiveRequest: Map<string, string>;
-    startRequest: (word: string, requestId: string) => void;
+    startRequest: (word: string, requestId: string, context?: string) => void;
     receiveUpdate: (requestId: string, word: string, data: OpenAIDictionaryResult, isComplete?: boolean) => void;
-    setFinalResult: (word: string, requestId: string, data: OpenAIDictionaryResult | null) => void;
-    clearByWord: (word: string) => void;
-    getActiveEntry: (word: string) => DictionaryEntry | undefined;
+    setFinalResult: (word: string, requestId: string, data: OpenAIDictionaryResult | null, context?: string) => void;
+    clearByWord: (word: string, context?: string) => void;
+    getActiveEntry: (word: string, context?: string) => DictionaryEntry | undefined;
 }
 
 /**
@@ -63,8 +64,9 @@ const cloneEntryData = (data: OpenAIDictionaryResult): OpenAIDictionaryResult =>
 /**
  * 生成流式请求的初始空数据，所有字段均为必填默认值。
  */
-const createEmptyEntry = (word: string, requestId: string): DictionaryEntry => ({
+const createEmptyEntry = (word: string, requestId: string, key: string): DictionaryEntry => ({
     requestId,
+    key,
     word,
     data: {
         word,
@@ -75,14 +77,19 @@ const createEmptyEntry = (word: string, requestId: string): DictionaryEntry => (
     updatedAt: Date.now()
 });
 
-const normalizeDictionaryKey = (word: string): string => word.trim().toLowerCase();
+const normalizeDictionaryKey = (word: string, context?: string): string => {
+    const base = word.trim().toLowerCase();
+    if (!base) return '';
+    const ctx = context?.trim();
+    return ctx ? `${base}::${ctx}` : base;
+};
 
 const useDictionaryStream = create<DictionaryState>((set, get) => ({
     entries: new Map<string, DictionaryEntry>(),
     wordActiveRequest: new Map<string, string>(),
 
-    startRequest: (word: string, requestId: string) => {
-        const key = normalizeDictionaryKey(word);
+    startRequest: (word: string, requestId: string, context?: string) => {
+        const key = normalizeDictionaryKey(word, context);
         if (!key) return;
         set(state => {
             const entries = new Map(state.entries);
@@ -93,7 +100,7 @@ const useDictionaryStream = create<DictionaryState>((set, get) => ({
                 entries.delete(previousId);
             }
 
-            const entry = createEmptyEntry(word, requestId);
+            const entry = createEmptyEntry(word, requestId, key);
             entries.set(requestId, entry);
             wordActiveRequest.set(key, requestId);
 
@@ -106,21 +113,24 @@ const useDictionaryStream = create<DictionaryState>((set, get) => ({
     },
 
     receiveUpdate: (requestId: string, word: string, data: OpenAIDictionaryResult, isComplete = false) => {
-        const key = normalizeDictionaryKey(word);
-        if (!key) return;
+        const baseKey = normalizeDictionaryKey(word);
+        if (!baseKey) return;
         set(state => {
+            const existing = state.entries.get(requestId);
+            const key = existing?.key ?? baseKey;
             // 只允许当前仍为 active request 的流更新，防止 clear/切换后迟到事件复活旧条目
             if (state.wordActiveRequest.get(key) !== requestId) {
                 return state;
             }
             const entries = new Map(state.entries);
-            const existing = entries.get(requestId) ?? createEmptyEntry(word, requestId);
+            const targetEntry = existing ?? createEmptyEntry(word, requestId, key);
 
             const updatedEntry: DictionaryEntry = {
                 requestId,
+                key: targetEntry.key,
                 word,
                 data: cloneEntryData(data),
-                isComplete: isComplete ?? existing.isComplete,
+                isComplete: isComplete ?? targetEntry.isComplete,
                 updatedAt: Date.now()
             };
 
@@ -133,10 +143,12 @@ const useDictionaryStream = create<DictionaryState>((set, get) => ({
         });
     },
 
-    setFinalResult: (word: string, requestId: string, data: OpenAIDictionaryResult | null) => {
-        const key = normalizeDictionaryKey(word);
-        if (!key) return;
+    setFinalResult: (word: string, requestId: string, data: OpenAIDictionaryResult | null, context?: string) => {
+        const fallbackKey = normalizeDictionaryKey(word, context);
+        if (!fallbackKey) return;
         set(state => {
+            const existing = state.entries.get(requestId);
+            const key = existing?.key ?? fallbackKey;
             if (state.wordActiveRequest.get(key) !== requestId) {
                 return state;
             }
@@ -144,7 +156,6 @@ const useDictionaryStream = create<DictionaryState>((set, get) => ({
 
             if (!data) {
                 // 如果没有结果，仍然确保状态为完成
-                const existing = entries.get(requestId);
                 if (existing) {
                     entries.set(requestId, {
                         ...existing,
@@ -161,6 +172,7 @@ const useDictionaryStream = create<DictionaryState>((set, get) => ({
 
             const updatedEntry: DictionaryEntry = {
                 requestId,
+                key,
                 word,
                 data: cloneEntryData(data),
                 isComplete: true,
@@ -176,8 +188,8 @@ const useDictionaryStream = create<DictionaryState>((set, get) => ({
         });
     },
 
-    clearByWord: (word: string) => {
-        const key = normalizeDictionaryKey(word);
+    clearByWord: (word: string, context?: string) => {
+        const key = normalizeDictionaryKey(word, context);
         if (!key) return;
         set(state => {
             const entries = new Map(state.entries);
@@ -197,8 +209,8 @@ const useDictionaryStream = create<DictionaryState>((set, get) => ({
         });
     },
 
-    getActiveEntry: (word: string) => {
-        const key = normalizeDictionaryKey(word);
+    getActiveEntry: (word: string, context?: string) => {
+        const key = normalizeDictionaryKey(word, context);
         if (!key) {
             return undefined;
         }

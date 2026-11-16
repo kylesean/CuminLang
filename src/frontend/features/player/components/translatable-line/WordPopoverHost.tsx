@@ -59,7 +59,18 @@ const readConnectedRect = (el: HTMLElement): WordPopoverRect | null => {
     };
 };
 
-const MAX_SELECTION_PHRASE_WORDS = 6;
+const MAX_SELECTION_PHRASE_WORDS = 8;
+
+const isRangeTouchingZeroCharsAtBoundary = (range: Range, el: HTMLElement): boolean => {
+    if (el.contains(range.startContainer) && range.startContainer.nodeType === Node.TEXT_NODE) {
+        const len = range.startContainer.textContent?.length ?? 0;
+        if (range.startOffset >= len) return true;
+    }
+    if (el.contains(range.endContainer) && range.endContainer.nodeType === Node.TEXT_NODE) {
+        if (range.endOffset <= 0) return true;
+    }
+    return false;
+};
 
 const PART_OF_SPEECH_ABBR: Record<string, string> = {
     noun: 'n.',
@@ -111,12 +122,13 @@ const normalizeCleanWord = (target: WordPopoverTarget): string => {
  * 承接 Floating UI、词典查询 SWR、上下文学习档案 SWR、AI 流式增量更新及多词划词选区监听。
  */
 export const WordPopoverHost: React.FC = () => {
-    const { open, mode, target, openImmediately, closePopover } = useWordPopoverStore(
+    const { open, mode, target, openImmediately, pinPopover, closePopover } = useWordPopoverStore(
         useShallow((s) => ({
             open: s.open,
             mode: s.mode,
             target: s.target,
             openImmediately: s.openImmediately,
+            pinPopover: s.pinPopover,
             closePopover: s.closePopover,
         })),
     );
@@ -160,53 +172,96 @@ export const WordPopoverHost: React.FC = () => {
     const sentenceIndex = target?.sentenceIndex;
     const sentenceHash = target?.sentenceHash;
 
-    // 划词多词自动识别为词组浮层（同一句内跨 2..6 个单词）
+    // 划词自动识别（支持单词/跨标点与空格/合并句跨行，单句内 1..8 词）
     useEffect(() => {
         const handleMouseUp = () => {
             const selection = window.getSelection();
             if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
                 return;
             }
+            if (!selection.toString().trim()) {
+                return;
+            }
             const range = selection.getRangeAt(0);
-            if (range.getBoundingClientRect().width < 4) {
-                return;
-            }
-
-            const anchorEl = (
-                selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement
-            )?.closest('[data-word="true"]') as HTMLElement | null;
-            const focusEl = (
-                selection.focusNode instanceof Element ? selection.focusNode : selection.focusNode?.parentElement
-            )?.closest('[data-word="true"]') as HTMLElement | null;
-
-            if (!anchorEl || !focusEl || anchorEl === focusEl) {
-                return;
-            }
-
-            const sHash = anchorEl.dataset.sentenceHash ?? '';
-            const sIndex = anchorEl.dataset.sentenceIndex ?? '';
-            if (
-                (focusEl.dataset.sentenceHash ?? '') !== sHash ||
-                (focusEl.dataset.sentenceIndex ?? '') !== sIndex
-            ) {
+            const rect = range.getBoundingClientRect();
+            if (rect.width < 4) {
                 return;
             }
 
             const rootEl = range.commonAncestorContainer instanceof Element
                 ? range.commonAncestorContainer
                 : range.commonAncestorContainer.parentElement;
-            if (!rootEl) {
+            if (!rootEl || rootEl.closest('[data-word-popover-card="true"]')) {
                 return;
             }
 
-            const intersected = Array.from(rootEl.querySelectorAll<HTMLElement>('[data-word="true"]'))
-                .filter((el) => (
-                    (el.dataset.sentenceHash ?? '') === sHash &&
-                    (el.dataset.sentenceIndex ?? '') === sIndex &&
-                    range.intersectsNode(el)
-                ));
+            const ancestorWord = rootEl.closest('[data-word="true"]') as HTMLElement | null;
+            const candidateWords = ancestorWord
+                ? [ancestorWord]
+                : Array.from(rootEl.querySelectorAll<HTMLElement>('[data-word="true"]'));
 
-            if (intersected.length < 2 || intersected.length > MAX_SELECTION_PHRASE_WORDS) {
+            const intersected = candidateWords.filter((el) => {
+                const hits = typeof range.intersectsNode === 'function'
+                    ? range.intersectsNode(el)
+                    : selection.containsNode(el, true);
+                return hits && !isRangeTouchingZeroCharsAtBoundary(range, el);
+            });
+
+            if (intersected.length === 0 || intersected.length > MAX_SELECTION_PHRASE_WORDS) {
+                return;
+            }
+
+            const firstEl = intersected[0];
+            const firstUnitEl = firstEl.closest('[data-sentence-unit]') as HTMLElement | null;
+            const sHash = firstEl.dataset.sentenceHash ?? '';
+            const sIndex = firstEl.dataset.sentenceIndex ?? '';
+            const sameLogicalSentence = intersected.every((el) => {
+                if (firstUnitEl && el.closest('[data-sentence-unit]') === firstUnitEl) {
+                    return true;
+                }
+                return (
+                    (el.dataset.sentenceHash ?? '') === sHash
+                    && (el.dataset.sentenceIndex ?? '') === sIndex
+                );
+            });
+            if (!sameLogicalSentence) {
+                return;
+            }
+
+            const parsedIndex = sIndex ? Number.parseInt(sIndex, 10) : undefined;
+            const nextSentenceText = firstUnitEl?.dataset.sentenceUnitText
+                || firstEl.dataset.sentenceText
+                || undefined;
+
+            if (intersected.length === 1) {
+                const wordText = (firstEl.dataset.wordText ?? firstEl.textContent ?? '').trim();
+                const lemma = firstEl.dataset.lemma || undefined;
+                const cleanSingle = (lemma || wordText)
+                    .toLowerCase()
+                    .replace(/^[^a-z0-9']+|[^a-z0-9']+$/gi, '');
+                if (!wordText || !cleanSingle) {
+                    return;
+                }
+                if (pauseOnWordHover || usePlayer.getState().playing) {
+                    pause();
+                }
+                const elRect = readConnectedRect(firstEl);
+                openImmediately(
+                    {
+                        kind: 'word',
+                        popKey: `sel:${sHash}:${sIndex}:${wordText}:${cleanSingle}`,
+                        word: wordText,
+                        original: wordText,
+                        cleanWord: cleanSingle,
+                        lemma,
+                        sentenceText: nextSentenceText,
+                        sentenceIndex: Number.isFinite(parsedIndex) ? parsedIndex : undefined,
+                        sentenceHash: sHash || undefined,
+                        triggerEl: firstEl,
+                        anchorRect: elRect,
+                    },
+                    'selection',
+                );
                 return;
             }
 
@@ -222,10 +277,6 @@ export const WordPopoverHost: React.FC = () => {
             if (!cleanPhrase) {
                 return;
             }
-
-            const rect = range.getBoundingClientRect();
-            const parsedIndex = sIndex ? Number.parseInt(sIndex, 10) : undefined;
-            const nextSentenceText = anchorEl.dataset.sentenceText || undefined;
 
             if (pauseOnWordHover || usePlayer.getState().playing) {
                 pause();
@@ -359,7 +410,7 @@ export const WordPopoverHost: React.FC = () => {
     }, [cleanWord, mode, open, sentenceHash, sentenceIndex, sentenceText, target]);
 
     const dictionaryEntry = useDictionaryStream((state) => (
-        original ? state.getActiveEntry(original) : undefined
+        original ? state.getActiveEntry(original, sentenceText) : undefined
     ));
     const shouldFetch = open && Boolean(target) && Boolean(original);
 
@@ -412,28 +463,29 @@ export const WordPopoverHost: React.FC = () => {
         shouldFetch ? ['ai-trans/word', original, sentenceText ?? ''] : null,
         async ([_apiName, wordParam, sentenceParam]) => {
             const targetWord = wordParam as string;
+            const ctxSentence = (sentenceParam as string) || undefined;
             const requestId = createDictionaryRequestId(targetWord);
-            useDictionaryStream.getState().startRequest(targetWord, requestId);
+            useDictionaryStream.getState().startRequest(targetWord, requestId, ctxSentence);
 
             try {
                 const result = await playerApi.translateWord({
                     word: targetWord,
-                    context: (sentenceParam as string) || undefined,
+                    context: ctxSentence,
                     requestId,
                 });
-                const activeRequestId = useDictionaryStream.getState().wordActiveRequest.get(targetWord.toLowerCase());
+                const activeRequestId = useDictionaryStream.getState().getActiveEntry(targetWord, ctxSentence)?.requestId;
                 if (activeRequestId && activeRequestId !== requestId) {
                     return null;
                 }
-                useDictionaryStream.getState().setFinalResult(targetWord, requestId, isOpenAIDictionaryResult(result) ? result : null);
+                useDictionaryStream.getState().setFinalResult(targetWord, requestId, isOpenAIDictionaryResult(result) ? result : null, ctxSentence);
                 return isOpenAIDictionaryResult(result) ? result : null;
             } catch (error) {
-                const activeRequestId = useDictionaryStream.getState().wordActiveRequest.get(targetWord.toLowerCase());
+                const activeRequestId = useDictionaryStream.getState().getActiveEntry(targetWord, ctxSentence)?.requestId;
                 if (activeRequestId && activeRequestId !== requestId) {
                     return null;
                 }
                 logger.error('failed to lookup dictionary', { word: targetWord, error: error instanceof Error ? error.message : error });
-                useDictionaryStream.getState().setFinalResult(targetWord, requestId, null);
+                useDictionaryStream.getState().setFinalResult(targetWord, requestId, null, ctxSentence);
                 return null;
             }
         },
@@ -446,32 +498,38 @@ export const WordPopoverHost: React.FC = () => {
 
     const handleRefresh = useCallback(async () => {
         if (!original) return;
+        const ctxSentence = sentenceText || undefined;
         const requestId = createDictionaryRequestId(original);
-        useDictionaryStream.getState().startRequest(original, requestId);
+        useDictionaryStream.getState().startRequest(original, requestId, ctxSentence);
 
         try {
             const newData = await playerApi.translateWord({
                 word: original,
                 forceRefresh: true,
-                context: sentenceText || undefined,
+                context: ctxSentence,
                 requestId,
             });
-            const activeRequestId = useDictionaryStream.getState().wordActiveRequest.get(original.toLowerCase());
+            const activeRequestId = useDictionaryStream.getState().getActiveEntry(original, ctxSentence)?.requestId;
             if (activeRequestId && activeRequestId !== requestId) {
                 return;
             }
             const next = isOpenAIDictionaryResult(newData) ? newData : null;
-            useDictionaryStream.getState().setFinalResult(original, requestId, next);
-            await mutate(next, false);
+            if (next) {
+                await mutate(next, false);
+            } else {
+                toast.error(t('aiDictionaryFailed', { defaultValue: 'AI 释义生成失败，请稍后重试' }));
+            }
+            useDictionaryStream.getState().setFinalResult(original, requestId, next, ctxSentence);
         } catch (error) {
-            const activeRequestId = useDictionaryStream.getState().wordActiveRequest.get(original.toLowerCase());
+            const activeRequestId = useDictionaryStream.getState().getActiveEntry(original, ctxSentence)?.requestId;
             if (activeRequestId && activeRequestId !== requestId) {
                 return;
             }
             logger.error('failed to refresh dictionary', { word: original, error: error instanceof Error ? error.message : error });
-            useDictionaryStream.getState().setFinalResult(original, requestId, null);
+            toast.error(t('aiDictionaryFailed', { defaultValue: 'AI 释义生成失败，请稍后重试' }));
+            useDictionaryStream.getState().setFinalResult(original, requestId, null, ctxSentence);
         }
-    }, [mutate, original, sentenceText]);
+    }, [mutate, original, sentenceText, t]);
 
     const vocabKey = target?.lemma || original || cleanWord;
     const isInVocabulary = target
@@ -617,6 +675,10 @@ export const WordPopoverHost: React.FC = () => {
                 contextWord={target.word}
                 dialogLabel={target.word}
                 contextSentence={sentenceText}
+                sentenceIndex={sentenceIndex}
+                sentenceHash={sentenceHash}
+                onClose={closePopover}
+                onPin={pinPopover}
                 wordMemory={wordMemory ?? null}
                 promptReasons={promptReasons}
             />

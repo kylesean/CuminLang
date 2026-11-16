@@ -46,6 +46,10 @@ interface ShadowingStudioProps {
     result: SentencePracticeResultVO | null;
     /** 跨次节奏趋势；样本不足或拉取失败时为 null/undefined。 */
     trend?: RhythmTrendVO | null;
+    /** 切换到本句且需要自动执行「示范原音 → 滴声开麦」流水线时的单调递增序号（>0 触发一次）。 */
+    autoFlowNonce?: number;
+    /** 开始播放受控原声片段前通知宿主记录当前句 key，避免宿主换句副作用误清本句 clipStopBound。 */
+    onClipStart?: (unitKey: string) => void;
     onScoreRecording: (audio: Uint8Array) => Promise<SentencePracticeResultVO | null>;
     onReplay: () => void;
     onSlowReplay: () => void;
@@ -137,6 +141,25 @@ function BeatShadowingView({
             usePlayer.getState().setShadowing?.(false);
         };
     }, []);
+
+    // 节拍跟读支持 Space 一键启停，与禁用后播放器热键形成无缝衔接
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== ' ' || e.repeat) return;
+            const target = e.target as HTMLElement | null;
+            if (isTextEntryTarget(target) || isInteractiveTarget(target)) return;
+            e.preventDefault();
+            const player = usePlayer.getState();
+            if (player.playing || player.shadowingPause !== null) {
+                player.pause();
+            } else {
+                player.gotoSentence(unit.anchor);
+                player.play();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [unit.anchor]);
 
     const adjustRatio = (delta: number): void => {
         const next = Math.round(Math.max(0.5, Math.min(3.0, shadowingRatio + delta)) * 10) / 10;
@@ -238,6 +261,8 @@ function RecordShadowingView({
     translationText,
     result,
     trend,
+    autoFlowNonce = 0,
+    onClipStart,
     onScoreRecording,
     onReplay,
     onSlowReplay,
@@ -251,6 +276,7 @@ function RecordShadowingView({
     const [localRecording, setLocalRecording] = useState<LocalRecordingSnapshot | null>(null);
     const [recordingSeconds, setRecordingSeconds] = useState(0);
     const [abPhase, setAbPhase] = useState<AbContrastPhase>('idle');
+    const [autoFlowCueing, setAutoFlowCueing] = useState(false);
     const [minePlayProgress, setMinePlayProgress] = useState<number | null>(null);
 
     const liveBarRefs = useRef<Array<HTMLSpanElement | null>>([]);
@@ -264,6 +290,7 @@ function RecordShadowingView({
     const autoCueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const localUrlRef = useRef<string | null>(null);
     const pttDownAtRef = useRef<number | null>(null);
+    const consumedAutoFlowNonceRef = useRef(0);
 
     const stopContrastAudio = useCallback(() => {
         abRunIdRef.current += 1;
@@ -291,6 +318,7 @@ function RecordShadowingView({
         playbackDisposeRef.current = null;
         setMinePlayProgress(null);
         setAbPhase('idle');
+        setAutoFlowCueing(false);
     }, []);
 
     // 卸载时回收本地录音 ObjectURL、对比计时器、受控原声与回放音轨（换句靠外层 key={unit.key} 重挂载清理）
@@ -484,6 +512,8 @@ function RecordShadowingView({
         stopContrastAudio();
         const runId = ++abRunIdRef.current;
         clipOwnedRef.current = true;
+        setAutoFlowCueing(true);
+        onClipStart?.(unit.key);
         usePlayer.getState().playPracticeClip(unit.range, unit.anchor, {
             onEnded: () => {
                 clipOwnedRef.current = false;
@@ -491,19 +521,35 @@ function RecordShadowingView({
                 playMicReadyCue();
                 autoCueTimerRef.current = setTimeout(() => {
                     if (abRunIdRef.current !== runId || !mountedRef.current) return;
+                    setAutoFlowCueing(false);
                     setRecordingSeconds(0);
                     void startRecording();
                 }, 180);
             },
             onAbort: () => {
                 clipOwnedRef.current = false;
+                if (abRunIdRef.current === runId && mountedRef.current) {
+                    setAutoFlowCueing(false);
+                }
             },
         });
-    }, [startRecording, stopContrastAudio, unit]);
+    }, [onClipStart, startRecording, stopContrastAudio, unit]);
+
+    // 下一句在「播完自动开麦」开启时自动衔接示范原声 → 开麦
+    useEffect(() => {
+        if (autoFlowNonce > 0 && consumedAutoFlowNonceRef.current !== autoFlowNonce) {
+            consumedAutoFlowNonceRef.current = autoFlowNonce;
+            queueMicrotask(() => {
+                if (mountedRef.current) {
+                    triggerAutoFlow();
+                }
+            });
+        }
+    }, [autoFlowNonce, triggerAutoFlow]);
 
     const recorderBusy = recorderPhase !== 'idle';
 
-    // 键盘交互：R 原音、S 0.75×、Space 对讲/启停、V 键 A/B 对比、P 听我的、Enter 下一句
+    // 键盘交互：R 原音、S 0.75×、Space 对讲/启停（自动示范中按 Space 立即开麦）、V 键 A/B 对比、P 听我的、Enter 下一句
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement | null;
@@ -514,12 +560,14 @@ function RecordShadowingView({
                 // 请求权限、录音、评分阶段均禁止试听，防止状态竞态或录进外放原声
                 if (recorderBusy) return;
                 e.preventDefault();
+                stopContrastAudio();
                 onReplay();
                 return;
             }
             if ((e.key === 's' || e.key === 'S') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
                 if (recorderBusy) return;
                 e.preventDefault();
+                stopContrastAudio();
                 onSlowReplay();
                 return;
             }
@@ -601,12 +649,40 @@ function RecordShadowingView({
             className="flex flex-col gap-2.5"
             data-recorder-phase={recorderPhase}
             data-ab-phase={abPhase}
+            data-autoflow-cueing={autoFlowCueing ? 'true' : undefined}
         >
             {/* 原句区：有 ASR 识别结果时直接原地差分高亮，平时保留干净原文与划词查词 */}
             <PracticeDiffSentence unit={unit} result={result} />
             {translationText ? (
                 <p className="text-sm text-secondary leading-relaxed">{translationText}</p>
             ) : null}
+
+            {/* 播完自动开麦等待态：让用户明确知道示范结束后将自动开麦，按 Space 可提前抢麦 */}
+            {autoFlowCueing && recorderPhase === 'idle' && (
+                <div
+                    data-testid="shadowing-autoflow-cue"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-accent/35 bg-accent-bg/10 px-3 py-1.5 text-sm text-accent"
+                >
+                    <span className="inline-flex items-center gap-1.5 min-w-0">
+                        <Radio className="h-3.5 w-3.5 shrink-0 animate-pulse" />
+                        <span>
+                            {t('shadowing.autoFlowCueing', {
+                                defaultValue: '原声示范中，播完自动开麦（按 Space 立即开麦）',
+                            })}
+                        </span>
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            stopContrastAudio();
+                            usePlayer.getState().pause();
+                        }}
+                        className="shrink-0 text-metadata font-medium text-secondary hover:text-primary cursor-pointer"
+                    >
+                        {t('shadowing.cancelAutoFlow', { defaultValue: '取消示范' })}
+                    </button>
+                </div>
+            )}
 
             {/* 声学反馈条：实时收音动效 或 录制完成后的 40 柱声纹包络 + 语速/得分 */}
             {(recorderPhase === 'recording' || localRecording || result) && (
@@ -629,7 +705,7 @@ function RecordShadowingView({
                                         'text-sm font-mono tabular-nums',
                                         // 临近 VAD 上限时提示录音即将自动结束
                                         recordingSeconds >= Math.floor(maxRecordingMs / 1000) - 3
-                                            ? 'text-amber-500'
+                                            ? 'text-warning-text'
                                             : 'text-error-text',
                                     )}
                                 >
@@ -717,48 +793,57 @@ function RecordShadowingView({
                 </div>
             )}
 
-            {result?.rhythm && (
-                <RhythmFeedback
-                    feedback={result.rhythm}
-                    trend={trend}
-                />
-            )}
-
-            {result?.prosody && (
+            {(result?.rhythm || result?.prosody) && (
                 <div
-                    data-testid="shadowing-prosody-feedback"
-                    className="rounded-lg border border-border/60 bg-surface/60 px-3 py-2 space-y-1.5"
+                    className={cn(
+                        'grid gap-2',
+                        result?.rhythm && result?.prosody ? 'grid-cols-1 md:grid-cols-2 items-start' : 'grid-cols-1',
+                    )}
                 >
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-metadata">
-                        <span className="font-medium text-primary">
-                            {t('shadowing.prosodyTitle', { defaultValue: '原声 DTW 韵律对比' })}
-                        </span>
-                        <span className="text-secondary tabular-nums">
-                            {t('shadowing.prosodyMetrics', {
-                                defaultValue: '贴合 {{prosody}}% · 停顿 {{pause}}% · 重音 {{energy}}%',
-                                prosody: result.prosody.prosodyScore,
-                                pause: result.prosody.pauseMatchScore,
-                                energy: result.prosody.energyCorrelation,
-                            })}
-                        </span>
-                    </div>
-                    <div className="grid grid-cols-24 gap-0.5 items-end h-5" aria-hidden="true">
-                        {result.prosody.referenceEnvelope.map((refVal, idx) => {
-                            const userVal = result.prosody?.userEnvelope[idx] ?? 0;
-                            return (
-                                <div key={idx} className="flex items-end gap-px h-full">
-                                    <span
-                                        className="w-1/2 rounded-t-xs bg-secondary/35"
-                                        style={{ height: `${Math.max(12, Math.round(refVal * 100))}%` }}
-                                    />
-                                    <span
-                                        className="w-1/2 rounded-t-xs bg-accent-bg/85"
-                                        style={{ height: `${Math.max(12, Math.round(userVal * 100))}%` }}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
+                    {result?.rhythm && (
+                        <RhythmFeedback
+                            feedback={result.rhythm}
+                            trend={trend}
+                        />
+                    )}
+
+                    {result?.prosody && (
+                        <div
+                            data-testid="shadowing-prosody-feedback"
+                            className="rounded-xl border border-border/60 bg-surface/60 px-3 py-2 space-y-1.5"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-metadata">
+                                <span className="font-medium text-primary">
+                                    {t('shadowing.prosodyTitle', { defaultValue: '原声 DTW 韵律对比' })}
+                                </span>
+                                <span className="text-secondary tabular-nums">
+                                    {t('shadowing.prosodyMetrics', {
+                                        defaultValue: '贴合 {{prosody}}% · 停顿 {{pause}}% · 重音 {{energy}}%',
+                                        prosody: result.prosody.prosodyScore,
+                                        pause: result.prosody.pauseMatchScore,
+                                        energy: result.prosody.energyCorrelation,
+                                    })}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-24 gap-0.5 items-end h-5" aria-hidden="true">
+                                {result.prosody.referenceEnvelope.map((refVal, idx) => {
+                                    const userVal = result.prosody?.userEnvelope[idx] ?? 0;
+                                    return (
+                                        <div key={idx} className="flex items-end gap-px h-full">
+                                            <span
+                                                className="w-1/2 rounded-t-xs bg-secondary/35"
+                                                style={{ height: `${Math.max(12, Math.round(refVal * 100))}%` }}
+                                            />
+                                            <span
+                                                className="w-1/2 rounded-t-xs bg-accent-bg/85"
+                                                style={{ height: `${Math.max(12, Math.round(userVal * 100))}%` }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -834,24 +919,33 @@ function RecordShadowingView({
                             ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             : recorderPhase === 'recording'
                                 ? <Square className="h-3.5 w-3.5 fill-current" />
-                                : <Mic className="h-3.5 w-3.5" />}
+                                : autoFlowCueing
+                                    ? <Radio className="h-3.5 w-3.5 animate-pulse" />
+                                    : <Mic className="h-3.5 w-3.5" />}
                         label={recorderPhase === 'processing'
                             ? t('recorder.processing')
                             : recorderPhase === 'recording'
                                 ? t('recorder.stop')
-                                : t('recorder.start')}
+                                : autoFlowCueing
+                                    ? t('shadowing.cancelAutoFlow', { defaultValue: '取消示范' })
+                                    : t('recorder.start')}
                         onClick={recorderPhase === 'recording'
                             ? stopRecording
-                            : () => {
-                                stopContrastAudio();
-                                if (autoRecordFlow && !localRecording) {
-                                    triggerAutoFlow();
-                                } else {
-                                    setRecordingSeconds(0);
-                                    playMicReadyCue();
-                                    void startRecording();
+                            : autoFlowCueing
+                                ? () => {
+                                    stopContrastAudio();
+                                    usePlayer.getState().pause();
                                 }
-                            }}
+                                : () => {
+                                    stopContrastAudio();
+                                    if (autoRecordFlow) {
+                                        triggerAutoFlow();
+                                    } else {
+                                        setRecordingSeconds(0);
+                                        playMicReadyCue();
+                                        void startRecording();
+                                    }
+                                }}
                     />
 
                     <Button

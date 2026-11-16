@@ -21,6 +21,7 @@ import { usePlayer } from '@/frontend/features/player/playerStore';
 import { useDevPlayerEntry } from '@/frontend/features/player/dev/useDevPlayerEntry';
 import { setPlayerViewMode } from '@/frontend/features/player/lib/player-view-controller';
 import { resetPlayerOverlaysOnMediaReset } from '@/frontend/features/player/lib/player-view-sync';
+import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 
 const logger = getRendererLogger('PlayerWithControlsPage');
 const MODE_SWITCH_TOAST_ID = 'mode-switch-toast';
@@ -301,6 +302,7 @@ const PlayerWithControlsPage = () => {
         }
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
+                if (useWordPopoverStore.getState().open) return;
                 event.preventDefault();
                 changeFullScreen(false);
             }

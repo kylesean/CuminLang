@@ -30,7 +30,10 @@
         "all": "All",
         "unpracticed": "New",
         "weak": "Weak",
-        "vocab": "Vocab"
+        "vocab": "Vocab",
+        "emptyTitle": "No sentences in \"{{filter}}\" queue",
+        "emptyHint": "Switch back to all sentences or pick another filter",
+        "resetToAll": "Show all sentences"
     },
     "shortcut": {
         "replay": "Replay",
@@ -41,6 +44,7 @@
         "ptt": "Talk (tap/hold)",
         "abCompare": "A/B compare",
         "playMine": "My voice",
+        "playPause": "Play/Pause",
         "focus": "Focus",
         "prevNext": "Prev/Next",
         "next": "Next",
@@ -80,6 +84,8 @@
         "asrDegradedNote": "No speech model installed: record & A/B compare remain available",
         "installAsrAction": "Get model →",
         "autoFlow": "Auto-mic after play",
+        "autoFlowCueing": "Playing model audio, mic opens after (press Space to talk now)",
+        "cancelAutoFlow": "Cancel",
         "prosodyTitle": "Original DTW prosody match",
         "prosodyMetrics": "Match {{prosody}}% · Pauses {{pause}}% · Stress {{energy}}%",
         "phonemeIssuesTitle": "Phoneme focus",

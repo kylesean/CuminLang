@@ -40,7 +40,7 @@ const defaultTheme: TransLineTheme = {
     popReferenceBgClass: 'bg-accent-muted/20 shadow-xs text-accent font-medium rounded'
   },
   pop: {
-    openaiContainer: 'w-[360px] h-[400px] bg-popover text-primary shadow-lg border border-border/80 rounded-xl overflow-hidden text-left relative flex flex-col',
+    openaiContainer: '',
     refreshButton: 'p-1 rounded-md text-secondary hover:text-primary hover:bg-muted transition-colors'
   }
 };

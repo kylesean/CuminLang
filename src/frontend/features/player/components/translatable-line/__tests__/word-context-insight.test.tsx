@@ -4,6 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import WordContextInsight from '@/frontend/features/player/components/translatable-line/word-context-insight';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import useChatPanel from '@/frontend/features/chat/chatStore';
+import { usePlayer } from '@/frontend/features/player/playerStore';
+import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 import useSetting from '@/frontend/features/settings/settingsStore';
 
 vi.mock('react-i18next', () => ({
@@ -163,5 +165,39 @@ describe('WordContextInsight', () => {
         fireEvent.click(studyBtn);
 
         expect(createFromCurrent).toHaveBeenCalledTimes(1);
+    });
+
+    it('携带 sentenceIndex 时精确打开目标句整句学习并顺手关闭词卡浮层', async () => {
+        const openSentenceSession = vi.fn().mockResolvedValue(undefined);
+        const targetSentence = { fileHash: 'fh-9', index: 7, key: 'fh-9-7', text: 'That was the attraction of Google.' };
+        useChatPanel.setState({ openSentenceSession } as never);
+        usePlayer.setState({ sentences: [targetSentence] as never });
+        useWordPopoverStore.setState({ open: true });
+        vi.mocked(playerApi.wordContextInsight).mockResolvedValue({
+            status: 'ok',
+            insight: {
+                meaning: '吸引力',
+                nuance: '',
+                source: 'cloud',
+                cached: false,
+            },
+        });
+
+        render(
+            <WordContextInsight
+                word="attraction"
+                sentence="That was the attraction of Google."
+                sentenceIndex={7}
+                sentenceHash="fh-9:7"
+                definitions={['n. 吸引']}
+            />,
+        );
+
+        fireEvent.click(screen.getByTestId('word-context-insight-trigger'));
+        const studyBtn = await screen.findByTestId('word-context-insight-sentence-study');
+        fireEvent.click(studyBtn);
+
+        expect(openSentenceSession).toHaveBeenCalledWith(targetSentence);
+        expect(useWordPopoverStore.getState().open).toBe(false);
     });
 });

@@ -264,6 +264,8 @@ export function ScriptArticleParagraph({
                             <span
                                 role="button"
                                 tabIndex={0}
+                                data-sentence-unit={unitKey}
+                                data-sentence-unit-text={unitText}
                                 data-active={isUnitCurrent ? 'true' : 'false'}
                                 onClickCapture={() => {
                                     // 用捕获阶段绕开内部 Word 的 stopPropagation：

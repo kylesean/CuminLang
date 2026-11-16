@@ -38,6 +38,14 @@ export interface WordSubParam {
     dialogLabel?: string;
     /** 单词所在字幕句，供语境解读使用。 */
     contextSentence?: string;
+    /** 单词所在句子索引。 */
+    sentenceIndex?: number;
+    /** 单词所在句子哈希/键。 */
+    sentenceHash?: string;
+    /** 关闭当前浮层回调。 */
+    onClose?: () => void;
+    /** 在悬停浮层内部发生点击交互时将其固定为持久态，避免因高度收缩或鼠标微移误关。 */
+    onPin?: () => void;
     /** 你与这个词的历史；加载中或不可用时为 null。 */
     wordMemory?: WordMemoryVO | null;
     /** 为什么此刻提示这个词；用户主动查的词通常没有系统理由。 */
@@ -82,6 +90,10 @@ const WordPop: React.FC<WordSubParam> = ({
     contextWord,
     dialogLabel,
     contextSentence,
+    sentenceIndex,
+    sentenceHash,
+    onClose,
+    onPin,
     wordMemory = null,
     promptReasons,
     classNames,
@@ -102,6 +114,12 @@ const WordPop: React.FC<WordSubParam> = ({
                 ref={setFloatingRef}
                 style={floatingStyles}
                 className="z-[9999] outline-none select-none"
+                onPointerDownCapture={() => {
+                    onPin?.();
+                }}
+                onMouseDownCapture={() => {
+                    onPin?.();
+                }}
                 onClick={(e) => {
                     e.stopPropagation();
                 }}
@@ -122,6 +140,9 @@ const WordPop: React.FC<WordSubParam> = ({
                         isUpdatingStatus={isUpdatingStatus}
                         contextWord={contextWord}
                         contextSentence={contextSentence}
+                        sentenceIndex={sentenceIndex}
+                        sentenceHash={sentenceHash}
+                        onClose={onClose}
                         wordMemory={wordMemory}
                         promptReasons={promptReasons}
                     />

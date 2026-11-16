@@ -42,6 +42,7 @@ import { usePlayer } from '@/frontend/features/player/playerStore';
 import useTranslationStore from '@/frontend/features/player/translationStore';
 import { useVocabularyState } from '@/frontend/features/player/vocabularyStore';
 import { exitOverlayView } from '@/frontend/features/player/lib/player-view-controller';
+import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 import { practiceApi } from '../practiceApi';
 import usePracticePanel, {
     type DictationStyle,
@@ -151,6 +152,7 @@ export default function PracticeDock() {
         dictationStyle,
         focusMode,
         soundCues,
+        autoRecordFlow,
         sentenceFilter,
         peekingSpoiler,
         recorderPhase,
@@ -172,6 +174,7 @@ export default function PracticeDock() {
             dictationStyle: s.dictationStyle,
             focusMode: s.focusMode,
             soundCues: s.soundCues,
+            autoRecordFlow: s.autoRecordFlow,
             sentenceFilter: s.sentenceFilter,
             peekingSpoiler: s.peekingSpoiler,
             recorderPhase: s.recorderPhase,
@@ -205,6 +208,9 @@ export default function PracticeDock() {
     const [result, setResult] = useState<SentencePracticeResultVO | null>(null);
     const [hasMineRecording, setHasMineRecording] = useState(false);
     const [attemptNonce, setAttemptNonce] = useState(0);
+    const [autoFlowRequest, setAutoFlowRequest] = useState<{ unitKey: string; nonce: number } | null>(null);
+    const autoFlowSeqRef = useRef(0);
+    const lastStartedClipUnitKeyRef = useRef<string | null>(null);
     const filterPopover = usePopover({
         className: cn('w-48 p-1.5', CONTROL_POPOVER_PANEL),
         hasSurface: false,
@@ -291,8 +297,7 @@ export default function PracticeDock() {
 
     const filteredUnits = useMemo(() => {
         if (sentenceFilter === 'all') return units;
-        const matched = units.filter((u) => matchesPracticeFilter(u, sentenceFilter, summaryByIndex, vocabChecker));
-        return matched.length > 0 ? matched : units;
+        return units.filter((u) => matchesPracticeFilter(u, sentenceFilter, summaryByIndex, vocabChecker));
     }, [units, sentenceFilter, summaryByIndex, vocabChecker]);
 
     const currentFilteredPos = useMemo(() => {
@@ -338,7 +343,12 @@ export default function PracticeDock() {
         latestUnitKeyRef.current = unitKey;
         audioRef.current?.pause();
         audioRef.current = null;
-        usePlayer.getState().clearPracticeClip?.();
+        // 主动切句（playClip / autoFlow）会先行以目标句启动受控试听并登记 unitKey；
+        // 这里仅在外部跳转或模式切换时清掉上一句的受控边界，避免把自己刚发起的新片段误删。
+        if (lastStartedClipUnitKeyRef.current !== unitKey) {
+            usePlayer.getState().clearPracticeClip?.();
+        }
+        lastStartedClipUnitKeyRef.current = null;
         setDictationRevealed(false);
         setPeekingSpoiler(false);
     }, [unitKey, mode, setDictationRevealed, setPeekingSpoiler]);
@@ -367,7 +377,12 @@ export default function PracticeDock() {
         return activeUnit.textZH;
     }, [activeUnit, translations]);
 
+    const notifyClipStartedForUnit = useCallback((key: string) => {
+        lastStartedClipUnitKeyRef.current = key;
+    }, []);
+
     const playClip = useCallback((unit: PracticeUnit, rate?: number) => {
+        lastStartedClipUnitKeyRef.current = unit.key;
         if (usePlayer.getState().playPracticeClip) {
             usePlayer.getState().playPracticeClip(unit.range, unit.anchor, rate !== undefined ? { rate } : undefined);
             return;
@@ -386,7 +401,7 @@ export default function PracticeDock() {
         playClip(activeUnit, 0.75);
     }, [activeUnit, playClip]);
 
-    const navigateOffset = useCallback((delta: number, autoPlay: boolean) => {
+    const navigateOffset = useCallback((delta: number, autoPlay: boolean, options?: { startAutoFlow?: boolean }) => {
         if (filteredUnits.length === 0) return;
         const basePos = currentFilteredPos >= 0 ? currentFilteredPos : 0;
         const nextPos = basePos + delta;
@@ -398,12 +413,29 @@ export default function PracticeDock() {
         }
         const targetUnit = filteredUnits[nextPos];
         if (!targetUnit) return;
+        if (options?.startAutoFlow) {
+            lastStartedClipUnitKeyRef.current = targetUnit.key;
+            autoFlowSeqRef.current += 1;
+            setAutoFlowRequest({ unitKey: targetUnit.key, nonce: autoFlowSeqRef.current });
+            usePlayer.getState().seekToTarget?.({ time: targetUnit.range.start, target: targetUnit.anchor, play: false });
+            return;
+        }
+        setAutoFlowRequest(null);
         if (autoPlay) {
             playClip(targetUnit);
         } else {
             usePlayer.getState().seekToTarget?.({ time: targetUnit.range.start, target: targetUnit.anchor, play: false });
         }
     }, [currentFilteredPos, filteredUnits, playClip, t]);
+
+    const advanceShadowingNext = useCallback(() => {
+        if (shadowingStyle === 'beat') {
+            const wasBeatPlaying = usePlayer.getState().playing || usePlayer.getState().shadowingPause !== null;
+            navigateOffset(1, wasBeatPlaying);
+            return;
+        }
+        navigateOffset(1, !autoRecordFlow, { startAutoFlow: autoRecordFlow });
+    }, [autoRecordFlow, navigateOffset, shadowingStyle]);
 
     const handleScoreShadowing = useCallback(async (audio: Uint8Array): Promise<SentencePracticeResultVO | null> => {
         if (!activeUnit) return null;
@@ -491,7 +523,7 @@ export default function PracticeDock() {
         });
     }, [t]);
 
-    // 练习工作台主控快捷键：Esc 退出，Alt+R / Alt+Shift+R 试听，↑/↓ 切换队列句子，F 开关专注态，结果页 Enter 直接跳下一句
+    // 练习工作台主控快捷键：Esc 退出，R/S(跟读) 或 Alt+R/Alt+S(听写) 试听，听写 \ 按住偷看，↑/↓ 切句，F 开关专注态，结果页 Enter 直接跳下一句
     useEffect(() => {
         if (!visible) return undefined;
         const onKeyDown = (e: KeyboardEvent) => {
@@ -501,9 +533,23 @@ export default function PracticeDock() {
             const isInteractive = isInteractiveTarget(target);
 
             if (e.key === 'Escape') {
-                if (filterPopover.isOpen || historyPopover.isOpen || recorderProcessing) return;
+                if (useWordPopoverStore.getState().open || filterPopover.isOpen || historyPopover.isOpen || recorderProcessing) return;
                 e.preventDefault();
                 exitOverlayView();
+                return;
+            }
+            if (
+                e.key === '\\'
+                && mode === 'dictation'
+                && result === null
+                && !e.ctrlKey
+                && !e.metaKey
+                && !e.altKey
+            ) {
+                e.preventDefault();
+                if (!e.repeat) {
+                    setPeekingSpoiler(true);
+                }
                 return;
             }
             if (
@@ -535,13 +581,19 @@ export default function PracticeDock() {
                 // 非空闲态禁止切句：切句会重挂载录音视图，静默丢弃整段录音
                 if (recorderBusy) return;
                 e.preventDefault();
-                navigateOffset(-1, !(mode === 'shadowing' && shadowingStyle === 'beat'));
+                const autoPlay = mode === 'shadowing' && shadowingStyle === 'beat'
+                    ? (usePlayer.getState().playing || usePlayer.getState().shadowingPause !== null)
+                    : true;
+                navigateOffset(-1, autoPlay);
                 return;
             }
             if (e.key === 'ArrowDown' && !isEditable && !isInteractive) {
                 if (recorderBusy) return;
                 e.preventDefault();
-                navigateOffset(1, !(mode === 'shadowing' && shadowingStyle === 'beat'));
+                const autoPlay = mode === 'shadowing' && shadowingStyle === 'beat'
+                    ? (usePlayer.getState().playing || usePlayer.getState().shadowingPause !== null)
+                    : true;
+                navigateOffset(1, autoPlay);
                 return;
             }
             if ((e.key === 'f' || e.key === 'F') && !isEditable && !isInteractive && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -564,8 +616,23 @@ export default function PracticeDock() {
             }
         };
 
+        const onKeyUp = (e: KeyboardEvent) => {
+            if (e.key === '\\') {
+                setPeekingSpoiler(false);
+            }
+        };
+        const onWindowBlur = () => {
+            setPeekingSpoiler(false);
+        };
+
         window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+        window.addEventListener('blur', onWindowBlur);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup', onKeyUp);
+            window.removeEventListener('blur', onWindowBlur);
+        };
     }, [
         filterPopover.isOpen,
         focusMode,
@@ -578,6 +645,7 @@ export default function PracticeDock() {
         recorderProcessing,
         result,
         setFocusMode,
+        setPeekingSpoiler,
         shadowingStyle,
         visible,
     ]);
@@ -642,6 +710,7 @@ export default function PracticeDock() {
                 { keys: 'esc', text: t('shortcut.exit', { defaultValue: '退出' }) },
             ]
             : [
+                { keys: 'space', text: t('shortcut.playPause', { defaultValue: '播/停' }) },
                 { keys: '↑', text: t('shortcut.prev', { defaultValue: '上一句' }) },
                 { keys: '↓', text: t('shortcut.next', { defaultValue: '下一句' }) },
                 { keys: 'f', text: t('shortcut.focus', { defaultValue: '专注' }) },
@@ -665,6 +734,7 @@ export default function PracticeDock() {
                             value={mode}
                             onChange={(next) => {
                                 if (recorderProcessing) return;
+                                setAutoFlowRequest(null);
                                 setMode(next as SentencePracticeMode);
                             }}
                         >
@@ -681,6 +751,7 @@ export default function PracticeDock() {
                             value={shadowingStyle}
                             onChange={(next) => {
                                 if (recorderProcessing) return;
+                                setAutoFlowRequest(null);
                                 setShadowingStyle(next);
                             }}
                             options={[
@@ -707,10 +778,13 @@ export default function PracticeDock() {
                         <Tooltip content={t('panel.prevSentence', { defaultValue: '上一句 (↑)' })} placement="below">
                             <button
                                 type="button"
-                                aria-disabled={recorderBusy}
+                                aria-disabled={recorderBusy || filteredUnits.length === 0}
                                 onClick={() => {
-                                    if (recorderBusy) return;
-                                    navigateOffset(-1, true);
+                                    if (recorderBusy || filteredUnits.length === 0) return;
+                                    const autoPlay = mode === 'shadowing' && shadowingStyle === 'beat'
+                                        ? (usePlayer.getState().playing || usePlayer.getState().shadowingPause !== null)
+                                        : true;
+                                    navigateOffset(-1, autoPlay);
                                 }}
                                 aria-label={t('panel.prevSentence', { defaultValue: '上一句 (↑)' })}
                                 className="rounded p-1 text-secondary hover:text-primary hover:bg-muted/70 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed cursor-pointer"
@@ -731,7 +805,9 @@ export default function PracticeDock() {
                             className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 font-mono tabular-nums text-primary hover:bg-muted/60 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed cursor-pointer"
                         >
                             <span>
-                                {currentFilteredPos >= 0 ? currentFilteredPos + 1 : 1}/{Math.max(1, filteredUnits.length)}
+                                {filteredUnits.length === 0
+                                    ? '0/0'
+                                    : `${currentFilteredPos >= 0 ? currentFilteredPos + 1 : 1}/${filteredUnits.length}`}
                             </span>
                             <span className="inline-flex items-center gap-0.5 font-sans text-secondary">
                                 <Filter className="h-3 w-3" />
@@ -764,6 +840,18 @@ export default function PracticeDock() {
                                                     if (recorderBusy) return;
                                                     setSentenceFilter(key);
                                                     filterPopover.hide();
+                                                    if (key !== 'all') {
+                                                        const nextMatched = units.filter((u) =>
+                                                            matchesPracticeFilter(u, key, summaryByIndex, vocabChecker),
+                                                        );
+                                                        if (nextMatched.length > 0 && !nextMatched.some((u) => u.key === activeUnit.key)) {
+                                                            usePlayer.getState().seekToTarget?.({
+                                                                time: nextMatched[0].range.start,
+                                                                target: nextMatched[0].anchor,
+                                                                play: false,
+                                                            });
+                                                        }
+                                                    }
                                                 }}
                                             />
                                         </span>
@@ -776,10 +864,13 @@ export default function PracticeDock() {
                         <Tooltip content={t('panel.nextSentence', { defaultValue: '下一句 (↓)' })} placement="below">
                             <button
                                 type="button"
-                                aria-disabled={recorderBusy}
+                                aria-disabled={recorderBusy || filteredUnits.length === 0}
                                 onClick={() => {
-                                    if (recorderBusy) return;
-                                    navigateOffset(1, true);
+                                    if (recorderBusy || filteredUnits.length === 0) return;
+                                    const autoPlay = mode === 'shadowing' && shadowingStyle === 'beat'
+                                        ? (usePlayer.getState().playing || usePlayer.getState().shadowingPause !== null)
+                                        : true;
+                                    navigateOffset(1, autoPlay);
                                 }}
                                 aria-label={t('panel.nextSentence', { defaultValue: '下一句 (↓)' })}
                                 className="rounded p-1 text-secondary hover:text-primary hover:bg-muted/70 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed cursor-pointer"
@@ -813,7 +904,7 @@ export default function PracticeDock() {
                                     <div className="mb-1.5 px-1 text-metadata font-semibold text-secondary">
                                         {t('result.history')} ({history.length})
                                     </div>
-                                    <div className="max-h-48 overflow-y-auto divide-y divide-border/40">
+                                    <div className="max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full divide-y divide-border/40">
                                         {history.slice(0, 12).map((record) => (
                                             <div key={record.id} className="flex items-center justify-between gap-2 py-1.5 px-1 text-sm">
                                                 <span className="text-secondary">
@@ -970,60 +1061,85 @@ export default function PracticeDock() {
             </div>
 
             {/* 中央核心练习区 */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-3 flex flex-col justify-center">
-                {mode === 'shadowing' ? (
-                    <ShadowingStudio
-                        unit={activeUnit}
-                        style={shadowingStyle}
-                        asrReady={asrReady}
-                        translationText={translationText}
-                        result={result}
-                        trend={rhythmTrend}
-                        onScoreRecording={handleScoreShadowing}
-                        onReplay={handleReplay}
-                        onSlowReplay={handleSlowReplay}
-                        onNextSentence={() => navigateOffset(1, shadowingStyle !== 'beat')}
-                        onHasRecordingChange={setHasMineRecording}
-                    />
-                ) : dictationStyle === 'slots' ? (
-                    <WordSlotDictation
-                        key={`slots-${activeUnit.key}-${attemptNonce}`}
-                        unit={activeUnit}
-                        result={result}
-                        peekingSpoiler={peekingSpoiler}
-                        translationText={translationText}
-                        onPeekChange={setPeekingSpoiler}
-                        onReplay={handleReplay}
-                        onSlowReplay={handleSlowReplay}
-                        onSubmitSentence={handleSubmitDictation}
-                        onRetry={() => {
-                            setResult(null);
-                            setDictationRevealed(false);
-                            setPeekingSpoiler(false);
-                            setAttemptNonce((n) => n + 1);
-                        }}
-                        onNextSentence={() => navigateOffset(1, true)}
-                    />
-                ) : (
-                    <BlindDictation
-                        key={`blind-${activeUnit.key}-${attemptNonce}`}
-                        unit={activeUnit}
-                        result={result}
-                        peekingSpoiler={peekingSpoiler}
-                        translationText={translationText}
-                        onPeekChange={setPeekingSpoiler}
-                        onReplay={handleReplay}
-                        onSlowReplay={handleSlowReplay}
-                        onSubmitSentence={handleSubmitDictation}
-                        onRetry={() => {
-                            setResult(null);
-                            setDictationRevealed(false);
-                            setPeekingSpoiler(false);
-                            setAttemptNonce((n) => n + 1);
-                        }}
-                        onNextSentence={() => navigateOffset(1, true)}
-                    />
-                )}
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full px-5 py-3 flex flex-col">
+                <div className="my-auto w-full">
+                    {sentenceFilter !== 'all' && filteredUnits.length === 0 ? (
+                        <div
+                            data-testid="practice-filter-empty"
+                            className="flex flex-col items-center justify-center gap-2.5 rounded-xl border border-border/60 bg-muted/25 px-6 py-6 text-center"
+                        >
+                            <Filter className="h-5 w-5 text-secondary" />
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium text-primary">
+                                    {t('filter.emptyTitle', {
+                                        defaultValue: '当前「{{filter}}」队列暂无匹配句子',
+                                        filter: filterLabelMap[sentenceFilter],
+                                    })}
+                                </p>
+                                <p className="text-metadata text-secondary">
+                                    {t('filter.emptyHint', {
+                                        defaultValue: '可切回全部句子继续练习，或更换其他筛选范围',
+                                    })}
+                                </p>
+                            </div>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                label={t('filter.resetToAll', { defaultValue: '切回全部句子' })}
+                                onClick={() => setSentenceFilter('all')}
+                            />
+                        </div>
+                    ) : mode === 'shadowing' ? (
+                        <ShadowingStudio
+                            unit={activeUnit}
+                            style={shadowingStyle}
+                            asrReady={asrReady}
+                            translationText={translationText}
+                            result={result}
+                            trend={rhythmTrend}
+                            autoFlowNonce={autoFlowRequest?.unitKey === activeUnit.key ? autoFlowRequest.nonce : 0}
+                            onClipStart={notifyClipStartedForUnit}
+                            onScoreRecording={handleScoreShadowing}
+                            onReplay={handleReplay}
+                            onSlowReplay={handleSlowReplay}
+                            onNextSentence={advanceShadowingNext}
+                            onHasRecordingChange={setHasMineRecording}
+                        />
+                    ) : dictationStyle === 'slots' ? (
+                        <WordSlotDictation
+                            key={`slots-${activeUnit.key}-${attemptNonce}`}
+                            unit={activeUnit}
+                            result={result}
+                            peekingSpoiler={peekingSpoiler}
+                            translationText={translationText}
+                            onReplay={handleReplay}
+                            onSubmitSentence={handleSubmitDictation}
+                            onRetry={() => {
+                                setResult(null);
+                                setDictationRevealed(false);
+                                setPeekingSpoiler(false);
+                                setAttemptNonce((n) => n + 1);
+                            }}
+                            onNextSentence={() => navigateOffset(1, true)}
+                        />
+                    ) : (
+                        <BlindDictation
+                            key={`blind-${activeUnit.key}-${attemptNonce}`}
+                            unit={activeUnit}
+                            result={result}
+                            peekingSpoiler={peekingSpoiler}
+                            translationText={translationText}
+                            onSubmitSentence={handleSubmitDictation}
+                            onRetry={() => {
+                                setResult(null);
+                                setDictationRevealed(false);
+                                setPeekingSpoiler(false);
+                                setAttemptNonce((n) => n + 1);
+                            }}
+                            onNextSentence={() => navigateOffset(1, true)}
+                        />
+                    )}
+                </div>
             </div>
 
             {/* 底部键盘流提示条 */}

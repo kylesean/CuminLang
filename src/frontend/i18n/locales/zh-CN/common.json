@@ -35,6 +35,8 @@
     "noMatchingWords": "未找到匹配的单词",
     "noVocabulary": "暂无生词记录",
     "noDefinition": "暂无释义",
+    "phraseRequiresAiHint": "内置词典未收录该词条；开启词典 AI 或点击下方结合本句理解",
+    "aiDictionaryFailed": "AI 释义生成失败，请稍后重试",
     "collinsRating": "Collins 词典词频星级",
     "dictTagZk": "中考",
     "dictTagGk": "高考",

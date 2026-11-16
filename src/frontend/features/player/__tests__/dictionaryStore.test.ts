@@ -42,4 +42,18 @@ describe('dictionaryStore active request 与大小写归一化守卫', () => {
         expect(active?.requestId).toBe('req-2');
         expect(active?.data.definitions).toEqual([]);
     });
+
+    it('按句子语境隔离同一单词的流式更新，不同句子的并发/先后查询互不覆盖', () => {
+        const store = useDictionaryStream.getState();
+        store.startRequest('make', 'req-a', 'Please make sure it works.');
+        store.startRequest('make', 'req-b', 'I will make a cake.');
+
+        store.receiveUpdate('req-a', 'make', sampleResult('make', '确保（语境A）'));
+        store.receiveUpdate('req-b', 'make', sampleResult('make', '制作（语境B）'));
+
+        expect(useDictionaryStream.getState().getActiveEntry('make', 'Please make sure it works.')?.data.definitions[0]?.meaning)
+            .toBe('确保（语境A）');
+        expect(useDictionaryStream.getState().getActiveEntry('make', 'I will make a cake.')?.data.definitions[0]?.meaning)
+            .toBe('制作（语境B）');
+    });
 });

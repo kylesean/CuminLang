@@ -393,7 +393,7 @@ export function usePracticeRecorder({
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
-                    autoGainControl: true,
+                    autoGainControl: false,
                 },
             });
             if (!isRequestingActive()) {

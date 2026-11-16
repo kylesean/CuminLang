@@ -20,32 +20,31 @@ interface WordSlotDictationProps {
     result: SentencePracticeResultVO | null;
     peekingSpoiler: boolean;
     translationText: string;
-    onPeekChange: (peeking: boolean) => void;
     onReplay: () => void;
-    onSlowReplay: () => void;
     /** 提交听写答案；resolve 值为 false 表示评分失败或结果已过期（不播成功音效）。 */
     onSubmitSentence: (typedSentence: string) => Promise<boolean>;
     onRetry: () => void;
     onNextSentence: () => void;
 }
 
+/** 未填充词槽的中性默认宽度（ch），避免空槽直接暴露各单词精确字母长度。 */
+const NEUTRAL_BLANK_CH = 4.5;
+
 /**
  * 词槽即时听写组件（心流默认流派）。
  *
  * 将真实受控输入框直接内嵌叠加在当前激活词槽之上，兼顾实时逐字着色与系统输入法光标跟随：
- * - 按词展示下划线槽位 + 保留只读标点骨架；
+ * - 按词展示统一基准下划线槽位 + 保留只读标点骨架；
  * - 敲完一词按空格：拼对则变绿锁定并跳向下一空槽；有误则保留橙色草稿并顺滑跳向下一空槽（不卡死听写流）；
  * - 空槽按空格可跳过当前未听清的词；`Backspace` 可退回修改上一词；
- * - `/` 提示当前词下一字母；按住 `\` 临时透视参考；`Alt+R` / `Alt+Shift+R` 重播原音与 0.75× 慢听。
+ * - `/` 提示当前词下一字母；按住 `\` 临时透视、Alt+R / Alt+S 重播与 0.75× 慢听由 PracticeDock 统一调度。
  */
 export default function WordSlotDictation({
     unit,
     result,
     peekingSpoiler,
     translationText,
-    onPeekChange,
     onReplay,
-    onSlowReplay,
     onSubmitSentence,
     onRetry,
     onNextSentence,
@@ -246,21 +245,6 @@ export default function WordSlotDictation({
     }
 
     const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-        if ((e.key === 'r' || e.key === 'R') && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-            e.preventDefault();
-            onReplay();
-            return;
-        }
-        if ((e.key === 's' || e.key === 'S') && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-            e.preventDefault();
-            onSlowReplay();
-            return;
-        }
-        if (e.key === '\\') {
-            e.preventDefault();
-            if (!e.repeat) onPeekChange(true);
-            return;
-        }
         if (e.key === '/') {
             e.preventDefault();
             revealLetterHint();
@@ -346,7 +330,9 @@ export default function WordSlotDictation({
                     const isLocked = locked[i];
                     const isActive = i === activeIdx;
                     const draft = drafts[i] ?? '';
-                    const minCh = Math.max(2.5, Math.min(token.text.length + 0.5, 14));
+                    const minCh = isLocked
+                        ? Math.max(2.5, Math.min(token.text.length + 0.5, 14))
+                        : Math.max(NEUTRAL_BLANK_CH, Math.min(draft.length + 1, 14));
                     const charFeedback = evaluateSlotTypingChars(draft, token.text);
                     const hasDraftMismatch = draft.length > 0 && !isLocked && !isSlotWordMatch(draft, token);
 
@@ -354,7 +340,7 @@ export default function WordSlotDictation({
                         return (
                             <span
                                 key={`slot-active-${unit.key}-${i}`}
-                                style={{ minWidth: `${Math.max(minCh, draft.length + 1)}ch` }}
+                                style={{ minWidth: `${minCh}ch` }}
                                 className={cn(
                                     'relative inline-flex items-center justify-center rounded-md px-1.5 py-0.5 text-center border-b-2 border-accent-bg bg-accent-bg/10 text-primary',
                                     shakeIdx === i && 'practice-shake',
@@ -372,7 +358,7 @@ export default function WordSlotDictation({
                                             </span>
                                         ))
                                     ) : (
-                                        <span className="text-transparent">{token.text.replace(/./g, '_')}</span>
+                                        <span className="text-transparent">{'____'}</span>
                                     )}
                                 </span>
                                 <input
@@ -410,12 +396,6 @@ export default function WordSlotDictation({
                                         setDrafts(nextDrafts);
                                     }}
                                     onKeyDown={handleInputKeyDown}
-                                    onKeyUp={(e) => {
-                                        if (e.key === '\\') {
-                                            onPeekChange(false);
-                                        }
-                                    }}
-                                    onBlur={() => onPeekChange(false)}
                                     onPaste={handlePaste}
                                     className="absolute inset-0 h-full w-full border-0 bg-transparent px-1.5 text-center font-medium tracking-wide text-transparent caret-accent outline-none selection:bg-accent-bg/25"
                                 />
@@ -464,7 +444,7 @@ export default function WordSlotDictation({
                                     ))}
                                 </span>
                             ) : (
-                                <span aria-hidden className="text-transparent">{token.text.replace(/./g, '_')}</span>
+                                <span aria-hidden className="text-transparent">{'____'}</span>
                             )}
                         </button>
                     );

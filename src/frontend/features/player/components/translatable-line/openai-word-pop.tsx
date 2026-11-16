@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, Check, ChevronDown, EyeOff, Loader2, RefreshCw, Star } from 'lucide-react';
+import { Bot, Check, ChevronDown, EyeOff, Loader2, RefreshCw, Star, X } from 'lucide-react';
 import useSWR from 'swr';
 import type { DictionarySource, OpenAIDictionaryResult } from '@/common/types/DictionaryResult';
 import Playable from '@/frontend/components/shared/common/Playable';
@@ -56,6 +56,12 @@ interface OpenAIWordPopProps {
     contextWord?: string;
     /** 单词所在字幕句，供语境解读使用。 */
     contextSentence?: string;
+    /** 单词所在句子索引（用于精确跳回整句学习）。 */
+    sentenceIndex?: number;
+    /** 单词所在句子哈希/键。 */
+    sentenceHash?: string;
+    /** 关闭当前浮层回调（点击/划词固定态展示右上角关闭按钮）。 */
+    onClose?: () => void;
     /** 你与这个词的历史；加载中或不可用时为 null。 */
     wordMemory?: WordMemoryVO | null;
     /**
@@ -82,6 +88,9 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
     isUpdatingStatus = false,
     contextWord,
     contextSentence,
+    sentenceIndex,
+    sentenceHash,
+    onClose,
     wordMemory = null,
     promptReasons,
     className
@@ -114,14 +123,25 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
     const hasContent = !!data && (Boolean(data.word) || hasDefinitions || hasEnglishSenses);
 
     const renderSkeleton = () => (
-        <div className="p-4 space-y-4 h-full flex flex-col justify-start">
+        <div className="p-4 space-y-3 flex flex-col justify-start">
             <div className="flex items-center justify-between pb-1">
                 <div className="space-y-2">
                     <div className="h-6 bg-muted rounded w-28 animate-pulse" />
                     <div className="h-4 bg-muted/60 rounded w-20 animate-pulse" />
                 </div>
+                {onClose && (
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-muted/70 transition-all cursor-pointer"
+                        title={t('close', { defaultValue: '关闭' })}
+                        aria-label={t('close', { defaultValue: '关闭' })}
+                    >
+                        <X size={15} />
+                    </button>
+                )}
             </div>
-            <div className="space-y-4 pt-1 flex-1">
+            <div className="space-y-3 pt-1">
                 <div className="space-y-2">
                     <div className="h-5 bg-muted/80 rounded w-1/2 animate-pulse" />
                     <div className="h-4 bg-muted/40 rounded w-4/5 animate-pulse" />
@@ -135,35 +155,36 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
     );
 
     const renderContent = () => {
-        if (!data) {
+        const displayWord = data?.word || contextWord || '';
+        if (!data && !displayWord) {
             return (
-                <div className="h-full flex flex-col">
-                    <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-secondary select-none">
+                <div className="flex flex-col">
+                    <div className="flex items-center justify-center p-6 text-center text-sm text-secondary select-none">
                         {t('noDefinition')}
                     </div>
                 </div>
             );
         }
 
-        const phonetic = formatPhonetic(data.phonetic);
-        const dictTags = (data.tags ?? []).filter((tag) => DICT_TAG_I18N_KEYS[tag]);
+        const phonetic = formatPhonetic(data?.phonetic);
+        const dictTags = (data?.tags ?? []).filter((tag) => DICT_TAG_I18N_KEYS[tag]);
         const corpusMetaParts: string[] = [];
-        if (data.collins) {
+        if (data?.collins) {
             corpusMetaParts.push(`Collins ${data.collins}★`);
         }
-        if (data.oxford) {
+        if (data?.oxford) {
             corpusMetaParts.push('Oxford');
         }
-        if (data.bnc) {
+        if (data?.bnc) {
             corpusMetaParts.push(`BNC #${data.bnc}`);
         }
-        if (data.frq) {
+        if (data?.frq) {
             corpusMetaParts.push(`COCA #${data.frq}`);
         }
         const examTagLabels = dictTags.map((tag) => t(DICT_TAG_I18N_KEYS[tag]));
         const hasMeta = corpusMetaParts.length > 0 || examTagLabels.length > 0;
         const hasLearningHistory = Boolean((promptReasons && promptReasons.length > 0) || wordMemory);
-        const insightDefinitions = data.definitions.map((definition) => {
+        const insightDefinitions = (data?.definitions ?? []).map((definition) => {
             const pos = formatPartOfSpeech(definition.partOfSpeech);
             return `${pos} ${definition.meaning}`.trim();
         });
@@ -178,13 +199,13 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
                         : null;
 
         return (
-            <div className="h-full flex flex-col overflow-hidden">
-                {/* 固定头部：单词、音标、词态与快捷操作 */}
+            <div className="flex flex-col min-h-0 overflow-hidden">
+                {/* 固定头部：单词/短语原文、音标、词态与快捷操作 */}
                 <div className="px-4 pt-3.5 pb-2.5 border-b border-border/50 flex items-start justify-between shrink-0">
                     <div className="min-w-0">
                         <div className="flex items-baseline gap-2">
                             <span className="text-base font-semibold text-primary tracking-tight select-text">
-                                <Playable>{data.word}</Playable>
+                                <Playable>{displayWord}</Playable>
                             </span>
                             {voiceAccent && (
                                 <span className="text-metadata text-secondary/70 select-none">
@@ -281,25 +302,36 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
                                     'p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-muted/70 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                                     (isLoading || isStreaming) && 'opacity-50 cursor-not-allowed'
                                 )}
-                                title={data.source === 'ai' ? t('regenerateAiDictionary') : t('aiDictionaryHint')}
-                                aria-label={data.source === 'ai' ? t('regenerateAiDictionary') : t('aiDictionary')}
+                                title={data?.source === 'ai' ? t('regenerateAiDictionary') : t('aiDictionaryHint')}
+                                aria-label={data?.source === 'ai' ? t('regenerateAiDictionary') : t('aiDictionary')}
                             >
                                 {isLoading || isStreaming ? (
                                     <Loader2 size={15} className="animate-spin" />
-                                ) : data.source === 'ai' ? (
+                                ) : data?.source === 'ai' ? (
                                     <RefreshCw size={14} />
                                 ) : (
                                     <Bot size={15} />
                                 )}
                             </button>
                         )}
+                        {onClose && (
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-muted/70 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                                title={t('close', { defaultValue: '关闭' })}
+                                aria-label={t('close', { defaultValue: '关闭' })}
+                            >
+                                <X size={15} />
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {/* 滚动区域：释义优先，随后是词典元信息、AI 语境解析与学习记录 */}
-                <div className="px-4 py-3 flex-1 overflow-y-auto space-y-3.5 scrollbar-thin">
+                <div className="px-4 py-3 flex-1 min-h-0 overflow-y-auto space-y-3.5 scrollbar-thin">
                     {hasDefinitions ? (
-                        data.definitions.map((def, defIdx) => {
+                        data!.definitions.map((def, defIdx) => {
                             const pos = formatPartOfSpeech(def.partOfSpeech);
                             const hasExamples = Array.isArray(def.examples) && def.examples.length > 0;
 
@@ -341,14 +373,23 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
                             );
                         })
                     ) : (
-                        <div className="text-sm text-secondary/70 select-none py-3">
+                        <div className="text-sm text-secondary/80 select-none py-2 space-y-1">
                             {isStreaming ? (
-                                <div className="flex items-center gap-2 text-secondary/60 animate-pulse">
+                                <div className="flex items-center gap-2 text-secondary/70 animate-pulse">
                                     <span className="w-1.5 h-1.5 rounded-full bg-secondary/40" />
                                     <span>{t('generatingDefinition', { defaultValue: '正在查询释义…' })}</span>
                                 </div>
                             ) : (
-                                <span>{t('noDefinition', { defaultValue: '暂无释义' })}</span>
+                                <>
+                                    <div>{t('noDefinition', { defaultValue: '暂无释义' })}</div>
+                                    {!aiEnabled && (
+                                        <p className="text-metadata text-secondary/70 leading-relaxed">
+                                            {t('phraseRequiresAiHint', {
+                                                defaultValue: '内置词典未收录该词条；开启词典 AI 或点击下方结合本句理解',
+                                            })}
+                                        </p>
+                                    )}
+                                </>
                             )}
                         </div>
                     )}
@@ -389,7 +430,7 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
                     {hasMeta && (
                         <div className="pt-2.5 border-t border-border/50 space-y-1 text-metadata text-secondary/80 select-none">
                             {corpusMetaParts.length > 0 && (
-                                <div title={data.collins ? t('collinsRating') : undefined}>
+                                <div title={data?.collins ? t('collinsRating') : undefined}>
                                     {corpusMetaParts.join(' · ')}
                                 </div>
                             )}
@@ -402,14 +443,15 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
                     )}
 
                     {/* AI 语境解析：独立轻量入口，紧跟释义区，不藏在学习记录里 */}
-                    {contextSentence?.trim() && (
-                        <div className="pt-2.5 border-t border-border/50">
-                            <WordContextInsight
-                                word={contextWord ?? data.word}
-                                sentence={contextSentence}
-                                definitions={insightDefinitions}
-                            />
-                        </div>
+                    {contextSentence?.trim() && displayWord && (
+                        <WordContextInsight
+                            className="pt-2.5 border-t border-border/50"
+                            word={displayWord}
+                            sentence={contextSentence}
+                            sentenceIndex={sentenceIndex}
+                            sentenceHash={sentenceHash}
+                            definitions={insightDefinitions}
+                        />
                     )}
 
                     {/* 学习记录：只在有提示理由或记忆数据时渲染 */}
@@ -487,7 +529,7 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
                     )}
 
                     {/* 词典来源：极细页脚，不打断首屏阅读 */}
-                    {data.source && (
+                    {data?.source && (
                         <div
                             data-testid="word-source"
                             className="pt-2 border-t border-border/40 text-metadata text-secondary/60 select-none"
@@ -502,8 +544,10 @@ const OpenAIWordPop: React.FC<OpenAIWordPopProps> = ({
 
     return (
         <div
+            data-word-popover-card="true"
             className={cn(
-                'w-[360px] h-[400px] bg-popover/95 backdrop-blur-2xl text-primary shadow-2xl border border-border/70 rounded-2xl overflow-hidden text-left relative flex flex-col',
+                'w-[360px] max-h-[380px] bg-popover/95 backdrop-blur-2xl text-primary shadow-xl border border-border/70 rounded-2xl overflow-hidden text-left relative flex flex-col',
+                isLoading || isStreaming ? 'min-h-[200px]' : 'min-h-[120px]',
                 className
             )}
         >

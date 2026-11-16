@@ -35,6 +35,8 @@
     "noMatchingWords": "No matching words",
     "noVocabulary": "No vocabulary saved yet",
     "noDefinition": "No definition",
+    "phraseRequiresAiHint": "Not found in built-in dictionaries; enable AI dictionary or explain in sentence below",
+    "aiDictionaryFailed": "AI dictionary lookup failed, please try again",
     "collinsRating": "Collins frequency star rating",
     "dictTagZk": "Zhongkao",
     "dictTagGk": "Gaokao",

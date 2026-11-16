@@ -13,9 +13,6 @@ interface BlindDictationProps {
     result: SentencePracticeResultVO | null;
     peekingSpoiler: boolean;
     translationText: string;
-    onPeekChange: (peeking: boolean) => void;
-    onReplay: () => void;
-    onSlowReplay: () => void;
     /** 提交听写答案；resolve 值为 false 表示评分失败或结果已过期（不播成功音效）。 */
     onSubmitSentence: (typedSentence: string) => Promise<boolean>;
     onRetry: () => void;
@@ -25,17 +22,14 @@ interface BlindDictationProps {
 /**
  * 整句盲听挑战组件（无词数/字母数量提示）。
  *
- * `Enter` 提交，`Shift+Enter` 换行，`Alt+R` 原音，`Alt+Shift+R` 0.75× 慢速，
- * 按住 `\` 临时透视，提交后原地展示带划词词典的红绿差异句。
+ * `Enter` 提交，`Shift+Enter` 换行，`Alt+R` 原音，`Alt+S` 0.75× 慢速，
+ * 按住 `\` 临时透视（由 PracticeDock 统一监听快捷键），提交后原地展示带划词词典的红绿差异句。
  */
 export default function BlindDictation({
     unit,
     result,
     peekingSpoiler,
     translationText,
-    onPeekChange,
-    onReplay,
-    onSlowReplay,
     onSubmitSentence,
     onRetry,
     onNextSentence,
@@ -79,26 +73,11 @@ export default function BlindDictation({
     }
 
     return (
-        // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- 盲听写作区集中拦截 Alt+R 重播、\ 偷看与 Enter 提交快捷键
+        // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- 盲听写作区仅拦截 Enter 提交（Alt+R/Alt+S/\\ 由 PracticeDock 统一调度）
         <div
             ref={containerRef}
             className="flex flex-col gap-2.5"
             onKeyDown={(e) => {
-                if ((e.key === 'r' || e.key === 'R') && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                    e.preventDefault();
-                    onReplay();
-                    return;
-                }
-                if ((e.key === 's' || e.key === 'S') && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                    e.preventDefault();
-                    onSlowReplay();
-                    return;
-                }
-                if (e.key === '\\') {
-                    e.preventDefault();
-                    if (!e.repeat) onPeekChange(true);
-                    return;
-                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                     const el = e.target as HTMLElement | null;
                     if (el?.closest('button, a[href], [role="button"]')) return;
@@ -106,12 +85,6 @@ export default function BlindDictation({
                     void handleSubmit();
                 }
             }}
-            onKeyUp={(e) => {
-                if (e.key === '\\') {
-                    onPeekChange(false);
-                }
-            }}
-            onBlur={() => onPeekChange(false)}
         >
             <TextArea
                 label={t('dictation.placeholder')}
@@ -119,7 +92,7 @@ export default function BlindDictation({
                 value={typed}
                 onChange={(val) => setTyped(val)}
                 placeholder={t('dictation.blindPlaceholder', {
-                    defaultValue: '盲听挑战：听到整句后直接写出内容（Enter 提交，Tab 重播）…',
+                    defaultValue: '盲听挑战：听到整句后直接写出内容（Enter 提交，Alt+R 重播，Alt+S 慢速）…',
                 })}
                 rows={2}
                 width="100%"

@@ -30,7 +30,10 @@
         "all": "全部",
         "unpracticed": "未练",
         "weak": "低分",
-        "vocab": "生词"
+        "vocab": "生词",
+        "emptyTitle": "当前「{{filter}}」队列暂无匹配句子",
+        "emptyHint": "可切回全部句子继续练习，或更换其他筛选范围",
+        "resetToAll": "切回全部句子"
     },
     "shortcut": {
         "replay": "原音",
@@ -41,6 +44,7 @@
         "ptt": "对讲(点按/长按)",
         "abCompare": "A/B 对比",
         "playMine": "听我的",
+        "playPause": "播/停",
         "focus": "专注",
         "prevNext": "上/下一句",
         "next": "下一句",
@@ -80,6 +84,8 @@
         "asrDegradedNote": "未安装语音识别模型：仍可直接录音并对比原音声纹",
         "installAsrAction": "下载模型 →",
         "autoFlow": "播完自动开麦",
+        "autoFlowCueing": "原声示范中，播完自动开麦（按 Space 立即开麦）",
+        "cancelAutoFlow": "取消示范",
         "prosodyTitle": "原声 DTW 韵律对比",
         "prosodyMetrics": "贴合 {{prosody}}% · 停顿 {{pause}}% · 重音 {{energy}}%",
         "phonemeIssuesTitle": "音素定位建议",

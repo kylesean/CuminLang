@@ -1,10 +1,11 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Sentence } from '@/common/types/SentenceC';
 import { practiceApi } from '@/frontend/features/practice/practiceApi';
 import usePracticePanel from '@/frontend/features/practice/practiceStore';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { useTrainingModeStore } from '@/frontend/features/player/trainingStore';
+import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 import PracticePanel from '@/frontend/features/practice/PracticePanel';
 
 const mockAsrReady = { value: true };
@@ -146,7 +147,7 @@ describe('PracticeDock 重构工坊核心交互', () => {
 
     afterEach(() => {
         cleanup();
-        usePracticePanel.setState({ visible: false, focusMode: false, sentenceFilter: 'all' });
+        usePracticePanel.setState({ visible: false, focusMode: false, sentenceFilter: 'all', autoRecordFlow: false });
     });
 
     it('词槽即时听写：空格校验推进词槽，/ 提示首字母，末词自动提交评分', async () => {
@@ -271,5 +272,101 @@ describe('PracticeDock 重构工坊核心交互', () => {
         fireEvent.click(screen.getByText('未练'));
         expect(usePracticePanel.getState().sentenceFilter).toBe('unpracticed');
         expect(screen.getByText('1/1')).toBeDefined();
+    });
+
+    it('筛选队列匹配为 0 句时不静默回退全量，展示空态与重置按钮；退出时重置专注态', async () => {
+        render(<PracticePanel />);
+
+        fireEvent.click(screen.getByLabelText('切换专注模式'));
+        expect(usePracticePanel.getState().focusMode).toBe(true);
+
+        // 选择「生词」筛选（2 句均不含生词 -> 0/0）
+        fireEvent.click(screen.getByText('1/2'));
+        fireEvent.click(await screen.findByText('生词'));
+
+        expect(screen.getByText('0/0')).toBeDefined();
+        expect(screen.getByTestId('practice-filter-empty')).toBeDefined();
+
+        fireEvent.click(screen.getByText('切回全部句子'));
+        expect(usePracticePanel.getState().sentenceFilter).toBe('all');
+        expect(screen.getByText('1/2')).toBeDefined();
+
+        act(() => {
+            usePracticePanel.getState().setVisible(false);
+        });
+        expect(usePracticePanel.getState().focusMode).toBe(false);
+    });
+
+    it('听写盲听提示正确快捷键，且 PracticeDock 统一承接 \\ 偷看与 Alt+R 重播', async () => {
+        const playClipSpy = vi.fn();
+        usePlayer.setState({
+            playPracticeClip: playClipSpy,
+            clearPracticeClip: vi.fn(),
+        } as never);
+
+        render(<PracticePanel />);
+        fireEvent.click(screen.getByText('整句盲听'));
+
+        const textarea = screen.getByLabelText('dictation.placeholder') as HTMLTextAreaElement;
+        expect(textarea.placeholder).not.toContain('Tab');
+        expect(textarea.placeholder).toContain('Alt+R');
+
+        // Alt+R 由 PracticeDock 统一分发重播
+        fireEvent.keyDown(textarea, { key: 'r', altKey: true });
+        expect(playClipSpy).toHaveBeenCalledTimes(1);
+
+        // 按住 \ 展开参考，松开恢复，切换下一句不提前清理刚发起的受控试听
+        fireEvent.keyDown(textarea, { key: '\\' });
+        expect(usePracticePanel.getState().peekingSpoiler).toBe(true);
+        fireEvent.keyUp(textarea, { key: '\\' });
+        expect(usePracticePanel.getState().peekingSpoiler).toBe(false);
+    });
+
+    it('切下一句不误清当前受控试听，且自动示范态可被取消', async () => {
+        const clearClipSpy = vi.fn();
+        const playClipSpy = vi.fn();
+        usePlayer.setState({
+            playPracticeClip: ((_range: unknown, target: Sentence) => {
+                playClipSpy();
+                usePlayer.setState({ currentSentence: target });
+            }) as never,
+            clearPracticeClip: clearClipSpy,
+            seekToTarget: ((opts: { target?: Sentence }) => {
+                if (opts.target) {
+                    usePlayer.setState({ currentSentence: opts.target });
+                }
+            }) as never,
+        } as never);
+
+        usePracticePanel.setState({ mode: 'shadowing', shadowingStyle: 'record', autoRecordFlow: true });
+        render(<PracticePanel />);
+
+        // 点「开始录音」在自动流下先进入原声示范等待态，点「取消示范」可中止
+        fireEvent.click(screen.getByText('recorder.start').closest('button')!);
+        expect(playClipSpy).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('shadowing-autoflow-cue')).toBeDefined();
+
+        fireEvent.click(within(screen.getByTestId('shadowing-autoflow-cue')).getByText('取消示范'));
+        expect(screen.queryByTestId('shadowing-autoflow-cue')).toBeNull();
+
+        // 切到下一句：触发 playPracticeClip 后不得紧接着 clearPracticeClip 清掉新句子边界
+        clearClipSpy.mockClear();
+        fireEvent.click(screen.getByLabelText('下一句 (↓)'));
+        expect(playClipSpy).toHaveBeenCalledTimes(2);
+        expect(clearClipSpy).not.toHaveBeenCalled();
+    });
+
+    it('打开查词浮层时按 Esc 不得连带关闭练习工作台', () => {
+        render(<PracticePanel />);
+        act(() => {
+            useWordPopoverStore.setState({ open: true });
+        });
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(usePracticePanel.getState().visible).toBe(true);
+
+        act(() => {
+            useWordPopoverStore.setState({ open: false });
+        });
     });
 });

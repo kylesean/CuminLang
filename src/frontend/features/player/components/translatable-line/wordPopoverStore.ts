@@ -49,6 +49,8 @@ interface WordPopoverState {
     scheduleHoverOpen: (target: WordPopoverTarget, delayMs?: number) => void;
     cancelHoverOpen: () => void;
     openImmediately: (target: WordPopoverTarget, mode: WordPopoverTriggerMode) => void;
+    /** 用户开始操作悬停打开的浮层（如点击 AI 解释/收藏/语境解读）时，将悬停态固定为 click 态，防止高度变化或鼠标轻移误关。 */
+    pinPopover: () => void;
     closePopover: () => void;
 }
 
@@ -103,6 +105,11 @@ export const useWordPopoverStore = create<WordPopoverState>((set, get) => ({
             return;
         }
         set({ open: true, mode, target });
+    },
+
+    pinPopover: () => {
+        clearHoverTimer();
+        set((state) => (state.open && state.mode === 'hover' ? { mode: 'click' } : state));
     },
 
     closePopover: () => {

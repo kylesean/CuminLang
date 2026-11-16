@@ -763,20 +763,26 @@ export const usePlayer = create<PlayerState>((set, get) => {
     const { playing, currentSentence, shadowing, srtTender } = state;
     if (!playing || !currentSentence || !srtTender) return false;
     const effectiveTime = getEffectiveTime();
-    const { start, end } = srtTender.mapSeekTime(currentSentence);
+    // 按意群整句块判定句末：避免跨多行字幕合并的整句在第一行中途提前留白断句
+    const block = getCurrentBlock();
+    const { start, end } = block
+      ? calcRangeForSentences(srtTender, block.sentences)
+      : srtTender.mapSeekTime(currentSentence);
+    const tailTarget = block?.repr ?? currentSentence;
+    const tailKey = sentenceKey(tailTarget);
     if (effectiveTime <= end) return false;
 
-    if (shadowing && shadowedSentenceKey !== sentenceKey(currentSentence)) {
-      // 影子跟读：原地停在句尾暂停留白（供跟读），留白结束后再过渡到下一句续播
+    if (shadowing && shadowedSentenceKey !== tailKey) {
+      // 影子跟读：原地停在意群块末尾暂停留白（供跟读），留白结束后再过渡到下一句续播
       state.pause();
       clearShadowTimer();
-      shadowedSentenceKey = sentenceKey(currentSentence);
-      // 留白时长按本句时长 × 留白倍率（默认 1.5），钳制在 0.5~15s
+      shadowedSentenceKey = tailKey;
+      // 留白时长按本句（或意群块）时长 × 留白倍率（默认 1.5），钳制在 0.5~15s
       const ratio = useTrainingModeStore.getState().config.shadowingRatio || 1.5;
       const pauseMs = Math.min(Math.max((end - start) * ratio * 1000, 500), 15000);
       set({ shadowingPause: { durationMs: pauseMs, untilTs: Date.now() + pauseMs } });
       // 暂停生效前播放头可能滑入下一句区间并触发一次时间回写，把高亮锁到留白结束以防字幕提前跳句
-      activateCurrentLock(currentSentence, pauseMs + 1500);
+      activateCurrentLock(tailTarget, pauseMs + 1500);
       shadowTimer = setTimeout(() => {
         shadowTimer = null;
         set({ shadowingPause: null });

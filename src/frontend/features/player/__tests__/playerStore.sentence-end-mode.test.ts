@@ -155,4 +155,57 @@ describe('playerStore 句末模式互斥', () => {
             ),
         ).toBe('autoPause');
     });
+
+    it('影子跟读在多行合并意群块内不在首行中途停顿，直到整句块结尾才留白', () => {
+        vi.useFakeTimers();
+        try {
+            const s0 = {
+                fileHash: 'hash-block',
+                index: 0,
+                start: 1,
+                end: 2.5,
+                adjustedStart: null,
+                adjustedEnd: null,
+                text: 'When you speak',
+                textZH: '',
+                key: 'hash-block-0',
+                transGroup: 1,
+                translationKey: 'hash-block:0',
+                struct: { original: 'When you speak', blocks: [] },
+            };
+            const s1 = {
+                fileHash: 'hash-block',
+                index: 1,
+                start: 2.7,
+                end: 4.5,
+                adjustedStart: null,
+                adjustedEnd: null,
+                text: 'people listen closely.',
+                textZH: '',
+                key: 'hash-block-1',
+                transGroup: 1,
+                translationKey: 'hash-block:1',
+                struct: { original: 'people listen closely.', blocks: [] },
+            };
+            usePlayer.getState().setSource('file:///block.mp4');
+            usePlayer.getState().loadSubtitles([s0, s1]);
+            usePlayer.getState().setShadowing(true);
+            usePlayer.getState().gotoSentence(s0);
+            usePlayer.getState().play();
+            usePlayer.getState().resolveSeek(1.0);
+
+            // 越过第一行句尾 2.5s 但仍在合并块 [1.0, 4.5] 内：不应提前停顿
+            usePlayer.getState().updateExactPlayTime(2.6);
+            expect(usePlayer.getState().shadowingPause).toBeNull();
+            expect(usePlayer.getState().playing).toBe(true);
+
+            // 越过整句块结尾 4.5s：触发留白倒计时并暂停
+            usePlayer.getState().updateExactPlayTime(4.6);
+            expect(usePlayer.getState().shadowingPause).not.toBeNull();
+            expect(usePlayer.getState().playing).toBe(false);
+        } finally {
+            usePlayer.getState().setShadowing(false);
+            vi.useRealTimers();
+        }
+    });
 });

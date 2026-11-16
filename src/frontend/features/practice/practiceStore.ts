@@ -111,7 +111,7 @@ const usePracticePanel = create<PracticePanelState>((set) => ({
     openedFromLearning: false,
     setVisible: (visible) => set((state) => ({
         visible,
-        ...(visible ? {} : { peekingSpoiler: false, dictationRevealed: false, openedFromLearning: false }),
+        ...(visible ? {} : { peekingSpoiler: false, dictationRevealed: false, openedFromLearning: false, focusMode: false }),
         mode: state.mode,
     })),
     setMode: (mode) => set({ mode, dictationRevealed: false, peekingSpoiler: false }),
