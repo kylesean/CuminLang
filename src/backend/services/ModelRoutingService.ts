@@ -2,7 +2,14 @@ import { injectable } from 'inversify';
 import { storeGet } from '@/backend/infrastructure/settings/store';
 import type { AiModelScene } from '@/backend/services/AiProviderService';
 import type { SettingKey } from '@/common/types/store_schema';
-import { parseStoredProviderProfiles } from '@/common/utils/cloud-ai-providers';
+import { parseStoredProviderProfiles, findProviderForModel } from '@/common/utils/cloud-ai-providers';
+
+const API_FORMAT_LABELS: Record<string, string> = {
+    anthropic: 'Anthropic',
+    gemini: 'Gemini',
+    openai: 'OpenAI',
+    'openai-responses': 'OpenAI',
+};
 
 export type RoutedModel = {
     providerId: 'openai';
@@ -12,6 +19,8 @@ export type RoutedModel = {
 
 export default interface ModelRoutingService {
     resolveOpenAiModel(scene: AiModelScene): RoutedModel;
+    /** 解析指定场景实际命中服务商的展示名（用于提示语展示真实配置供应商）。 */
+    resolveProviderLabel?(scene: AiModelScene): string;
 }
 
 
@@ -77,5 +86,25 @@ export class ModelRoutingServiceImpl implements ModelRoutingService {
             modelId: selectedModel,
             fullModelId: `openai:${selectedModel}`,
         };
+    }
+
+    /**
+     * 解析当前场景在“服务凭据”中实际命中供应商的名称，用于状态与失败提示。
+     */
+    public resolveProviderLabel(scene: AiModelScene): string {
+        try {
+            const routed = this.resolveOpenAiModel(scene);
+            const profiles = parseStoredProviderProfiles(storeGet('models.openai.providers'));
+            if (profiles && profiles.length > 0) {
+                const matched = findProviderForModel(profiles, routed.modelId);
+                if (matched) {
+                    return matched.name.trim() || (API_FORMAT_LABELS[matched.apiFormat] ?? 'AI');
+                }
+            }
+            const format = storeGet('apiKeys.openAi.apiFormat');
+            return API_FORMAT_LABELS[format] ?? 'OpenAI';
+        } catch {
+            return 'AI';
+        }
     }
 }

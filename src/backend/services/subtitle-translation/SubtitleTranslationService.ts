@@ -204,7 +204,7 @@ const createAbortError = (): Error => {
 /** 批次失败提示里的引擎展示名；新引擎接入时在此补一行。 */
 const PROVIDER_LABELS: Partial<Record<TranslationProvider, string>> = {
     local: '本地模型',
-    openai: 'OpenAI',
+    tencent: '腾讯',
 };
 
 /**
@@ -616,7 +616,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             });
 
             if (failedIndices.size > 0 && request.requeueCount > 0) {
-                const engineLabel = PROVIDER_LABELS[request.context.provider] ?? '翻译';
+                const engineLabel = this.resolveEngineLabel(request.context.provider);
                 this.showFailureToast(
                     request.context.provider !== 'tencent'
                         ? `${engineLabel}字幕翻译未返回完整结果，失败 ${failedIndices.size} 条`
@@ -660,7 +660,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 error,
             });
             if (request.requeueCount > 0) {
-                const engineLabel = PROVIDER_LABELS[request.context.provider] ?? '翻译';
+                const engineLabel = this.resolveEngineLabel(request.context.provider);
                 this.showFailureToast(
                     request.context.provider !== 'tencent'
                         ? `${engineLabel}字幕翻译请求失败`
@@ -904,11 +904,17 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
         localModelId: string | null,
         targets: SubtitleTranslationTarget[]
     ): Promise<{ translations: Map<string, string>; fellBackToLocal: boolean }> {
-        const translateWithLocal = async () => {
+        const translateWithLocal = async (localInput: SubtitleBatchTranslationInput, localTargets: SubtitleTranslationTarget[]) => {
             const fallbackModelId = await this.localAiService.getActiveModelId();
-            return this.validateGatewayItems(
-                targets,
-                await this.localSubtitleTranslator.translate({ ...input, modelId: fallbackModelId })
+            return this.resolveGatewayItemsWithPartialRetry(
+                localTargets,
+                await this.localSubtitleTranslator.translate({ ...localInput, modelId: fallbackModelId }),
+                (missingTargets) => this.localSubtitleTranslator.translate({
+                    ...localInput,
+                    targets: missingTargets,
+                    modelId: fallbackModelId,
+                }),
+                localInput.signal,
             );
         };
         if (provider === 'local') {
@@ -918,7 +924,16 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             const items = await this.localSubtitleTranslator.translate({ ...input, modelId: localModelId });
             this.resourceFallback.clear('subtitleTranslation');
             return {
-                translations: this.validateGatewayItems(targets, items),
+                translations: await this.resolveGatewayItemsWithPartialRetry(
+                    targets,
+                    items,
+                    (missingTargets) => this.localSubtitleTranslator.translate({
+                        ...input,
+                        targets: missingTargets,
+                        modelId: localModelId,
+                    }),
+                    input.signal,
+                ),
                 fellBackToLocal: false,
             };
         }
@@ -926,14 +941,22 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             const items = await this.openAiSubtitleTranslator.translate(input);
             this.resourceFallback.clear('subtitleTranslation');
             return {
-                translations: this.validateGatewayItems(targets, items),
+                translations: await this.resolveGatewayItemsWithPartialRetry(
+                    targets,
+                    items,
+                    (missingTargets) => this.openAiSubtitleTranslator.translate({
+                        ...input,
+                        targets: missingTargets,
+                    }),
+                    input.signal,
+                ),
                 fellBackToLocal: false,
             };
         } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
             this.logger.warn('字幕翻译引擎失败，回退到本地模型', { provider, from: provider, reason });
             try {
-                const translations = await translateWithLocal();
+                const translations = await translateWithLocal(input, targets);
                 // 仅登记展示状态（设置页可见），不依据它短路后续批次。
                 this.resourceFallback.markFallback('subtitleTranslation', provider, 'local', reason);
                 return {
@@ -950,43 +973,88 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
     }
 
     /**
-     * 严格校验模型返回的 key 集合与非空翻译。
-     *
-     * @param targets 当前请求目标。
-     * @param items 模型返回条目。
-     * @returns 以稳定字幕键索引的翻译结果。
+     * 解析用于展示的真实供应商名称：OpenAI 兼容渠道从服务凭据配置中取用户配置名称，避免写死为 OpenAI。
      */
-    private validateGatewayItems(
+    private resolveEngineLabel(provider: TranslationProvider): string {
+        if (provider === 'openai') {
+            return this.modelRoutingService.resolveProviderLabel?.('subtitleTranslation') ?? 'AI';
+        }
+        return PROVIDER_LABELS[provider] ?? '翻译';
+    }
+
+    /**
+     * 提取模型返回中键合法且译文非空的条目；若全部无效则抛错触发回退。
+     */
+    private collectValidGatewayItems(
         targets: SubtitleTranslationTarget[],
-        items: SubtitleTranslationResultItem[]
+        items: SubtitleTranslationResultItem[],
     ): Map<string, string> {
-        if (items.length !== targets.length) {
+        const targetKeys = new Set(targets.map((target) => target.key));
+        const result = new Map<string, string>();
+        for (const item of items) {
+            if (!targetKeys.has(item.key) || result.has(item.key)) {
+                continue;
+            }
+            const translation = item.translation.trim();
+            if (translation) {
+                result.set(item.key, translation);
+            }
+        }
+        if (result.size === 0) {
             throw createSubtitleValidationError(
                 `返回条目数量不匹配: expected=${targets.length}, actual=${items.length}`
             );
         }
+        return result;
+    }
 
-        const targetKeys = new Set(targets.map((target) => target.key));
-        const result = new Map<string, string>();
-        items.forEach((item) => {
-            if (!targetKeys.has(item.key)) {
-                throw createSubtitleValidationError(`返回了未知字幕键: ${item.key}`);
-            }
-            if (result.has(item.key)) {
-                throw createSubtitleValidationError(`重复返回字幕键: ${item.key}`);
-            }
-            const translation = item.translation.trim();
-            if (!translation) {
-                throw createSubtitleValidationError(`字幕翻译为空: ${item.key}`);
-            }
-            result.set(item.key, translation);
+    /**
+     * 校验批量返回并在缺失少数条目时执行一次针对性补译，避免因为漏 1 条而丢弃整批有效译文。
+     */
+    private async resolveGatewayItemsWithPartialRetry(
+        targets: SubtitleTranslationTarget[],
+        items: SubtitleTranslationResultItem[],
+        retryMissing: (missingTargets: SubtitleTranslationTarget[]) => Promise<SubtitleTranslationResultItem[]>,
+        signal?: AbortSignal,
+    ): Promise<Map<string, string>> {
+        const result = this.collectValidGatewayItems(targets, items);
+        if (result.size === targets.length || targets.length <= 1) {
+            return result;
+        }
+
+        const missingTargets = targets.filter((target) => !result.has(target.key));
+        if (missingTargets.length === 0) {
+            return result;
+        }
+
+        this.logger.warn('字幕翻译批量返回存在缺失条目，保留有效译文并尝试补译缺失项', {
+            expected: targets.length,
+            receivedValid: result.size,
+            missingCount: missingTargets.length,
         });
 
-        targets.forEach((target) => {
-            if (!result.has(target.key)) {
-                throw createSubtitleValidationError(`缺少字幕键: ${target.key}`);
+        try {
+            this.throwIfAborted(signal);
+            const retryItems = await retryMissing(missingTargets);
+            const missingKeys = new Set(missingTargets.map((target) => target.key));
+            for (const item of retryItems) {
+                if (!missingKeys.has(item.key) || result.has(item.key)) {
+                    continue;
+                }
+                const translation = item.translation.trim();
+                if (translation) {
+                    result.set(item.key, translation);
+                }
             }
-        });
+        } catch (retryError) {
+            if (signal?.aborted) {
+                throw retryError;
+            }
+            this.logger.warn('字幕翻译缺失条目补译失败，保留本批其余有效译文', {
+                missingCount: missingTargets.length,
+                error: retryError instanceof Error ? retryError.message : String(retryError),
+            });
+        }
         return result;
     }
 
@@ -1110,8 +1178,8 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
      *
      * @param signal 当前批次取消信号。
      */
-    private throwIfAborted(signal: AbortSignal): void {
-        if (signal.aborted) {
+    private throwIfAborted(signal?: AbortSignal): void {
+        if (signal?.aborted) {
             throw createAbortError();
         }
     }

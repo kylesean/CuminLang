@@ -1,4 +1,4 @@
-import { generateText, Output } from 'ai';
+import { generateText, NoObjectGeneratedError, Output } from 'ai';
 import { inject, injectable } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import type AiProviderService from '@/backend/services/AiProviderService';
@@ -14,6 +14,48 @@ import {
 } from '@/backend/infrastructure/translate/subtitleBatchPrompt';
 
 const OPENAI_SUBTITLE_REQUEST_TIMEOUT_MS = 40_000;
+
+/**
+ * 从被 Markdown 代码块（````json ... ````）或前后解释文本包裹的模型输出中提取并校验结构化 JSON。
+ */
+const tryRecoverFencedSubtitleItems = (
+    error: unknown,
+    schema: ReturnType<typeof createSubtitleBatchResultSchema>,
+): SubtitleTranslationResultItem[] | null => {
+    if (!NoObjectGeneratedError.isInstance(error)) {
+        return null;
+    }
+    const rawText = typeof error.text === 'string' ? error.text.trim() : '';
+    if (!rawText) {
+        return null;
+    }
+    const strippedFence = rawText
+        .replace(/^```(?:json)?\s*\r?\n?/i, '')
+        .replace(/\r?\n?```\s*$/i, '')
+        .trim();
+    const candidates = [strippedFence];
+    const firstBrace = strippedFence.indexOf('{');
+    const lastBrace = strippedFence.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const sliced = strippedFence.slice(firstBrace, lastBrace + 1);
+        if (sliced !== strippedFence) {
+            candidates.push(sliced);
+        }
+    }
+
+    for (const candidate of candidates) {
+        try {
+            const parsed = JSON.parse(candidate) as unknown;
+            const checked = schema.safeParse(parsed);
+            if (checked.success) {
+                return checked.data.items;
+            }
+        } catch {
+            // 继续尝试更紧凑的外层花括号子串
+        }
+    }
+    return null;
+};
 
 /**
  * 云端字幕批量翻译网关：自持提示词拼装与 OpenAI 兼容结构化输出。
@@ -46,18 +88,26 @@ implements OpenAiSubtitleBatchTranslator {
         const schema = createSubtitleBatchResultSchema(input.mode);
         const prompt = buildSubtitleBatchPrompt(input, input.style);
 
-        const result = await concurrency.withRateLimit('gpt', () =>
-            generateText({
-                model,
-                output: Output.object({ schema }),
-                prompt,
-                maxRetries: 0,
-                timeout: OPENAI_SUBTITLE_REQUEST_TIMEOUT_MS,
-                abortSignal: input.signal,
-            }), {
-            signal: input.signal,
-        });
+        try {
+            const result = await concurrency.withRateLimit('gpt', () =>
+                generateText({
+                    model,
+                    output: Output.object({ schema }),
+                    prompt,
+                    maxRetries: 0,
+                    timeout: OPENAI_SUBTITLE_REQUEST_TIMEOUT_MS,
+                    abortSignal: input.signal,
+                }), {
+                signal: input.signal,
+            });
 
-        return result.output.items;
+            return result.output.items;
+        } catch (error) {
+            const recovered = tryRecoverFencedSubtitleItems(error, schema);
+            if (recovered) {
+                return recovered;
+            }
+            throw error;
+        }
     }
 }
