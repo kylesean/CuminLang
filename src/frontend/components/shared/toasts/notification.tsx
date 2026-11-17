@@ -80,13 +80,13 @@ function BubbleToastContent(props: {
     const toneClass = (() => {
         switch (variant) {
             case 'success':
-                return 'border-success/40 bg-success-muted text-primary';
+                return 'border-success/40 bg-success-muted text-on-success-muted';
             case 'info':
-                return 'border-info/40 bg-info-muted text-primary';
+                return 'border-info/40 bg-info-muted text-on-info-muted';
             case 'warning':
-                return 'border-warning/40 bg-warning-muted text-primary';
+                return 'border-warning/40 bg-warning-muted text-on-warning-muted';
             case 'error':
-                return 'border-error/40 bg-error-muted text-primary';
+                return 'border-error/40 bg-error-muted text-on-error-muted';
             case 'default':
             default:
                 return 'border-border/80 bg-body/95 text-primary shadow-md';
@@ -101,7 +101,7 @@ function BubbleToastContent(props: {
                     <div className="text-sm leading-relaxed opacity-90 break-words">{message}</div>
                 </div>
                 {count > 1 ? (
-                    <div className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-mono font-semibold leading-4 text-primary/80">
+                    <div className="shrink-0 rounded-full bg-current/10 px-2 py-0.5 text-xs font-mono font-semibold leading-4 text-current">
                         x{count}
                     </div>
                 ) : null}
@@ -111,6 +111,7 @@ function BubbleToastContent(props: {
                             size="sm"
                             variant="ghost"
                             label={action.label}
+                            className="text-current hover:bg-current/10"
                             onClick={() => {
                                 toast.dismiss(id);
                                 action.onClick();

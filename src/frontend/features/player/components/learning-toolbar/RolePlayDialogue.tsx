@@ -46,6 +46,7 @@ export default function RolePlayDialogue({
     const [draft, setDraft] = useState('');
     // 轮次、提交态与错误均按会话键作用域化：切到另一个会话时自动归位，不在 effect 里同步 setState。
     const [submittingKey, setSubmittingKey] = useState<string | null>(null);
+    const [restartingKey, setRestartingKey] = useState<string | null>(null);
     const [errorState, setErrorState] = useState<{ key: string; message: string } | null>(null);
     const [sessionState, setSessionState] = useState<{
         key: string;
@@ -87,6 +88,7 @@ export default function RolePlayDialogue({
     }, [sessionKey, videoId, fileHash]);
 
     const submitting = submittingKey === sessionKey;
+    const restarting = restartingKey === sessionKey;
     const error = errorState?.key === sessionKey ? errorState.message : null;
 
     // 会话切换后、恢复完成前一律当作「还没有轮次且仍在恢复」，避免闪现上一个会话的对话。
@@ -117,7 +119,7 @@ export default function RolePlayDialogue({
     const handleSubmit = async (value: string) => {
         const response = value.trim();
         const partnerLine = nextLine.next;
-        if (!response || !partnerLine || submitting) {
+        if (!response || !partnerLine || submitting || restarting) {
             return;
         }
         const submitEpoch = ++submitEpochRef.current;
@@ -166,6 +168,26 @@ export default function RolePlayDialogue({
         } finally {
             if (submitEpochRef.current === submitEpoch) {
                 setSubmittingKey((cur) => (cur === sessionKey ? null : cur));
+            }
+        }
+    };
+
+    const handleRestart = async () => {
+        if (submitting || restarting) return;
+        const restartEpoch = ++submitEpochRef.current;
+        setRestartingKey(sessionKey);
+        setErrorState(null);
+        try {
+            await learningDataApi.resetRolePlaySession?.({ sessionKey, videoId, fileHash });
+            if (submitEpochRef.current !== restartEpoch) return;
+            setSessionState({ key: sessionKey, turns: [], restored: true });
+            setDraft('');
+        } catch {
+            if (submitEpochRef.current !== restartEpoch) return;
+            setErrorState({ key: sessionKey, message: t('rolePlayFailed') });
+        } finally {
+            if (submitEpochRef.current === restartEpoch) {
+                setRestartingKey((cur) => (cur === sessionKey ? null : cur));
             }
         }
     };
@@ -233,12 +255,12 @@ export default function RolePlayDialogue({
                         placeholder={t('rolePlayPlaceholder')}
                         density="compact"
                         elevation="none"
-                        isDisabled={submitting}
+                        isDisabled={submitting || restarting}
                         status={error ? { type: 'error', message: error } : undefined}
                     />
                 </div>
             ) : (
-                <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+                <div className="mt-2.5 flex flex-col gap-1 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
                     <Text type="supporting" color="secondary">
                         {restored
                             ? reachedLimit
@@ -246,6 +268,11 @@ export default function RolePlayDialogue({
                                 : t('rolePlayEnded')
                             : t('rolePlayRestoring')}
                     </Text>
+                    {error && (
+                        <p role="alert" className="text-metadata text-error-text">
+                            {error}
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -253,17 +280,11 @@ export default function RolePlayDialogue({
                 <button
                     type="button"
                     data-testid="learning-role-play-restart"
-                    disabled={submitting}
-                    onClick={() => {
-                        if (submitting) return;
-                        submitEpochRef.current += 1;
-                        setSessionState({ key: sessionKey, turns: [], restored: true });
-                        setDraft('');
-                        setErrorState(null);
-                    }}
-                    className="mt-2 flex h-7 items-center gap-1.5 rounded-lg px-2 text-metadata text-secondary transition-colors hover:bg-muted/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={submitting || restarting}
+                    onClick={() => { void handleRestart(); }}
+                    className="mt-2 flex h-7 items-center gap-1.5 rounded-lg px-2 text-metadata text-secondary transition-colors hover:bg-muted/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw className="h-3.5 w-3.5" />
                     {t('rolePlayRestart')}
                 </button>
             )}
@@ -340,7 +361,7 @@ function RolePlayTurnFeedback({
                     className={cn(
                         'rounded-md px-1.5 py-0.5 text-metadata font-medium',
                         level === 'great' && 'bg-success/10 text-success-text',
-                        level === 'good' && 'bg-warning-muted/60 text-warning-text',
+                        level === 'good' && 'bg-warning-muted text-on-warning-muted',
                         level === 'retry' && 'bg-muted text-secondary',
                     )}
                 >

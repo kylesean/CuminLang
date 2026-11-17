@@ -1,8 +1,9 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
+import { toast } from 'react-hot-toast';
 import type { ServiceCredentialSettingFormValues } from '@/common/types/vo/service-credentials-setting-vo';
 import { CLOUD_AI_PROVIDER_PRESETS } from '@/common/constants/cloud-ai-provider-presets';
 import { OpenAiCredentialCard } from '../components/OpenAiCredentialCard';
@@ -42,6 +43,7 @@ const translationDict: Record<string, string> = {
     'serviceCredentials.openai.providerNamePlaceholder': '如 DeepSeek、本地 AI',
     'serviceCredentials.openai.copyLink': '复制链接',
     'serviceCredentials.openai.openInBrowser': '在浏览器中打开',
+    'common.saveFailed': '保存失败',
     'common.delete': '删除',
     'common.cancel': '取消',
 };
@@ -83,23 +85,39 @@ const buildDefaultValues = (
     },
 });
 
-const renderCard = (defaultValues: ServiceCredentialSettingFormValues) => {
+const renderCard = (
+    defaultValues: ServiceCredentialSettingFormValues,
+    overrides?: {
+        onTestModel?: (model: string, providerId?: string) => void;
+        onFlushCredentials?: () => Promise<void>;
+    },
+) => {
+    let latestValues: () => ServiceCredentialSettingFormValues = () => defaultValues;
     const Wrapper: React.FC = () => {
         const form = useForm<ServiceCredentialSettingFormValues>({ defaultValues });
+        latestValues = form.getValues;
         return (
             <OpenAiCredentialCard
                 form={form}
                 testingModel={null}
                 testResults={{}}
-                onTestModel={() => undefined}
+                onTestModel={overrides?.onTestModel ?? (() => undefined)}
                 onModelRemoved={() => undefined}
+                onFlushCredentials={overrides?.onFlushCredentials}
                 onCopy={() => undefined}
                 onOpenUrl={() => undefined}
             />
         );
     };
-    return render(<Wrapper />);
+    return {
+        ...render(<Wrapper />),
+        getValues: () => latestValues(),
+    };
 };
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
 
 describe('OpenAiCredentialCard', () => {
     it('点击「使用预设」打开弹窗并列出全部厂商预设', async () => {
@@ -226,5 +244,158 @@ describe('OpenAiCredentialCard', () => {
         await user.click(screen.getByRole('button', { name: '移除此配置' }));
         await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '删除' }));
         expect(screen.getByText('暂未配置服务商')).toBeInTheDocument();
+    });
+
+    it('保存或清除 API Key 必须等待落盘 IPC 完成后才提示成功，失败时回滚并保留输入', async () => {
+        const user = userEvent.setup();
+        const successSpy = vi.spyOn(toast, 'success').mockImplementation(() => '');
+        const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '');
+
+        let resolveFlush!: () => void;
+        let rejectFlush!: (err: Error) => void;
+        let callCount = 0;
+        const onFlushCredentials = vi.fn(() => {
+            callCount += 1;
+            if (callCount === 1) {
+                return new Promise<void>((_, reject) => {
+                    rejectFlush = reject;
+                });
+            }
+            return new Promise<void>((resolve) => {
+                resolveFlush = resolve;
+            });
+        });
+
+        const { getValues } = renderCard(buildDefaultValues(), { onFlushCredentials });
+        const keyInput = screen.getByPlaceholderText('sk-...');
+        await user.type(keyInput, 'sk-pending-1234');
+        await user.click(screen.getByRole('button', { name: '保存' }));
+
+        // 在途期间未提前弹出成功提示
+        expect(onFlushCredentials).toHaveBeenCalledTimes(1);
+        expect(successSpy).not.toHaveBeenCalled();
+
+        // 首次落盘失败：不弹成功提示、保留草稿、并把表单状态回滚到未保存前
+        rejectFlush(new Error('disk full'));
+        await waitFor(() => expect(errorSpy).toHaveBeenCalledTimes(1));
+        expect(successSpy).not.toHaveBeenCalled();
+        expect(keyInput).toHaveValue('sk-pending-1234');
+        expect(getValues().openai.hasKey).toBe(false);
+
+        // 重试并落盘成功：落盘完成前仍未弹成功，落盘完成后清空草稿并弹成功提示
+        await user.click(screen.getByRole('button', { name: '保存' }));
+        expect(successSpy).not.toHaveBeenCalled();
+        resolveFlush();
+        await waitFor(() => expect(successSpy).toHaveBeenCalledWith('API Key 已保存'));
+        expect(keyInput).toHaveValue('');
+        expect(getValues().openai.hasKey).toBe(true);
+
+        // 清除 Key 同样等待落盘完成，失败时不误报已清除
+        callCount = 0;
+        await user.click(screen.getByRole('button', { name: '清除' }));
+        expect(successSpy).toHaveBeenCalledTimes(1);
+        rejectFlush(new Error('save failed'));
+        await waitFor(() => expect(errorSpy).toHaveBeenCalledTimes(2));
+        expect(successSpy).toHaveBeenCalledTimes(1);
+        expect(getValues().openai.hasKey).toBe(true);
+    });
+
+    it('输入 API Key 后直接点击测试会先提交草稿并等待落盘，再触发模型连通性测试', async () => {
+        const user = userEvent.setup();
+        const events: string[] = [];
+        let flushedKey = '';
+        let getValuesRef: (() => ServiceCredentialSettingFormValues) | null = null;
+        const onFlushCredentials = vi.fn(async () => {
+            flushedKey = getValuesRef?.().openai.key ?? '';
+            events.push(`flush:${flushedKey}`);
+        });
+        const onTestModel = vi.fn((model: string) => {
+            events.push(`test:${model}`);
+        });
+
+        const rendered = renderCard(buildDefaultValues({
+            endpoint: 'https://api.deepseek.com/v1',
+            models: ['deepseek-chat'],
+        }), { onFlushCredentials, onTestModel });
+        getValuesRef = rendered.getValues;
+
+        const keyInput = screen.getByPlaceholderText('sk-...');
+        await user.type(keyInput, 'sk-direct-test-9999');
+
+        const row = screen.getByTestId('model-row-deepseek-chat');
+        await user.click(within(row).getByRole('button', { name: '测试' }));
+
+        await waitFor(() => expect(onTestModel).toHaveBeenCalledWith('deepseek-chat', undefined));
+        expect(events).toEqual(['flush:sk-direct-test-9999', 'test:deepseek-chat']);
+        expect(keyInput).toHaveValue('');
+    });
+
+    it('保存密钥在途期间切换服务商标签并修改其他字段，保存失败只回滚原服务商密钥，不串台也不丢并发编辑', async () => {
+        const user = userEvent.setup();
+        vi.spyOn(toast, 'success').mockImplementation(() => '');
+        const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '');
+
+        let rejectFlush!: (err: Error) => void;
+        const onFlushCredentials = vi.fn(() => new Promise<void>((_, reject) => {
+            rejectFlush = reject;
+        }));
+
+        const { getValues } = renderCard(buildDefaultValues({
+            activeProviderId: 'deepseek',
+            endpoint: 'https://api.deepseek.com/v1',
+            providers: [
+                {
+                    id: 'deepseek',
+                    name: 'DeepSeek',
+                    apiFormat: 'openai',
+                    endpoint: 'https://api.deepseek.com/v1',
+                    hasKey: false,
+                    keyHint: '',
+                    key: '',
+                    clearKey: false,
+                    models: ['deepseek-chat'],
+                    disabledModels: [],
+                },
+                {
+                    id: 'openai',
+                    name: 'OpenAI',
+                    apiFormat: 'openai-responses',
+                    endpoint: 'https://api.openai.com/v1',
+                    hasKey: true,
+                    keyHint: '••••8888',
+                    key: '',
+                    clearKey: false,
+                    models: ['gpt-4o'],
+                    disabledModels: [],
+                },
+            ],
+        }), { onFlushCredentials });
+
+        const keyInput = screen.getByPlaceholderText('sk-...');
+        await user.type(keyInput, 'sk-deepseek-failing');
+        await user.click(screen.getByRole('button', { name: '保存' }));
+        expect(onFlushCredentials).toHaveBeenCalledTimes(1);
+
+        // 保存仍在途时切到 OpenAI 标签，并修改 OpenAI 的接口地址
+        await user.click(screen.getByTestId('provider-tab-openai'));
+        const endpointInput = screen.getByDisplayValue('https://api.openai.com/v1');
+        await user.clear(endpointInput);
+        await user.type(endpointInput, 'https://proxy.openai.example/v1');
+
+        // DeepSeek 的保存请求失败：应只回滚 DeepSeek 的凭据，不切回标签，不覆盖 OpenAI 的当前值与编辑
+        rejectFlush(new Error('network error'));
+        await waitFor(() => expect(errorSpy).toHaveBeenCalledTimes(1));
+
+        const values = getValues();
+        expect(values.openai.activeProviderId).toBe('openai');
+        expect(values.openai.endpoint).toBe('https://proxy.openai.example/v1');
+        expect(values.openai.hasKey).toBe(true);
+        expect(values.openai.keyHint).toBe('••••8888');
+        const deepseek = values.openai.providers?.find((p) => p.id === 'deepseek');
+        const openai = values.openai.providers?.find((p) => p.id === 'openai');
+        expect(deepseek?.hasKey).toBe(false);
+        expect(deepseek?.key).toBe('');
+        expect(openai?.endpoint).toBe('https://proxy.openai.example/v1');
+        expect(screen.getByDisplayValue('https://proxy.openai.example/v1')).toBeInTheDocument();
     });
 });

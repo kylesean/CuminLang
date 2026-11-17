@@ -77,17 +77,17 @@ const ServiceResourceSetting: React.FC = () => {
     const { t } = useI18nTranslation('settings');
     const navigate = useNavigate();
 
-    const { data: settings } = useSWR(
+    const { data: settings, error: settingsError } = useSWR(
         'settings/service-credentials/detail',
         () => settingsApi.getServiceCredentials(),
         SETTINGS_DETAIL_SWR_OPTIONS,
     );
-    const { data: engineSettings } = useSWR(
+    const { data: engineSettings, error: engineSettingsError } = useSWR(
         'settings/engine-selection/detail',
         () => settingsApi.getEngineSelection(),
         SETTINGS_DETAIL_SWR_OPTIONS,
     );
-    const { data: resourceStatus, mutate: refreshResourceStatus } = useSWR(
+    const { data: resourceStatus, error: resourceStatusError, mutate: refreshResourceStatus } = useSWR(
         'settings/resource-status/detail',
         () => settingsApi.getResourceStatus(),
     );
@@ -104,10 +104,9 @@ const ServiceResourceSetting: React.FC = () => {
 
     const {
         ready: credentialReady,
-        saving: credentialSaving,
         error: credentialSaveError,
         initialize: initializeCredentials,
-        flush: flushCredentials,
+        flushSettled: flushCredentials,
     } = useAutoSaveSettingsForm<ServiceCredentialSettingFormValues>({
         form: credentialForm,
         detailKey: 'settings/service-credentials/detail',
@@ -328,6 +327,22 @@ const ServiceResourceSetting: React.FC = () => {
             : []),
     ], [modelOptionItems, availableModels, sentenceLearningValue, t]);
 
+    const loadError = settingsError ?? engineSettingsError ?? resourceStatusError;
+    if (loadError && (!settings || !engineSettings || !resourceStatus)) {
+        return (
+            <SettingsPageShell
+                title={t('resources.title')}
+                description={t('resources.description')}
+            >
+                <Banner
+                    role="alert"
+                    status="error"
+                    title={loadError instanceof Error ? loadError.message : String(loadError)}
+                />
+            </SettingsPageShell>
+        );
+    }
+
     if (!credentialReady || !preferenceReady || !resourceStatus) {
         return (
             <SettingsLoadingSkeleton
@@ -354,10 +369,10 @@ const ServiceResourceSetting: React.FC = () => {
 
             <VStack gap={6} width="100%">
                 {credentialSaveError && (
-                    <Banner status="error" title={credentialSaveError} />
+                    <Banner role="alert" status="error" title={credentialSaveError} />
                 )}
                 {preferenceSaveError && (
-                    <Banner status="error" title={preferenceSaveError} />
+                    <Banner role="alert" status="error" title={preferenceSaveError} />
                 )}
 
                 {activeTab === 'local' && (
@@ -570,9 +585,9 @@ const ServiceResourceSetting: React.FC = () => {
                                 testResults={openAiTestResults}
                                 onTestModel={(model, providerId) => testOpenAiModel(model, providerId).catch(() => null)}
                                 onModelRemoved={forgetOpenAiTestResult}
+                                onFlushCredentials={flushCredentials}
                                 onCopy={(text) => copyText(text).catch(() => null)}
                                 onOpenUrl={(url) => openUrl(url).catch(() => null)}
-                                disabled={credentialSaving}
                             />
                         </SettingSection>
                     </VStack>

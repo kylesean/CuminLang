@@ -1,10 +1,22 @@
 import type { RegisterRendererApi } from '@/frontend/infrastructure/electron/rendererApiRegistry';
 import type { RendererApiDefinitions } from '@/common/api/renderer-api-def';
 
+/** 离线归档模型下载来源，用于避免并发下载时进度事件互相串台。 */
+export type ArchiveProgressSource =
+    | 'tts'
+    | 'whisper-cpp'
+    | 'parakeet'
+    | 'diarization'
+    | 'phonemeGop'
+    | 'senseVoice';
+
 /**
  * 离线模型归档下载解压进度事件负载。
  */
-export type ArchiveDownloadProgressEvent = RendererApiDefinitions['settings/sherpa-tts-model-download-progress']['params'];
+export type ArchiveDownloadProgressEvent =
+    RendererApiDefinitions['settings/sherpa-tts-model-download-progress']['params'] & {
+        source?: ArchiveProgressSource;
+    };
 
 /**
  * 语义向量模型下载进度事件负载。
@@ -60,27 +72,27 @@ export function registerSettingsRendererApis(register: RegisterRendererApi): voi
     };
 
     register('settings/parakeet-model-download-progress', async (params) => {
-        notifyArchive(params);
+        notifyArchive({ ...params, source: 'parakeet' });
     });
 
     register('settings/speaker-diarization-model-download-progress', async (params) => {
-        notifyArchive(params);
+        notifyArchive({ ...params, source: 'diarization' });
     });
 
     register('settings/sherpa-tts-model-download-progress', async (params) => {
-        notifyArchive(params);
+        notifyArchive({ ...params, source: 'tts' });
     });
 
     register('settings/whisper-cpp-model-download-progress', async (params) => {
-        notifyArchive(params);
+        notifyArchive({ ...params, source: 'whisper-cpp' });
     });
 
     register('settings/phoneme-gop-model-download-progress', async (params) => {
-        notifyArchive(params);
+        notifyArchive({ ...params, source: 'phonemeGop' });
     });
 
     register('settings/sense-voice-model-download-progress', async (params) => {
-        notifyArchive(params);
+        notifyArchive({ ...params, source: 'senseVoice' });
     });
 
     register('settings/embedding-model-download-progress', async (params) => {

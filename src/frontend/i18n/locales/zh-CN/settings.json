@@ -97,6 +97,14 @@
         "bypassRulesTitle": "直连规则",
         "bypassRulesDescription": "逗号分隔的域名/IP/CIDR，命中这些地址不走代理（如 localhost,127.0.0.1）",
         "directConnectionWarning": "未检测到有效代理：YouTube 下载等外部网络请求可能直连失败。如需代理，请选择「自定义」并填写代理地址。",
+        "validation": {
+            "missingScheme": "代理地址缺少协议前缀（例如 http://、https:// 或 socks5://）",
+            "unsupportedScheme": "代理协议不受支持，仅支持 http://、https://、socks5:// 与 socks4://",
+            "invalidUrl": "代理地址格式无效，请检查协议、主机与端口",
+            "missingHost": "代理地址缺少主机名或 IP",
+            "missingSocksPort": "SOCKS 代理地址必须包含有效端口（例如 socks5://127.0.0.1:1080）",
+            "invalidPort": "代理端口必须在 1–65535 之间"
+        },
         "sections": {
             "connection": "连接方式",
             "connectionDesc": "CuminLang 如何访问外部网络"
@@ -271,7 +279,9 @@
         },
         "rerecord": "重新录制",
         "cancel": "取消",
-        "listeningPromptHint": "等待按键输入...（可随时直接按下新按键）"
+        "listeningPromptHint": "等待按键输入...（可随时直接按下新按键）",
+        "reservedConflict": "与系统保留快捷键 {{key}} 冲突",
+        "actionConflict": "与「{{actions}}」冲突"
     },
     "about": {
         "title": "关于与更新",

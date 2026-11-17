@@ -119,7 +119,7 @@ export const SettingField: React.FC<SettingFieldProps> = ({
             justify="between"
             vAlign={alignTop ? 'start' : 'center'}
             data-testid={testId}
-            className="flex-col items-stretch gap-2 @[26rem]:flex-row @[26rem]:items-center @[26rem]:gap-6"
+            className={`flex-col items-stretch gap-2 @[26rem]:flex-row ${alignTop ? '@[26rem]:items-start' : '@[26rem]:items-center'} @[26rem]:gap-6`}
         >
             <StackItem size="fill" className="min-w-0">
                 <VStack gap={0.5} className="min-w-0">
@@ -134,7 +134,7 @@ export const SettingField: React.FC<SettingFieldProps> = ({
                 </VStack>
             </StackItem>
             {children && (
-                <HStack gap={2} vAlign="center" justify="end" className="shrink-0">
+                <HStack gap={2} vAlign="center" justify="end" className="shrink-0 max-w-full">
                     {children}
                 </HStack>
             )}

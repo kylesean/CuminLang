@@ -234,7 +234,16 @@ export function ReviewSessionCanvas({
         [currentCard, submitting, primaryContext, onRated, t],
     );
 
-    // 键盘快捷键：Space 显示答案；1-4 直接评分
+    const handleAdvanceSentence = useCallback((success: boolean) => {
+        stopActiveAudio();
+        if (success) {
+            setSentenceRecalled((prev) => prev + 1);
+        }
+        setSentenceRevealed(false);
+        setSentenceIndex((prev) => prev + 1);
+    }, []);
+
+    // 键盘快捷键：Space 显示答案；1-4（生词）或 1-3（金句）直接评分
     useEffect(() => {
         if (reviewMode === 'sentences') {
             if (!currentReviewSentence || isSentenceCompleted) return;
@@ -249,6 +258,16 @@ export function ReviewSessionCanvas({
                 if (event.code === 'Space' && !sentenceRevealed) {
                     event.preventDefault();
                     setSentenceRevealed(true);
+                    return;
+                }
+                if (sentenceRevealed) {
+                    if (event.key === '1' || event.key === '2') {
+                        event.preventDefault();
+                        handleAdvanceSentence(false);
+                    } else if (event.key === '3') {
+                        event.preventDefault();
+                        handleAdvanceSentence(true);
+                    }
                 }
             };
             window.addEventListener('keydown', onSentenceKeyDown);
@@ -292,20 +311,12 @@ export function ReviewSessionCanvas({
         currentReviewSentence,
         isSentenceCompleted,
         sentenceRevealed,
+        handleAdvanceSentence,
         currentCard,
         isCompleted,
         revealed,
         handleRate,
     ]);
-
-    const handleAdvanceSentence = (success: boolean) => {
-        stopActiveAudio();
-        if (success) {
-            setSentenceRecalled((prev) => prev + 1);
-        }
-        setSentenceRevealed(false);
-        setSentenceIndex((prev) => prev + 1);
-    };
 
     const handlePlayReviewSentence = async (item: SavedSentenceVO) => {
         setPlayingAudio(true);
@@ -342,7 +353,18 @@ export function ReviewSessionCanvas({
                                 })}
                             </Text>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            {sessionCards.length > 0 && !isCompleted && (
+                                <Button
+                                    size="md"
+                                    variant="secondary"
+                                    label={t('contextStudio.reviewModeWords', {
+                                        count: sessionCards.length,
+                                        defaultValue: `生词 (${sessionCards.length})`,
+                                    })}
+                                    onClick={() => setReviewMode('words')}
+                                />
+                            )}
                             <Button
                                 size="md"
                                 variant="secondary"
@@ -487,7 +509,10 @@ export function ReviewSessionCanvas({
                                                 variant="ghost"
                                                 icon={<BookOpenText className="w-3.5 h-3.5" />}
                                                 label={t('contextStudio.openInReader', { defaultValue: '精读全文' })}
-                                                onClick={() => navigate(`/reader/${currentReviewSentence.videoId}?sentence=${currentReviewSentence.sentenceIndex}`)}
+                                                onClick={() => {
+                                                    stopActiveAudio();
+                                                    navigate(`/reader/${currentReviewSentence.videoId}?sentence=${currentReviewSentence.sentenceIndex}`);
+                                                }}
                                             />
                                         )}
                                     </div>
@@ -497,6 +522,8 @@ export function ReviewSessionCanvas({
                                         size="md"
                                         variant="destructive"
                                         className="justify-center"
+                                        aria-keyshortcuts="1"
+                                        tooltip="1"
                                         label={t('contextStudio.sentenceRateMiss', { defaultValue: '没想起' })}
                                         onClick={() => handleAdvanceSentence(false)}
                                     />
@@ -504,6 +531,8 @@ export function ReviewSessionCanvas({
                                         size="md"
                                         variant="secondary"
                                         className="justify-center"
+                                        aria-keyshortcuts="2"
+                                        tooltip="2"
                                         label={t('contextStudio.sentenceRateHesitated', { defaultValue: '有点卡壳' })}
                                         onClick={() => handleAdvanceSentence(false)}
                                     />
@@ -511,6 +540,8 @@ export function ReviewSessionCanvas({
                                         size="md"
                                         variant="primary"
                                         className="justify-center"
+                                        aria-keyshortcuts="3"
+                                        tooltip="3"
                                         label={t('contextStudio.sentenceRateFluent', { defaultValue: '脱口而出' })}
                                         onClick={() => handleAdvanceSentence(true)}
                                     />
@@ -616,13 +647,31 @@ export function ReviewSessionCanvas({
                         </p>
                     )}
 
-                    <Button
-                        size="md"
-                        variant="primary"
-                        icon={<ArrowLeft className="w-4 h-4" />}
-                        label={t('contextStudio.backToWorkspace', { defaultValue: '返回工作台' })}
-                        onClick={onExit}
-                    />
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                        {sessionSentences.length > 0 && !topicLabel && (
+                            <Button
+                                size="md"
+                                variant="secondary"
+                                label={t('contextStudio.practiceSavedSentencesCta', {
+                                    count: sessionSentences.length,
+                                    defaultValue: `练练收藏金句 (${sessionSentences.length})`,
+                                })}
+                                onClick={() => {
+                                    setSentenceIndex(0);
+                                    setSentenceRecalled(0);
+                                    setSentenceRevealed(false);
+                                    setReviewMode('sentences');
+                                }}
+                            />
+                        )}
+                        <Button
+                            size="md"
+                            variant="primary"
+                            icon={<ArrowLeft className="w-4 h-4" />}
+                            label={t('contextStudio.backToWorkspace', { defaultValue: '返回工作台' })}
+                            onClick={onExit}
+                        />
+                    </div>
                 </div>
             </Card>
         );
@@ -827,12 +876,13 @@ export function ReviewSessionCanvas({
                                                 <button
                                                     type="button"
                                                     onClick={() => {
+                                                        stopActiveAudio();
                                                         const query = primaryContext.sentenceIndex !== undefined
                                                             ? `?sentence=${primaryContext.sentenceIndex}`
                                                             : '';
                                                         navigate(`/reader/${primaryContext.videoId}${query}`);
                                                     }}
-                                                    className="inline-flex items-center gap-1 text-metadata text-accent hover:underline cursor-pointer"
+                                                    className="inline-flex items-center gap-1 rounded-sm text-metadata text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                                                 >
                                                     <BookOpenText className="w-3.5 h-3.5" />
                                                     <span>{t('contextStudio.openInReader', { defaultValue: '精读全文' })}</span>
@@ -840,12 +890,13 @@ export function ReviewSessionCanvas({
                                                 <button
                                                     type="button"
                                                     onClick={() => {
+                                                        stopActiveAudio();
                                                         const tParam = primaryContext.startTime !== undefined
                                                             ? `?t=${Math.floor(primaryContext.startTime)}`
                                                             : '';
                                                         navigate(`/player/${primaryContext.videoId}${tParam}`);
                                                     }}
-                                                    className="inline-flex items-center gap-1 text-metadata text-accent hover:underline cursor-pointer"
+                                                    className="inline-flex items-center gap-1 rounded-sm text-metadata text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                                                 >
                                                     <ExternalLink className="w-3.5 h-3.5" />
                                                     <span>{t('contextStudio.openInPlayer', { defaultValue: '定位播放' })}</span>

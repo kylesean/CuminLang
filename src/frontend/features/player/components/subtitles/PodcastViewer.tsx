@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion, useSpring } from 'framer-motion';
 import { AudioLines, BookOpen, Eye, EyeOff } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
@@ -15,6 +15,7 @@ import SourceBadge from './SourceBadge';
 import SubtitleGenerationPanel from '@/frontend/features/player/components/srt-layout/SubtitleGenerationPanel';
 import StrUtil from '@/common/utils/str-util';
 import FuncUtil from '@/common/utils/func-util';
+import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 import useTranslation from '@/frontend/features/player/translationStore';
 
 const AUDIO_PULSE_BARS = [
@@ -205,8 +206,9 @@ const PodcastViewer = ({ className }: { className?: string }) => {
     const [hoverPeeking, setHoverPeeking] = useState(false);
     const [keyPeeking, setKeyPeeking] = useState(false);
     const [peekLockedKey, setPeekLockedKey] = useState<string | null>(null);
+    const wordPopoverOpen = useWordPopoverStore((s) => s.open);
     const isPeekLocked = current !== null && peekLockedKey === current.key;
-    const isCurrentRevealed = !podcastBlindMode || hoverPeeking || keyPeeking || isPeekLocked;
+    const isCurrentRevealed = !podcastBlindMode || hoverPeeking || keyPeeking || isPeekLocked || wordPopoverOpen;
 
     useEffect(() => {
         const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -258,18 +260,32 @@ const PodcastViewer = ({ className }: { className?: string }) => {
         ? sentences.findIndex((x) => x.index === current.index && x.fileHash === current.fileHash)
         : -1;
 
-    // 零延迟测量：将当前焦点句几何中心对齐到扣除底部控制条后的可用视口焦点区
-    useLayoutEffect(() => {
-        if (!current || !viewerContainerRef.current || !activeItemRef.current) return;
+    const recenterActiveSentence = useCallback(() => {
+        if (!viewerContainerRef.current || !activeItemRef.current) return;
         const container = viewerContainerRef.current;
         const activeElem = activeItemRef.current;
-
         const availableHeight = Math.max(container.clientHeight - 96, 120);
         const viewportCenter = availableHeight * 0.45;
-
         const targetY = -(activeElem.offsetTop + activeElem.offsetHeight / 2 - viewportCenter);
         springY.set(targetY);
-    }, [current, newTranslation, showCn, showSourceZh, podcastBlindMode, isCurrentRevealed, springY]);
+    }, [springY]);
+
+    // 零延迟测量：将当前焦点句几何中心对齐到扣除底部控制条后的可用视口焦点区
+    useLayoutEffect(() => {
+        if (!current) return;
+        recenterActiveSentence();
+    }, [current, newTranslation, showCn, showSourceZh, podcastBlindMode, isCurrentRevealed, recenterActiveSentence]);
+
+    // 容器尺寸变化（如窗口缩放、展开/收起侧栏文稿）时自动重算居中位置
+    useEffect(() => {
+        const container = viewerContainerRef.current;
+        if (!container || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(() => {
+            recenterActiveSentence();
+        });
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, [recenterActiveSentence]);
 
     if (!current || !srtTender) {
         return (
@@ -402,7 +418,7 @@ const PodcastViewer = ({ className }: { className?: string }) => {
                                                     setPeekLockedKey(null);
                                                     setHoverPeeking(false);
                                                 }}
-                                                className="mt-3 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs text-secondary hover:bg-muted hover:text-primary transition-colors cursor-pointer"
+                                                className="mt-3 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs text-secondary hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring transition-colors cursor-pointer"
                                             >
                                                 <EyeOff className="h-3 w-3" />
                                                 <span>{t('podcast.blindHide')}</span>

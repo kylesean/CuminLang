@@ -78,6 +78,7 @@ export default function SubtitleGenerationPanel() {
                     <Button
                         variant="secondary"
                         label={t('subtitleGeneration.cancel')}
+                        isLoading={cancelling}
                         isDisabled={cancelling || taskId === undefined}
                         onClick={() => void cancel()}
                     />

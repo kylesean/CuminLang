@@ -21,8 +21,11 @@ import { apiPath } from '@/frontend/lib/swr-util';
 import {
     ChevronsDown,
     Clock,
+    Loader2,
     Play,
+    RotateCcw,
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import FolderSelector, { FolderSelectAction } from '@/frontend/features/file-browser/components/FolderSelector';
 import FileSelector, { FileAction } from '@/frontend/features/file-browser/components/FileSelector';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
@@ -32,6 +35,7 @@ import { DailyStudyPulse } from '@/frontend/features/file-browser/components/Dai
 import YoutubeImportHero from '@/frontend/features/youtube-import/YoutubeImportHero';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import ContentCompassSection from '@/frontend/features/content-compass/ContentCompassSection';
+import { useReviewDockStore } from '@/frontend/features/player/components/learning-toolbar/reviewDockStore';
 
 const logger = getRendererLogger('HomePage');
 
@@ -43,14 +47,37 @@ const HomePage = () => {
     const navigate = useNavigate();
     const changeSideBar = useLayout((s) => s.changeSideBar);
     const sidebarCollapsed = useLayout((s) => s.sidebarCollapsed);
+    const navigatingRef = React.useRef(false);
 
     async function handleClickById(vId: string) {
-        await fileBrowserApi.changeWindowSize('player');
-        changeSideBar(false);
-        navigate(`/player/${vId}`);
+        if (navigatingRef.current) return;
+        navigatingRef.current = true;
+        try {
+            await fileBrowserApi.changeWindowSize('player');
+            changeSideBar(false);
+            navigate(`/player/${vId}`);
+        } catch (error) {
+            const dockState = useReviewDockStore.getState();
+            if (dockState.requestId > dockState.consumedId && dockState.scope?.videoId === vId) {
+                dockState.consume(dockState.requestId);
+                dockState.clearScope();
+            }
+            logger.warn('failed to open player', {
+                videoId: vId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            toast.error(error instanceof Error ? error.message : tc('openMediaFailed'));
+        } finally {
+            navigatingRef.current = false;
+        }
     }
 
-    const { data: vpsBasic } = useSWR(
+    const {
+        data: vpsBasic,
+        error: vpsBasicError,
+        isLoading: vpsBasicLoading,
+        mutate: mutateBasic,
+    } = useSWR(
         apiPath('watch-history/list/basic'),
         fileBrowserApi.listBasicWatchHistory,
         { revalidateOnMount: true, dedupingInterval: 0 }
@@ -60,6 +87,7 @@ const HomePage = () => {
         data: vpsFull,
         error: vpsFullError,
         isValidating: vpsFullValidating,
+        mutate: mutateFull,
     } = useSWR(
         fullHistoryReady ? apiPath('watch-history/list') : null,
         fileBrowserApi.listWatchHistory,
@@ -90,7 +118,11 @@ const HomePage = () => {
     const rest = vps?.slice(3, num + 3);
 
     useEffect(() => {
-        fileBrowserApi.changeWindowSize('home').then();
+        void fileBrowserApi.changeWindowSize('home').catch((error) => {
+            logger.warn('failed to resize home window', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
         clear();
     }, [clear]);
 
@@ -118,7 +150,9 @@ const HomePage = () => {
         };
     }, []);
 
-    const hasHistory = vps && vps.length > 0;
+    const isInitialLoading = vps === undefined && !vpsBasicError && vpsBasicLoading;
+    const isInitialError = vps === undefined && Boolean(vpsBasicError);
+    const hasHistory = Boolean(vps && vps.length > 0);
 
     return (
         <Layout
@@ -140,7 +174,32 @@ const HomePage = () => {
             }
             content={
                 <LayoutContent isScrollable padding={6}>
-                    {hasHistory ? (
+                    {isInitialLoading ? (
+                        <Center height="100%" minHeight={420}>
+                            <HStack gap={2} vAlign="center" className="text-secondary text-sm">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>{tc('loading')}</span>
+                            </HStack>
+                        </Center>
+                    ) : isInitialError ? (
+                        <Center height="100%" minHeight={420}>
+                            <VStack gap={3} hAlign="center">
+                                <Text type="body" color="secondary">
+                                    {tc('watchHistoryLoadFailed')}
+                                </Text>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={<RotateCcw className="h-3.5 w-3.5" />}
+                                    label={tc('retry')}
+                                    onClick={() => {
+                                        void mutateBasic();
+                                        void mutateFull();
+                                    }}
+                                />
+                            </VStack>
+                        </Center>
+                    ) : hasHistory ? (
                         <VStack gap={6} width="100%">
                             {/* 顶部快速打开区域：紧凑工具条 */}
                             <Card variant="default" padding={3}>
@@ -157,11 +216,9 @@ const HomePage = () => {
                                         </div>
                                         <div className="w-36">
                                             <FolderSelector
-                                                onSelected={FolderSelectAction.defaultAction2(async (vid) => {
-                                                    await fileBrowserApi.changeWindowSize('player');
-                                                    changeSideBar(false);
-                                                    navigate(`/player/${vid}`);
-                                                })}
+                                                onSelected={(files) => FolderSelectAction.defaultAction2((id) => {
+                                                    void handleClickById(id);
+                                                })(files)}
                                             />
                                         </div>
                                         <YoutubeImportButton />

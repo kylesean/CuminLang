@@ -59,6 +59,12 @@ export const learningDataApi = {
         backendClient.call('learning-data/role-play-session', params),
 
     /**
+     * 清空某个多轮场景对话的已落库轮次。
+     */
+    resetRolePlaySession: (params: RolePlaySessionParams) =>
+        backendClient.call('learning-data/role-play-session-reset', params),
+
+    /**
      * 读取某个视频下最近的复述 / 角色扮演结果，用于展示「上次结果」。
      */
     listProductionPractice: (params: ProductionPracticeListParams) =>

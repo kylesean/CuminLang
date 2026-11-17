@@ -125,11 +125,29 @@ describe('ContentCompassSection', () => {
         fireEvent.click(await screen.findByText('reviewDue'));
 
         expect(useReviewDockStore.getState().requestId).toBe(1);
+        expect(useReviewDockStore.getState().scope).toEqual({
+            videoId: 'video-1',
+            words: ['journey'],
+        });
         expect(onSelected).toHaveBeenCalledWith('video-1');
         expect(contentCompassApi.recordEvent).toHaveBeenCalledWith(expect.objectContaining({
             videoId: 'video-1',
             action: 'reviewed',
             reasonCode: 'due_review',
         }));
+    });
+
+    it('点击不感兴趣后会持久化隐藏记录，重新挂载后仍保持已隐藏', async () => {
+        window.localStorage.clear();
+        const { unmount } = render(<ContentCompassSection onSelected={() => undefined} />);
+
+        const dismissButtons = await screen.findAllByRole('button', { name: 'dismiss' });
+        fireEvent.click(dismissButtons[0]);
+        expect(screen.queryByText('A Quiet Journey')).toBeNull();
+
+        unmount();
+        render(<ContentCompassSection onSelected={() => undefined} />);
+        expect(await screen.findByText('Slow English')).toBeDefined();
+        expect(screen.queryByText('A Quiet Journey')).toBeNull();
     });
 });

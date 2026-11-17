@@ -31,6 +31,7 @@ import {
 import type { EngineSelectionSettingVO } from '@/common/types/vo/engine-selection-setting-vo';
 import type { ShortcutSettingDetailVO, ShortcutSettingSaveVO } from '@/common/types/vo/shortcut-setting-vo';
 import type { ProxySettingDetailVO, ProxySettingSaveVO } from '@/common/contracts/proxy-setting-vo';
+import { validateCustomProxyUrl } from '@/common/utils/proxy-url';
 import {
     APPEARANCE_THEME_FAMILIES,
     type AppearanceSettingVO,
@@ -974,9 +975,16 @@ export class SettingServiceImpl implements SettingService {
      */
     public async saveProxySettings(settings: ProxySettingSaveVO): Promise<void> {
         const mode = this.requireEnumValue(settings.mode, ['system', 'custom', 'none'] as const, 'proxy.mode');
+        const trimmedUrl = settings.url.trim();
+        if (mode === 'custom' && trimmedUrl.length > 0) {
+            const check = validateCustomProxyUrl(trimmedUrl);
+            if (!check.valid) {
+                throw new Error(check.message);
+            }
+        }
         this.logger.info('update proxy settings', { mode, host: this.extractProxyHost(settings.url) });
         await this.setValue('proxy.mode', mode);
-        await this.setValue('proxy.url', settings.url);
+        await this.setValue('proxy.url', mode === 'custom' ? trimmedUrl : settings.url);
         await this.setValue('proxy.bypass_rules', settings.bypassRules);
     }
 

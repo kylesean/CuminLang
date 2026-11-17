@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/refs -- Astryx usePopover 把 triggerRef/triggerProps/render 作为渲染期 API 返回，会被 refs 规则误判 */
-import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { BookOpenCheck, Check, Clapperboard, CornerUpLeft, Loader2, RotateCcw, Volume2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-hot-toast';
@@ -140,7 +140,7 @@ const ReviewCardBody = ({
                         data-testid="review-speak-word"
                         aria-label={t('reviewDock.speakWord', { defaultValue: '发音' })}
                         onClick={() => { void playContextAudio({ text: card.word }); }}
-                        className="shrink-0 rounded-md p-1 text-secondary hover:bg-muted/70 hover:text-primary transition-colors cursor-pointer"
+                        className="shrink-0 rounded-md p-1 text-secondary hover:bg-muted/70 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring transition-colors cursor-pointer"
                     >
                         <Volume2 className="h-4 w-4" />
                     </button>
@@ -170,7 +170,7 @@ const ReviewCardBody = ({
                     onClick={() => onOpenClips(card.word)}
                     className={cn(
                         'mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border/60 bg-muted/25',
-                        'h-8 text-sm font-medium text-primary transition-colors hover:bg-muted/50 cursor-pointer',
+                        'h-8 text-sm font-medium text-primary transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer',
                     )}
                 >
                     <Clapperboard className="h-3.5 w-3.5 text-accent" />
@@ -261,6 +261,7 @@ export default function ReviewDock({
     const navigate = useNavigate();
     const requestId = useReviewDockStore((state) => state.requestId);
     const consumedId = useReviewDockStore((state) => state.consumedId);
+    const requestScope = useReviewDockStore((state) => state.scope);
     const consumeRequest = useReviewDockStore((state) => state.consume);
     const [revealedFor, setRevealedFor] = useState<string | null>(null);
     const revealButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -287,6 +288,7 @@ export default function ReviewDock({
         setPending(false);
         setRevealedFor(null);
         setLastRated(null);
+        useReviewDockStore.getState().clearScope();
         // 关闭即结束本组：下次打开从新的一组开始，不把上次的进度带过来。
         setReviewedWords([]);
     }, []);
@@ -339,6 +341,20 @@ export default function ReviewDock({
         },
     );
 
+    const style = TOOLBAR_TONE[tone];
+    const videoId = usePlaybackSession((state) => state.videoId);
+    const fileHash = usePlaybackSession((state) => state.srtHash);
+    const scopedWords = useMemo(() => {
+        if (
+            requestScope?.words
+            && requestScope.words.length > 0
+            && (!requestScope.videoId || !videoId || requestScope.videoId === videoId)
+        ) {
+            return requestScope.words;
+        }
+        return null;
+    }, [requestScope, videoId]);
+
     const { data, error, isLoading, mutate } = useSWR(
         REVIEW_QUEUE_SWR_KEY,
         () => videoLearningApi.getReviewQueue(),
@@ -348,18 +364,56 @@ export default function ReviewDock({
             shouldRetryOnError: false,
         },
     );
-
-    const style = TOOLBAR_TONE[tone];
-    const videoId = usePlaybackSession((state) => state.videoId);
-    const fileHash = usePlaybackSession((state) => state.srtHash);
+    const scopedWordsKey = scopedWords && scopedWords.length > 0 ? scopedWords.join(',') : null;
+    const {
+        data: scopedQueue,
+        isLoading: scopedLoading,
+        mutate: mutateScoped,
+    } = useSWR(
+        scopedWordsKey ? [REVIEW_QUEUE_SWR_KEY, 'scoped', scopedWordsKey] : null,
+        () => videoLearningApi.getReviewQueue(undefined, scopedWords ?? undefined),
+        {
+            revalidateOnFocus: false,
+            shouldRetryOnError: false,
+        },
+    );
+    const waitingForScopedQueue = Boolean(scopedWordsKey && scopedLoading && !scopedQueue);
     const dueCount = data?.dueCount ?? 0;
+    const orderedItems = useMemo(() => {
+        const baseItems = data?.items ?? [];
+        const priorityItems = scopedQueue?.items ?? [];
+        if (!scopedWords || scopedWords.length === 0) {
+            return baseItems;
+        }
+        const prioritySet = new Set(scopedWords.map((word) => word.toLowerCase()));
+        const mergedMap = new Map<string, ReviewCardVO>();
+        for (const item of priorityItems) {
+            mergedMap.set(item.word.toLowerCase(), item);
+        }
+        for (const item of baseItems) {
+            const key = item.word.toLowerCase();
+            if (!mergedMap.has(key)) {
+                mergedMap.set(key, item);
+            }
+        }
+        const prioritized: ReviewCardVO[] = [];
+        const remainder: ReviewCardVO[] = [];
+        for (const item of mergedMap.values()) {
+            if (prioritySet.has(item.word.toLowerCase())) {
+                prioritized.push(item);
+            } else {
+                remainder.push(item);
+            }
+        }
+        return [...prioritized, ...remainder];
+    }, [data?.items, scopedQueue?.items, scopedWords]);
     /**
      * 当前这一组的进度。
      *
      * 到期词可能远多于一组，这里只取前几张：一组是注意力单位，
      * 用户做完一组就知道自己完成了一小段，而不是面对一条看不到头的队列。
      */
-    const batch = selectReviewBatch(data?.items ?? [], reviewedWords);
+    const batch = selectReviewBatch(orderedItems, reviewedWords);
     const card = batch.card;
     const revealed = card !== null && revealedFor === card.word;
     const hasRetentionSample = (data?.stats.last7Days.reviewed ?? 0) > 0
@@ -369,12 +423,16 @@ export default function ReviewDock({
     useEffect(() => {
         if (requestId > consumedId) {
             consumeRequest(requestId);
+            if (requestScope?.videoId && videoId && requestScope.videoId !== videoId) {
+                useReviewDockStore.getState().clearScope();
+                return;
+            }
             if (!popover.isOpen) {
                 returnToSecRef.current = usePlayer.getState().getExactPlayTime();
                 popover.show();
             }
         }
-    }, [requestId, consumedId, consumeRequest, popover]);
+    }, [requestId, consumedId, consumeRequest, popover, requestScope, videoId]);
 
     const rate = async (rating: ReviewRating) => {
         if (!card || pending) return;
@@ -386,7 +444,10 @@ export default function ReviewDock({
                 videoId: videoId ?? undefined,
                 fileHash: fileHash ?? undefined,
             });
-            await mutate();
+            await Promise.all([
+                mutate(),
+                ...(scopedWordsKey ? [mutateScoped()] : []),
+            ]);
             if (dockEpochRef.current !== epoch) {
                 return;
             }
@@ -439,7 +500,10 @@ export default function ReviewDock({
                 </button>
             </Tooltip>
             {popover.render(
-                <div data-testid="review-dock-panel">
+                <div
+                    data-testid="review-dock-panel"
+                    className="max-h-[min(70vh,480px)] overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full"
+                >
                 <div className="flex items-start justify-between gap-3 px-1 pb-2 pt-1">
                     <div className="min-w-0">
                         <div className="text-sm font-semibold text-primary">{t('reviewDock.title')}</div>
@@ -466,13 +530,13 @@ export default function ReviewDock({
                         <button
                             type="button"
                             onClick={() => { void mutate(); }}
-                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60 cursor-pointer"
+                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                         >
                             <RotateCcw className="h-3.5 w-3.5" />
                             {t('reviewDock.retry')}
                         </button>
                     </div>
-                ) : isLoading && !data ? (
+                ) : (isLoading && !data) || waitingForScopedQueue ? (
                     <div className="flex items-center justify-center gap-2 py-8 text-sm text-secondary">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         {t('reviewDock.loading')}
@@ -535,7 +599,7 @@ export default function ReviewDock({
                                 type="button"
                                 data-testid="review-batch-next"
                                 onClick={() => setReviewedWords([])}
-                                className="mt-1 flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60 cursor-pointer"
+                                className="mt-1 flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                             >
                                 {t('reviewDock.batchNext', { defaultValue: '继续下一组' })}
                             </button>
@@ -552,7 +616,7 @@ export default function ReviewDock({
                                 popover.hide();
                                 navigate('/context-studio?view=review');
                             }}
-                            className="flex h-7 items-center gap-1 rounded-lg px-2 text-metadata text-accent transition-colors hover:bg-muted/60 cursor-pointer"
+                            className="flex h-7 items-center gap-1 rounded-lg px-2 text-metadata text-accent transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                         >
                             {t('reviewDock.openStudioReview', { defaultValue: '进入语境工坊集中复习 →' })}
                         </button>
@@ -560,7 +624,7 @@ export default function ReviewDock({
                             type="button"
                             data-testid="review-dock-return"
                             onClick={returnToPlayback}
-                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-metadata text-secondary transition-colors hover:bg-muted/60 hover:text-primary cursor-pointer"
+                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-metadata text-secondary transition-colors hover:bg-muted/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                         >
                             <CornerUpLeft className="h-3 w-3" />
                             {t('reviewDock.returnToPlayback')}

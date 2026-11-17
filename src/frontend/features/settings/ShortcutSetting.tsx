@@ -505,7 +505,7 @@ const ShortcutSetting: React.FC = () => {
     const { t } = useI18nTranslation('settings');
     const [searchQuery, setSearchQuery] = React.useState('');
 
-    const { data: shortcutValues } = useSWR<ShortcutSettingDetailVO>(
+    const { data: shortcutValues, error: loadError } = useSWR<ShortcutSettingDetailVO>(
         'settings/shortcuts/detail',
         settingsApi.getShortcuts,
         SETTINGS_DETAIL_SWR_OPTIONS,
@@ -634,6 +634,21 @@ const ShortcutSetting: React.FC = () => {
             }))
             .filter((group) => group.items.length > 0);
     }, [groups, searchQuery, watchedShortcuts]);
+
+    if (loadError && !shortcutValues) {
+        return (
+            <SettingsPageShell
+                title={t('shortcut.title')}
+                description={t('shortcut.description')}
+            >
+                <Banner
+                    role="alert"
+                    status="error"
+                    title={loadError instanceof Error ? loadError.message : String(loadError)}
+                />
+            </SettingsPageShell>
+        );
+    }
 
     if (!ready) {
         return (
@@ -776,12 +791,12 @@ const ShortcutRow: React.FC<{
 
     return (
         <HStack justify="between" vAlign="center" gap={6} width="100%" data-testid="shortcut-row">
-            <VStack gap={0.5}>
+            <VStack gap={0.5} className="min-w-0 flex-1">
                 <Text type="body" weight="medium">{title}</Text>
-                <Text type="supporting" color="secondary">{description}</Text>
+                <Text type="supporting" color="secondary" className="break-words">{description}</Text>
             </VStack>
 
-            <HStack gap={2} vAlign="center" justify="end">
+            <HStack gap={2} vAlign="center" justify="end" className="shrink-0">
                 <button
                     type="button"
                     aria-haspopup="dialog"

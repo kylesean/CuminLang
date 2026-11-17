@@ -728,4 +728,53 @@ describe('ScriptReaderPage - Refactored Book & Inspector Intensive Studio', () =
         expect(screen.queryByTestId('script-sentence-row-0')).toBeNull();
         expect(screen.getByTestId('script-sentence-row-2')).toBeDefined();
     });
+
+    it('文稿目录抽屉支持空搜索提示与 Escape 键关闭', async () => {
+        mockListReaderDocuments.mockResolvedValueOnce([
+            {
+                videoId: 'v-drawer',
+                title: 'First Talk',
+                srtFile: '/tmp/first.srt',
+                videoPath: '/tmp/first.mp4',
+                updatedAt: '2026-11-17T00:00:00Z',
+                mediaType: 'video',
+                hasSubtitle: true,
+            },
+        ]);
+        mockParseSubtitleToSentences.mockResolvedValue({
+            fileHash: 'h-drawer',
+            sentences: [
+                {
+                    fileHash: 'h-drawer',
+                    index: 0,
+                    start: 1,
+                    end: 3,
+                    adjustedStart: null,
+                    adjustedEnd: null,
+                    text: 'Hello world.',
+                    textZH: '你好世界。',
+                    key: 'kd-0',
+                    transGroup: 1,
+                    translationKey: 'h-drawer:0',
+                    struct: { original: '', blocks: [] },
+                },
+            ],
+        });
+
+        render(
+            <MemoryRouter>
+                <ScriptReaderPage />
+            </MemoryRouter>,
+        );
+
+        fireEvent.click(await screen.findByTestId('script-doc-switcher'));
+        const searchInput = await screen.findByPlaceholderText('搜索文稿...');
+        fireEvent.change(searchInput, { target: { value: 'nonexistent-doc' } });
+        expect(screen.getByText('没有找到相关结果')).toBeDefined();
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        await waitFor(() => {
+            expect(screen.queryByPlaceholderText('搜索文稿...')).toBeNull();
+        });
+    });
 });

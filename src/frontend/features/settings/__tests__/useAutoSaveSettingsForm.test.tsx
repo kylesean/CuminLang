@@ -16,6 +16,7 @@ vi.mock('swr', () => ({
 
 interface TestForm {
     url: string;
+    mode?: string;
 }
 
 /** 推进假时钟使防抖与保存微任务链跑完。 */
@@ -166,5 +167,70 @@ describe('设置自动保存表单', () => {
 
         rejectFirst(new Error('save failed'));
         await expect(flushPromise).rejects.toThrow('save failed');
+    });
+
+    it('对象字段键顺序不同但语义相同时，不触发误判脏状态或额外保存', async () => {
+        const onSave = vi.fn(async () => undefined);
+        const { result } = mountForm(onSave);
+
+        act(() => result.current.auto.initialize({ url: 'a', mode: 'system' }));
+        act(() => result.current.auto.initialize({ mode: 'system', url: 'a' }));
+        await settle();
+
+        expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('flushSettled 会等待在途保存与最新改动全部落盘后才返回', async () => {
+        let releaseFirstSave!: () => void;
+        const savedUrls: string[] = [];
+        const onSave = vi.fn((values: TestForm) => {
+            if (values.url === 'first') {
+                return new Promise<void>((resolve) => {
+                    releaseFirstSave = () => {
+                        savedUrls.push(values.url);
+                        resolve();
+                    };
+                });
+            }
+            savedUrls.push(values.url);
+            return Promise.resolve();
+        });
+        const { result } = mountForm(onSave);
+
+        act(() => result.current.auto.initialize({ url: 'init' }));
+        act(() => result.current.form.setValue('url', 'first'));
+        await settle();
+        expect(onSave).toHaveBeenCalledTimes(1);
+
+        // 首轮仍在途时修改为 second 并调用 flushSettled
+        act(() => result.current.form.setValue('url', 'second'));
+        let settled = false;
+        const settledPromise = result.current.auto.flushSettled().then(() => {
+            settled = true;
+        });
+
+        await Promise.resolve();
+        expect(settled).toBe(false);
+
+        await act(async () => {
+            releaseFirstSave();
+            await settledPromise;
+        });
+
+        expect(settled).toBe(true);
+        expect(savedUrls).toEqual(['first', 'second']);
+    });
+
+    it('保存失败后将表单改回已保存基线时清除错误状态', async () => {
+        const onSave = vi.fn().mockRejectedValue(new Error('invalid input'));
+        const { result } = mountForm(onSave);
+
+        act(() => result.current.auto.initialize({ url: 'valid' }));
+        act(() => result.current.form.setValue('url', 'invalid'));
+        await settle();
+        expect(result.current.auto.error).toBe('invalid input');
+
+        act(() => result.current.form.setValue('url', 'valid'));
+        expect(result.current.auto.error).toBeNull();
     });
 });

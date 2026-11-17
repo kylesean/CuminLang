@@ -145,7 +145,10 @@ export default function LearningSessionDock({
                 </button>
             </Tooltip>
             {popover.render(
-                <div data-testid="learning-session-panel">
+                <div
+                    data-testid="learning-session-panel"
+                    className="max-h-[min(70vh,480px)] overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full"
+                >
                 <div className="flex items-start justify-between gap-3 px-1 pb-2 pt-1">
                     <div className="min-w-0">
                         <div className="text-sm font-semibold text-primary">
@@ -168,7 +171,7 @@ export default function LearningSessionDock({
                         <button
                             type="button"
                             onClick={() => { void mutate(); }}
-                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60 cursor-pointer"
+                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                         >
                             <RotateCcw className="h-3.5 w-3.5" />
                             {t('learningSummary.retry')}
@@ -235,8 +238,11 @@ export default function LearningSessionDock({
                                 type="button"
                                 data-testid="learning-recap-trigger"
                                 title={tRecap('ctaHint')}
-                                onClick={() => setRecapOpen(true)}
-                                className="group flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left text-sm font-medium text-secondary transition-colors hover:text-primary"
+                                onClick={() => {
+                                    popover.hide();
+                                    setRecapOpen(true);
+                                }}
+                                className="group flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left text-sm font-medium text-secondary transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                             >
                                 <ListChecks className="h-3.5 w-3.5 shrink-0 text-warning-text/80" />
                                 <span>{tRecap('cta')}</span>

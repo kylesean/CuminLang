@@ -84,7 +84,7 @@ export function ScriptReaderToolbar({
                         type="button"
                         data-testid="script-doc-switcher"
                         onClick={onOpenDocDrawer}
-                        className="inline-flex items-center gap-2 rounded-lg border border-border/50 bg-body/80 px-2.5 py-1.5 text-sm font-medium text-primary hover:border-border hover:bg-muted/60 transition-colors cursor-pointer min-w-0 max-w-xs"
+                        className="inline-flex items-center gap-2 rounded-lg border border-border/50 bg-body/80 px-2.5 py-1.5 text-sm font-medium text-primary hover:border-border hover:bg-muted/60 transition-colors cursor-pointer min-w-0 max-w-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                         title={t('scriptReader.switchDocTooltip', { defaultValue: '切换或导入文稿' })}
                     >
                         <PanelLeft className="h-3.5 w-3.5 text-secondary shrink-0" />
@@ -116,13 +116,13 @@ export function ScriptReaderToolbar({
                                     value={searchQuery}
                                     onChange={(e) => onChangeSearchQuery(e.target.value)}
                                     placeholder={t('scriptReader.searchContent', { defaultValue: '搜文稿/译文...' })}
-                                    className="w-36 rounded-lg border border-border/50 bg-body pl-8 pr-7 py-1 text-sm text-primary placeholder:text-secondary/70 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                                    className="w-36 rounded-lg border border-border/50 bg-body pl-8 pr-7 py-1 text-sm text-primary placeholder:text-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                                 />
                                 {searchQuery && (
                                     <button
                                         type="button"
                                         onClick={() => onChangeSearchQuery('')}
-                                        className="absolute right-2 text-secondary hover:text-primary cursor-pointer"
+                                        className="absolute right-2 rounded p-0.5 text-secondary hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                                         aria-label={t('scriptReader.clearSearch', { defaultValue: '清空搜索' })}
                                     >
                                         <X className="h-3.5 w-3.5" />
@@ -158,7 +158,7 @@ export function ScriptReaderToolbar({
                                     aria-pressed={showTranslation}
                                     onClick={onToggleTranslation}
                                     className={cn(
-                                        'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium transition-colors cursor-pointer',
+                                        'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                                         showTranslation
                                             ? 'text-accent bg-accent-bg/15'
                                             : 'text-secondary hover:text-primary hover:bg-muted/80',
@@ -216,7 +216,7 @@ export function ScriptReaderToolbar({
                             key={item.word}
                             type="button"
                             onClick={() => onJumpToSentenceIndex(item.firstSentenceIndex)}
-                            className="rounded-md border border-border/40 bg-body/80 px-1.5 py-0.5 text-metadata text-primary hover:border-accent/60 hover:text-accent transition-colors cursor-pointer"
+                            className="rounded-md border border-border/40 bg-body/80 px-1.5 py-0.5 text-metadata text-primary hover:border-accent/60 hover:text-accent transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                             title={t('scriptReader.jumpToWordSentence', {
                                 defaultValue: '跳转到包含 "{{word}}" 的句子',
                                 word: item.word,

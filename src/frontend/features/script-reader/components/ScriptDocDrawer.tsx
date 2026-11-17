@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { FileText, Headphones, Loader2, Plus, Search, Video, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@astryxdesign/core/Button';
@@ -42,6 +43,19 @@ export function ScriptDocDrawer({
     const taskIdsByVideo = useSubtitleGenerationStore((s) => s.taskIdsByVideo);
     const startingVideos = useSubtitleGenerationStore((s) => s.startingVideos);
     const tasks = useDpTaskCenter((s) => s.tasks);
+    const hasSearchQuery = docQuery.trim().length > 0;
+
+    useEffect(() => {
+        if (!open) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [onClose, open]);
 
     if (!open) {
         return null;
@@ -50,7 +64,7 @@ export function ScriptDocDrawer({
     return (
         <div className="fixed inset-0 z-40 flex" role="dialog" aria-modal="true" aria-label={t('scriptReader.docDrawerLabel', { defaultValue: '切换精读文稿' })}>
             <div
-                className="fixed inset-0 bg-black/25 backdrop-blur-[1px]"
+                className="fixed inset-0 bg-overlay/50 backdrop-blur-[1px]"
                 onClick={onClose}
                 aria-hidden="true"
             />
@@ -71,7 +85,7 @@ export function ScriptDocDrawer({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="p-1.5 rounded-md text-secondary hover:text-primary hover:bg-muted/70 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-md text-secondary hover:text-primary hover:bg-muted/70 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                             aria-label={t('scriptReader.closeDrawer', { defaultValue: '关闭文稿目录' })}
                         >
                             <X className="h-4 w-4" />
@@ -87,8 +101,19 @@ export function ScriptDocDrawer({
                             value={docQuery}
                             onChange={(e) => onDocQueryChange(e.target.value)}
                             placeholder={t('scriptReader.searchDocs', { defaultValue: '搜索文稿...' })}
-                            className="w-full rounded-lg border border-border/50 bg-body pl-8 pr-3 py-1.5 text-sm text-primary placeholder:text-secondary/70 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                            aria-label={t('scriptReader.searchDocs', { defaultValue: '搜索文稿...' })}
+                            className="w-full rounded-lg border border-border/50 bg-body pl-8 pr-8 py-1.5 text-sm text-primary placeholder:text-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                         />
+                        {hasSearchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => onDocQueryChange('')}
+                                aria-label={t('scriptReader.clearSearch', { defaultValue: '清空搜索' })}
+                                className="absolute right-2 rounded p-0.5 text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -100,7 +125,19 @@ export function ScriptDocDrawer({
                     ) : documents.length === 0 ? (
                         <div className="p-6 text-center text-sm text-secondary flex flex-col items-center gap-2">
                             <FileText className="h-6 w-6 opacity-50" />
-                            <span>{t('scriptReader.emptyDocs', { defaultValue: '暂无文稿，可导入 MP3/M4A 音频生成' })}</span>
+                            <span>
+                                {hasSearchQuery
+                                    ? t('common:noResults', { defaultValue: '没有找到相关结果' })
+                                    : t('scriptReader.emptyDocs', { defaultValue: '暂无文稿，可导入 MP3/M4A 音频生成' })}
+                            </span>
+                            {hasSearchQuery && (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    label={t('scriptReader.clearSearch', { defaultValue: '清空搜索' })}
+                                    onClick={() => onDocQueryChange('')}
+                                />
+                            )}
                         </div>
                     ) : (
                         documents.map((doc) => {
@@ -138,7 +175,7 @@ export function ScriptDocDrawer({
                                         onClose();
                                     }}
                                     className={cn(
-                                        'w-full text-left rounded-lg px-2.5 py-2 transition-colors cursor-pointer flex items-start gap-2.5',
+                                        'w-full text-left rounded-lg px-2.5 py-2 transition-colors cursor-pointer flex items-start gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                                         active
                                             ? 'bg-accent-bg/15 text-accent font-medium'
                                             : 'text-primary/90 hover:bg-muted/60',
@@ -154,7 +191,7 @@ export function ScriptDocDrawer({
                                     <div className="min-w-0 flex-1 flex flex-col gap-0.5">
                                         <div className="flex items-center gap-1.5">
                                             <span className="text-sm line-clamp-2 leading-snug flex-1">{doc.title}</span>
-                                            <span className="shrink-0 rounded px-1 py-0.2 text-[11px] bg-muted/70 text-secondary font-normal">
+                                            <span className="shrink-0 rounded px-1 py-0.5 text-metadata bg-muted/70 text-secondary font-normal">
                                                 {isAudio
                                                     ? t('scriptReader.badgeAudio', { defaultValue: '音频' })
                                                     : t('scriptReader.badgeVideo', { defaultValue: '视频' })}

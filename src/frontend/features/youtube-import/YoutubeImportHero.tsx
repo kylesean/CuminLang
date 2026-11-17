@@ -1,7 +1,8 @@
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-hot-toast';
-import { Clapperboard, Download, PlayCircle } from 'lucide-react';
+import { Clapperboard, Download, Loader2, PlayCircle } from 'lucide-react';
 import useSWR from 'swr';
 import { Button } from '@astryxdesign/core/Button';
 import { TextInput } from '@astryxdesign/core/TextInput';
@@ -31,10 +32,15 @@ const YoutubeImportHero = () => {
     const { t: tc } = useTranslation('common');
     const navigate = useNavigate();
     const changeSideBar = useLayout((s) => s.changeSideBar);
-    const { data: setting } = useSWR('youtube-import/setting-detail', () => youtubeImportApi.getSettingDetail(), {
-        // 读取失败必须显式暴露：静默回退会让入口消失、退回旧空态，用户不知道功能其实已开启
-        onError: () => toast.error(t('settings.loadFailed'), { id: 'youtube-import-setting' }),
-    });
+    const navigatingRef = useRef(false);
+    const { data: setting, isLoading: settingLoading } = useSWR(
+        'youtube-import/setting-detail',
+        () => youtubeImportApi.getSettingDetail(),
+        {
+            // 读取失败必须显式暴露：静默回退会让入口消失、退回旧空态，用户不知道功能其实已开启
+            onError: () => toast.error(t('settings.loadFailed'), { id: 'youtube-import-setting' }),
+        },
+    );
     const ytEnabled = setting?.enabled ?? false;
     const url = useYoutubeImportUi((s) => s.url);
     const setUrl = useYoutubeImportUi((s) => s.setUrl);
@@ -46,6 +52,20 @@ const YoutubeImportHero = () => {
     const isInvalid = url.trim().length > 0 && !videoId;
     const canSubmit = Boolean(videoId) && !submitting;
 
+    const openVideoInPlayer = async (vid: string) => {
+        if (navigatingRef.current) return;
+        navigatingRef.current = true;
+        try {
+            await fileBrowserApi.changeWindowSize('player');
+            changeSideBar(false);
+            navigate(`/player/${vid}`);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : tc('openMediaFailed'));
+        } finally {
+            navigatingRef.current = false;
+        }
+    };
+
     const localSelectors = (
         <HStack vAlign="center" hAlign="center" gap={3} width="100%">
             <FileSelector
@@ -53,14 +73,21 @@ const YoutubeImportHero = () => {
                 withMkv
             />
             <FolderSelector
-                onSelected={FolderSelectAction.defaultAction2(async (vid) => {
-                    await fileBrowserApi.changeWindowSize('player');
-                    changeSideBar(false);
-                    navigate(`/player/${vid}`);
-                })}
+                onSelected={(files) => FolderSelectAction.defaultAction2((vid) => {
+                    void openVideoInPlayer(vid);
+                })(files)}
             />
         </HStack>
     );
+
+    if (settingLoading && !setting) {
+        return (
+            <HStack gap={2} vAlign="center" className="text-secondary text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>{tc('loading')}</span>
+            </HStack>
+        );
+    }
 
     if (!ytEnabled) {
         // 功能关闭时的旧版空状态：仅保留本地文件入口。
@@ -71,7 +98,7 @@ const YoutubeImportHero = () => {
                     height={64}
                     className="rounded-3xl bg-accent-muted text-accent shadow-xs mb-2"
                 >
-                    <PlayCircle style={{ width: 32, height: 32 }} strokeWidth={1.75} />
+                    <PlayCircle className="w-8 h-8" strokeWidth={1.75} />
                 </Center>
                 <Heading level={2} justify="center">
                     {tc('emptyWatchTitle')}
@@ -91,7 +118,7 @@ const YoutubeImportHero = () => {
                 height={64}
                 className="rounded-3xl bg-accent-muted text-accent shadow-xs mb-2"
             >
-                <Clapperboard style={{ width: 32, height: 32 }} strokeWidth={1.75} />
+                <Clapperboard className="w-8 h-8" strokeWidth={1.75} />
             </Center>
             <Heading level={2} justify="center">
                 {t('hero.title')}

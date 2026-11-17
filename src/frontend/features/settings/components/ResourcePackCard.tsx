@@ -26,6 +26,9 @@ import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
 
 import {
+    SETTINGS_EXTENSIONS_PACK_ID,
+    SETTINGS_RESOURCE_PACK_ID,
+    TTS_VOICE_DOWNLOAD_ID,
     cancelPackDownload,
     startPackDownload,
     updatePackCallbacks,
@@ -41,10 +44,6 @@ import type { ModelInstallationStatusVO } from '@/common/types/vo/model-installa
 
 /** 资源包内的资源标识。 */
 type PackItemKey = 'tts' | 'transcription' | 'diarization' | 'phonemeGop' | 'senseVoice';
-
-/** 持久化下载队列的包标识：切走设置标签页或离开设置页后再回来仍可续接进度展示。 */
-const SETTINGS_RESOURCE_PACK_ID = 'settings-resource-pack';
-const SETTINGS_EXTENSIONS_PACK_ID = 'settings-extensions-pack';
 
 /** 收尾阶段的文案键；下载中的文案统一用 `resources.pack.downloading`。 */
 const PHASE_LABEL_KEYS: Partial<Record<ModelDownloadPhase, string>> = {
@@ -152,6 +151,8 @@ export const ResourcePackCard: React.FC<ResourcePackCardProps> = ({
         live,
         error,
     } = usePackDownloadState(packId);
+    const ttsVoiceDownload = usePackDownloadState(TTS_VOICE_DOWNLOAD_ID);
+    const ttsBusyElsewhere = mode !== 'extensions' && ttsVoiceDownload.downloading;
 
     const notifyComplete = React.useCallback(() => {
         toast.success(
@@ -438,6 +439,7 @@ export const ResourcePackCard: React.FC<ResourcePackCardProps> = ({
                             label={downloading ? t('resources.pack.cancel') : t('resources.pack.download')}
                             size="sm"
                             variant={downloading ? 'secondary' : 'primary'}
+                            isDisabled={!downloading && ttsBusyElsewhere && pendingItems.some((item) => item.key === 'tts')}
                             icon={<Icon icon={(downloading ? Square : Download) as unknown as IconType} size="sm" />}
                             onClick={() => (downloading ? cancelDownload() : downloadPack()).catch(() => null)}
                         />
@@ -476,6 +478,7 @@ export const ResourcePackCard: React.FC<ResourcePackCardProps> = ({
                             size="sm"
                             variant="secondary"
                             label={t('resources.pack.retry')}
+                            isDisabled={deleting || (ttsBusyElsewhere && pendingItems.some((item) => item.key === 'tts'))}
                             icon={<Icon icon={RefreshCw as unknown as IconType} size="sm" />}
                             onClick={() => { void downloadPack(); }}
                         />
@@ -550,7 +553,7 @@ export const ResourcePackCard: React.FC<ResourcePackCardProps> = ({
                                         label={t('resources.pack.itemDownload')}
                                         size="sm"
                                         variant="secondary"
-                                        isDisabled={downloading || deleting}
+                                        isDisabled={downloading || deleting || (item.key === 'tts' && ttsBusyElsewhere)}
                                         icon={<Icon icon={Download as unknown as IconType} size="sm" />}
                                         onClick={() => { void downloadSingleItem(item); }}
                                     />

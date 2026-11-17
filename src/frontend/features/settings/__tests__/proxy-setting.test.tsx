@@ -148,4 +148,50 @@ describe('ProxySetting（SWR 版本）', () => {
             ]);
         });
     });
+
+    it.each([
+        ['127.0.0.1:7890', 'proxy.validation.missingScheme'],
+        ['socks5://127.0.0.1', 'proxy.validation.missingSocksPort'],
+        ['http://', 'proxy.validation.missingHost'],
+    ])('custom 模式填写非法代理地址 %s 时展示校验错误 %s 且不调用保存接口', async (badUrl, expectedMessageKey) => {
+        const savedCalls: unknown[] = [];
+        window.electron = {
+            call: vi.fn((path: string, params: unknown) => {
+                if (path === KEY) {
+                    return Promise.resolve({ mode: 'custom', url: 'http://127.0.0.1:7890', bypassRules: '', systemProxy: { detected: false, url: null } });
+                }
+                if (path === 'settings/proxy/save') {
+                    savedCalls.push(params);
+                }
+                return Promise.resolve(undefined);
+            }),
+        } as never;
+
+        renderPage();
+        const urlInput = await screen.findByDisplayValue('http://127.0.0.1:7890', {}, { timeout: 3000 });
+        fireEvent.change(urlInput, { target: { value: badUrl } });
+
+        expect(await screen.findByText(expectedMessageKey)).toBeInTheDocument();
+
+        const form = urlInput.closest('form');
+        expect(form).not.toBeNull();
+        fireEvent.submit(form!);
+
+        const alert = await screen.findByRole('alert', {}, { timeout: 3000 });
+        expect(alert.textContent).toContain(expectedMessageKey);
+        expect(savedCalls).toHaveLength(0);
+
+        // 修正为合法地址后错误清除并正常提交保存
+        fireEvent.change(urlInput, { target: { value: 'socks5://127.0.0.1:1080' } });
+        fireEvent.submit(form!);
+
+        await waitFor(() => {
+            expect(savedCalls).toEqual([
+                { mode: 'custom', url: 'socks5://127.0.0.1:1080', bypassRules: '' },
+            ]);
+        });
+        await waitFor(() => {
+            expect(screen.queryByRole('alert')).toBeNull();
+        });
+    });
 });

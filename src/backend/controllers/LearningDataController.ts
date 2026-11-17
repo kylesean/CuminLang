@@ -91,6 +91,13 @@ export default class LearningDataController implements Controller {
     }
 
     /**
+     * 清空某个多轮场景对话已落库的轮次。
+     */
+    public async clearRolePlaySession(params: RolePlaySessionParams) {
+        return this.learningRecapService.clearRolePlaySession(params);
+    }
+
+    /**
      * 读取某个视频下最近的复述 / 角色扮演结果。
      */
     public async listProductionPractice(params: ProductionPracticeListParams) {
@@ -258,6 +265,13 @@ export default class LearningDataController implements Controller {
             }),
         });
         registerRoute('learning-data/role-play-session', (p) => this.listRolePlayTurns(p), {
+            schema: z.object({
+                sessionKey: z.string().min(1).max(200),
+                videoId: z.string().min(1).optional(),
+                fileHash: z.string().min(1).optional(),
+            }),
+        });
+        registerRoute('learning-data/role-play-session-reset', (p) => this.clearRolePlaySession(p), {
             schema: z.object({
                 sessionKey: z.string().min(1).max(200),
                 videoId: z.string().min(1).optional(),

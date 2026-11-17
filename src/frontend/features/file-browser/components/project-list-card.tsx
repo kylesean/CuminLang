@@ -48,6 +48,7 @@ const ProjectListCard = ({
     );
 
     const [hover, setHover] = React.useState(false);
+    const [focused, setFocused] = React.useState(false);
     const [contextMenu, setContextMenu] = React.useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
     const [isDeleting, setIsDeleting] = React.useState(false);
@@ -116,7 +117,13 @@ const ProjectListCard = ({
                     }}
                     onMouseEnter={() => setHover(true)}
                     onMouseLeave={() => setHover(false)}
-                    className="group flex flex-col gap-2.5 text-left cursor-pointer outline-none transition-transform duration-200 hover:-translate-y-0.5"
+                    onFocus={() => setFocused(true)}
+                    onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                            setFocused(false);
+                        }
+                    }}
+                    className="group flex flex-col gap-2.5 text-left cursor-pointer outline-none rounded-2xl transition-transform duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-body"
                     onClick={onSelected}
                 >
                     <div className="relative w-full rounded-2xl overflow-hidden bg-card border border-border/60 shadow-2xs transition-shadow duration-200 group-hover:shadow-md group-hover:border-border">
@@ -174,8 +181,8 @@ const ProjectListCard = ({
                             </div>
                         )}
 
-                        {/* 悬浮时展示删除按钮 */}
-                        {hover && (
+                        {/* 悬浮或键盘聚焦时展示删除按钮 */}
+                        {(hover || focused) && (
                             <div className="absolute top-2.5 right-2.5 z-10">
                                 <IconButton
                                     label={i18n.t('common:delete')}

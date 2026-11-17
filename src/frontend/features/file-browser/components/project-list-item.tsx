@@ -45,6 +45,7 @@ const ProjectListItem = ({
     );
 
     const [hover, setHover] = React.useState(false);
+    const [focused, setFocused] = React.useState(false);
     const [contextMenu, setContextMenu] = React.useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
     const [isDeleting, setIsDeleting] = React.useState(false);
@@ -111,8 +112,14 @@ const ProjectListItem = ({
                     }}
                     onMouseEnter={() => setHover(true)}
                     onMouseLeave={() => setHover(false)}
+                    onFocus={() => setFocused(true)}
+                    onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                            setFocused(false);
+                        }
+                    }}
                     onClick={onSelected}
-                    className={`group flex items-center gap-4 py-3 px-2 rounded-2xl transition-all duration-150 cursor-pointer outline-none ${
+                    className={`group flex items-center gap-4 py-3 px-2 rounded-2xl transition-all duration-150 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-body ${
                         hover || contextMenu ? 'bg-muted' : 'hover:bg-muted/50'
                     }`}
                 >
@@ -187,7 +194,7 @@ const ProjectListItem = ({
                             </Text>
                         </VStack>
                     </StackItem>
-                    {hover && (
+                    {(hover || focused) && (
                         <div className="shrink-0">
                             <IconButton
                                 label={i18n.t('common:delete')}

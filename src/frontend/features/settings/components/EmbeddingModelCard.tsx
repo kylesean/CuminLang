@@ -55,6 +55,7 @@ export default function EmbeddingModelCard({
     const [installing, setInstalling] = useState(false);
     const [installingMultimodal, setInstallingMultimodal] = useState(false);
     const [removing, setRemoving] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
     const [failedKind, setFailedKind] = useState<'base' | 'multimodal' | null>(null);
     const [liveProgress, setLiveProgress] = useState<EmbeddingDownloadProgressEvent | null>(null);
@@ -65,6 +66,9 @@ export default function EmbeddingModelCard({
             setLiveProgress(detail);
             if (detail.phase === 'idle') {
                 onInstalled();
+            } else {
+                setLocalError(null);
+                setFailedKind(null);
             }
         });
         return unsubscribe;
@@ -124,11 +128,16 @@ export default function EmbeddingModelCard({
     };
 
     const cancelDownload = async () => {
+        if (cancelling) return;
+        setCancelling(true);
         try {
             await settingsApi.cancelEmbeddingModelDownload?.();
+            setLiveProgress(null);
             onInstalled();
         } catch (error) {
             toast.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            setCancelling(false);
         }
     };
 
@@ -148,7 +157,11 @@ export default function EmbeddingModelCard({
         }
     };
 
-    const displayError = !isDownloading ? (localError || status?.error || null) : null;
+    const errorStillRelevant =
+        failedKind === null
+        || (failedKind === 'base' && !status?.ready)
+        || (failedKind === 'multimodal' && !status?.multimodalReady);
+    const displayError = !isDownloading ? ((errorStillRelevant ? localError : null) || status?.error || null) : null;
 
     return (
         <Card variant="default" padding={3}>
@@ -165,6 +178,8 @@ export default function EmbeddingModelCard({
                         <Button
                             variant="secondary"
                             size="sm"
+                            isLoading={cancelling}
+                            isDisabled={cancelling}
                             label={t('resources.embedding.cancel')}
                             icon={<Square className="h-3.5 w-3.5" />}
                             onClick={() => { void cancelDownload(); }}

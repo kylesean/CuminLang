@@ -113,9 +113,29 @@ export function useDesktopLyricsBridge(enabled: boolean): void {
 
         pushIfChanged();
 
-        const unsubPlayer = usePlayer.subscribe(pushIfChanged);
-        const unsubSession = usePlaybackSession.subscribe(pushIfChanged);
-        const unsubTranslation = useSubtitleTranslation.subscribe(pushIfChanged);
+        const unsubPlayer = usePlayer.subscribe((state, prevState) => {
+            if (
+                state.currentSentence === prevState.currentSentence
+                && state.playing === prevState.playing
+                && state.singleRepeat === prevState.singleRepeat
+            ) {
+                return;
+            }
+            pushIfChanged();
+        });
+        const unsubSession = usePlaybackSession.subscribe((state, prevState) => {
+            if (state.videoPath === prevState.videoPath) {
+                return;
+            }
+            pushIfChanged();
+        });
+        const unsubTranslation = useSubtitleTranslation.subscribe(
+            (state) => {
+                const key = usePlayer.getState().currentSentence?.translationKey;
+                return key ? (state.translations.get(key) ?? '') : '';
+            },
+            pushIfChanged,
+        );
 
         return () => {
             unsubPlayer();

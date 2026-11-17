@@ -66,7 +66,7 @@ const ZH_SIZE_CLASSES: Record<DesktopLyricsFontSize, string> = {
 };
 
 const CONTROL_BTN_CLASS =
-    'flex h-7 w-7 items-center justify-center rounded-md text-media-fg/80 hover:bg-media-fg/15 hover:text-media-fg transition-colors cursor-pointer shrink-0';
+    'flex h-7 w-7 items-center justify-center rounded-md text-media-fg/80 hover:bg-media-fg/15 hover:text-media-fg transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-media-fg/70';
 
 /**
  * 独立透明悬浮“桌面整句字幕”窗口视图（路由 `#/desktop-lyrics`）。
@@ -89,6 +89,13 @@ export default function DesktopLyricsPage() {
     const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
     const pendingDeltaRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
     const rafRef = useRef<number | null>(null);
+
+    useEffect(() => () => {
+        if (rafRef.current !== null) {
+            window.cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+        }
+    }, []);
 
     // 透明窗口根节点去底色，避免主应用主题 bg-body 盖住透明合成层
     useEffect(() => {
@@ -191,7 +198,6 @@ export default function DesktopLyricsPage() {
             onMouseEnter={() => { if (!locked) setHovered(true); }}
             onMouseLeave={() => {
                 setHovered(false);
-                dragOriginRef.current = null;
             }}
             className="flex h-screen w-screen flex-col items-center justify-end p-2 select-none bg-transparent"
         >

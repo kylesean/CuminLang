@@ -138,8 +138,18 @@ const useYoutubeImportUi = create<YoutubeImportState>((set, get) => {
 
         retryTask: async (taskId) => {
             const entry = get().tasks.find((item) => item.taskId === taskId);
-            if (!entry) return;
+            if (!entry || get().submitting) return;
+            const prevTaskIds = new Set(get().tasks.map((item) => item.taskId));
             await get().startImport(entry.url);
+            // 若新任务成功提交，移除旧的失败条目，避免失败任务行堆积
+            set((state) => {
+                const hasReplacement = state.tasks.some(
+                    (item) => !prevTaskIds.has(item.taskId) && item.videoId === entry.videoId,
+                );
+                return hasReplacement
+                    ? { tasks: state.tasks.filter((item) => item.taskId !== taskId) }
+                    : state;
+            });
         },
 
         requestPlay: (result) => set({ playTarget: result }),

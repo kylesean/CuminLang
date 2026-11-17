@@ -289,4 +289,52 @@ describe('ReviewDock', () => {
         fireEvent.click(screen.getByTestId('review-dock-trigger'));
         expect(screen.queryByTestId('review-last-rated')).toBeNull();
     });
+
+    it('带作用域打开时优先展示对应视频的到期词，关闭面板后清理作用域', async () => {
+        const twoCards: ReviewQueueVO = {
+            ...queue,
+            dueCount: 2,
+            items: [
+                { ...queue.items[0], id: 1, word: 'alpha' },
+                { ...queue.items[0], id: 2, word: 'beta' },
+            ],
+        };
+        mockSWR(twoCards);
+        useReviewDockStore.setState({ requestId: 0, consumedId: 0, scope: null });
+        useReviewDockStore.getState().open({ videoId: 'video-beta', words: ['beta'] });
+
+        render(<ReviewDock tone="panel" popoverOffset={8} />);
+
+        expect(await screen.findByTestId('review-card-word')).toHaveTextContent('beta');
+        fireEvent.click(screen.getByTestId('review-dock-trigger'));
+        expect(useReviewDockStore.getState().scope).toBeNull();
+    });
+
+    it('带作用域打开且作用域队列尚在加载时，不闪现全局缓存的旧单词', async () => {
+        vi.mocked(useSWR).mockImplementation((key) => {
+            if (Array.isArray(key) && key[1] === 'scoped') {
+                return {
+                    data: undefined,
+                    error: null,
+                    isLoading: true,
+                    mutate: vi.fn(async () => undefined),
+                } as unknown as ReturnType<typeof useSWR>;
+            }
+            return {
+                data: queue,
+                error: null,
+                isLoading: false,
+                mutate: vi.fn(async () => undefined),
+            } as unknown as ReturnType<typeof useSWR>;
+        });
+
+        useReviewDockStore.setState({ requestId: 0, consumedId: 0, scope: null });
+        useReviewDockStore.getState().open({ videoId: 'video-beta', words: ['beta'] });
+
+        render(<ReviewDock tone="panel" popoverOffset={8} />);
+
+        await screen.findByTestId('review-dock-panel');
+        expect(screen.queryByTestId('review-card-word')).toBeNull();
+        expect(screen.getByText('reviewDock.loading')).toBeDefined();
+    });
 });

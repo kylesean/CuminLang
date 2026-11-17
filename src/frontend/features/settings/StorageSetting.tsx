@@ -71,6 +71,8 @@ const StorageSetting: React.FC = () => {
     const [isExportingLearning, setIsExportingLearning] = React.useState(false);
     const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
     const [isImportingLearning, setIsImportingLearning] = React.useState(false);
+    const [isSyncingCollections, setIsSyncingCollections] = React.useState(false);
+    const actionInFlightRef = React.useRef(false);
     const { data: compassStats, isLoading: compassStatsLoading } = useSWR<ContentCompassStatsVO>(
         'content-compass/stats',
         () => contentCompassApi.getStats({ days: 7 }),
@@ -82,7 +84,7 @@ const StorageSetting: React.FC = () => {
         { revalidateOnFocus: false, shouldRetryOnError: false },
     );
 
-    const { data: detail } = useSWR<StorageSettingVO>(
+    const { data: detail, error: loadError } = useSWR<StorageSettingVO>(
         'settings/storage/detail',
         () => settingsApi.getStorage(),
         SETTINGS_DETAIL_SWR_OPTIONS,
@@ -173,6 +175,9 @@ const StorageSetting: React.FC = () => {
     }, [detail, loadStorageStatus]);
 
     async function reloadWordLearningClips() {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
+        setIsSyncingCollections(true);
         try {
             await flush();
             const result = await settingsApi.syncVideoLearningFromOss();
@@ -184,10 +189,15 @@ const StorageSetting: React.FC = () => {
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             toast.error(`${t('storage.wordClipsSync.error')}\n${message}`);
+        } finally {
+            actionInFlightRef.current = false;
+            setIsSyncingCollections(false);
         }
     }
 
     const handleClear = async () => {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
         try {
             setIsResetting(true);
             await settingsApi.resetDatabase();
@@ -197,11 +207,14 @@ const StorageSetting: React.FC = () => {
             const message = error instanceof Error ? error.message : String(error);
             toast.error(`${t('storage.resetFailed')}\n${message}`);
         } finally {
+            actionInFlightRef.current = false;
             setIsResetting(false);
         }
     };
 
     const handleExportLearningData = async () => {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
         try {
             setIsExportingLearning(true);
             const result = await learningDataApi.exportLearningData();
@@ -216,11 +229,14 @@ const StorageSetting: React.FC = () => {
             const message = error instanceof Error ? error.message : String(error);
             toast.error(`${t('storage.learningData.exportFailed')}\n${message}`);
         } finally {
+            actionInFlightRef.current = false;
             setIsExportingLearning(false);
         }
     };
 
     const handleClearLearningData = async () => {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
         try {
             setIsClearingLearning(true);
             const result = await learningDataApi.resetLearningData();
@@ -237,6 +253,7 @@ const StorageSetting: React.FC = () => {
             const message = error instanceof Error ? error.message : String(error);
             toast.error(`${t('storage.learningData.clearFailed')}\n${message}`);
         } finally {
+            actionInFlightRef.current = false;
             setIsClearingLearning(false);
         }
     };
@@ -248,6 +265,8 @@ const StorageSetting: React.FC = () => {
      * 不把「用户主动取消」当成失败提示。
      */
     const handleImportLearningData = async () => {
+        if (actionInFlightRef.current) return;
+        actionInFlightRef.current = true;
         try {
             setIsImportingLearning(true);
             const result = await learningDataApi.importLearningData();
@@ -274,6 +293,7 @@ const StorageSetting: React.FC = () => {
             const message = error instanceof Error ? error.message : String(error);
             toast.error(`${t('storage.learningData.importFailed')}\n${message}`);
         } finally {
+            actionInFlightRef.current = false;
             setIsImportingLearning(false);
         }
     };
@@ -295,8 +315,20 @@ const StorageSetting: React.FC = () => {
     }, [detail, loadStorageStatus]);
 
     const libraryAvailable = storageStatus?.available ?? false;
-    const canSyncCollections = libraryAvailable && !formState.isDirty && !autoSaveSaving;
+    const canSyncCollections = libraryAvailable && !formState.isDirty && !autoSaveSaving && !isSyncingCollections;
     const canOpenLibrary = libraryAvailable;
+
+    if (loadError && !detail) {
+        return (
+            <SettingsPageShell title={t('storage.title')} description={t('storage.description')}>
+                <Banner
+                    role="alert"
+                    status="error"
+                    title={loadError instanceof Error ? loadError.message : String(loadError)}
+                />
+            </SettingsPageShell>
+        );
+    }
 
     if (!detail) {
         return (
@@ -446,6 +478,7 @@ const StorageSetting: React.FC = () => {
                     >
                         <Button
                             isDisabled={!canSyncCollections}
+                            isLoading={isSyncingCollections}
                             onClick={reloadWordLearningClips}
                             variant="secondary"
                             size="sm"

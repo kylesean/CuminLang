@@ -70,6 +70,7 @@ export default function DictionaryEnhancementCard({
     const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
     const [removing, setRemoving] = useState(false);
     const [installing, setInstalling] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const actionInFlightRef = useRef(false);
 
     /** 启动安装并订阅任务进度。 */
@@ -78,21 +79,30 @@ export default function DictionaryEnhancementCard({
         actionInFlightRef.current = true;
         setInstalling(true);
         setLocalError(null);
+        let settled = false;
+        let registeredTaskId: number | null = null;
         try {
             const id = await useDpTaskCenter.getState().register(
                 () => englishDictionaryApi.install(),
                 {
-                    onUpdated: (task: DpTask) => updateActiveInstallState({
-                        taskId: activeInstallState.taskId,
-                        progress: task.progress ?? null,
-                    }),
+                    onUpdated: (task: DpTask) => {
+                        if (settled) return;
+                        updateActiveInstallState({
+                            taskId: registeredTaskId ?? activeInstallState.taskId,
+                            progress: task.progress ?? null,
+                        });
+                    },
                     onFinish: () => {
+                        settled = true;
                         updateActiveInstallState({ taskId: null, progress: null });
                         void swrMutate(STATUS_KEY);
                     },
                 },
             );
-            updateActiveInstallState({ taskId: id, progress: activeInstallState.progress });
+            registeredTaskId = id;
+            if (!settled) {
+                updateActiveInstallState({ taskId: id, progress: activeInstallState.progress });
+            }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             setLocalError(message);
@@ -107,6 +117,7 @@ export default function DictionaryEnhancementCard({
     const cancel = async (): Promise<void> => {
         if (taskId === null || actionInFlightRef.current) return;
         actionInFlightRef.current = true;
+        setCancelling(true);
         try {
             await englishDictionaryApi.cancel(taskId);
         } catch (error) {
@@ -115,6 +126,7 @@ export default function DictionaryEnhancementCard({
             }));
         } finally {
             actionInFlightRef.current = false;
+            setCancelling(false);
         }
     };
 
@@ -122,6 +134,7 @@ export default function DictionaryEnhancementCard({
     const remove = async (): Promise<boolean> => {
         try {
             await englishDictionaryApi.remove();
+            setLocalError(null);
             await mutate();
             return true;
         } catch (error) {
@@ -147,7 +160,8 @@ export default function DictionaryEnhancementCard({
                     <Button
                         variant="secondary"
                         size="sm"
-                        isDisabled={taskId === null}
+                        isLoading={cancelling}
+                        isDisabled={taskId === null || cancelling}
                         label={t('resources.pack.cancel')}
                         icon={<Icon icon={Square as unknown as IconType} size="sm" />}
                         onClick={() => void cancel()}
@@ -229,13 +243,15 @@ export default function DictionaryEnhancementCard({
                 actionVariant="destructive"
                 isActionLoading={removing}
                 onAction={async () => {
-                    if (removing) return;
+                    if (removing || actionInFlightRef.current) return;
+                    actionInFlightRef.current = true;
                     setRemoving(true);
                     try {
                         if (await remove()) {
                             setRemoveConfirmOpen(false);
                         }
                     } finally {
+                        actionInFlightRef.current = false;
                         setRemoving(false);
                     }
                 }}

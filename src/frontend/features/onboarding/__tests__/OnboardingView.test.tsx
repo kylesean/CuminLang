@@ -422,4 +422,75 @@ describe('OnboardingView Component', () => {
             );
         });
     });
+
+    it('已存在旧模型时保存新输入的云端模型，新模型排在 models 首位', async () => {
+        vi.mocked(settingsApi.saveServiceCredentials).mockResolvedValue(undefined);
+        vi.mocked(settingsApi.getServiceCredentials)
+            .mockResolvedValueOnce({
+                openai: {
+                    hasKey: true,
+                    keyHint: '...1111',
+                    endpoint: 'https://api.deepseek.com/v1',
+                    apiFormat: 'openai',
+                    models: ['old-model'],
+                    embeddingModel: '',
+                },
+                tencent: { hasCredentials: false, secretIdHint: '' },
+            })
+            .mockResolvedValue({
+                openai: {
+                    hasKey: true,
+                    keyHint: '...9999',
+                    endpoint: 'https://api.deepseek.com/v1',
+                    apiFormat: 'openai',
+                    models: ['new-model', 'old-model'],
+                    embeddingModel: '',
+                },
+                tencent: { hasCredentials: false, secretIdHint: '' },
+            });
+
+        render(<OnboardingView />);
+        expect(await screen.findByTestId('onboarding-hardware-summary')).toBeDefined();
+
+        fireEvent.click(screen.getByText('nextStep'));
+        fireEvent.click(screen.getByText('steps.download.cloud.toggle'));
+        fireEvent.change(screen.getByLabelText('steps.download.cloud.apiKeyLabel'), {
+            target: { value: 'sk-new-9999' },
+        });
+        fireEvent.change(screen.getByLabelText('steps.download.cloud.modelLabel'), {
+            target: { value: 'new-model' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'steps.download.cloud.saveButton' }));
+
+        await waitFor(() => {
+            expect(settingsApi.saveServiceCredentials).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    openai: expect.objectContaining({
+                        models: ['new-model', 'old-model'],
+                    }),
+                }),
+            );
+        });
+    });
+
+    it('低内存设备默认展开云端配置后，用户手动点击开关可以收起并保持收起', async () => {
+        vi.mocked(getSystemInfo).mockResolvedValueOnce({
+            totalMemoryGb: 4,
+            cpuCount: 2,
+            gpuAcceleration: 'none',
+            platform: 'win32',
+            arch: 'x64',
+            whisperCppSupported: false,
+        });
+
+        render(<OnboardingView />);
+        expect(await screen.findByTestId('onboarding-hardware-summary')).toBeDefined();
+
+        fireEvent.click(screen.getByText('nextStep'));
+        const toggleBtn = await screen.findByRole('button', { name: 'steps.download.cloud.toggle' });
+        expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+
+        fireEvent.click(toggleBtn);
+        expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+    });
 });

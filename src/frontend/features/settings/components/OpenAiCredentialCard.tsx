@@ -57,6 +57,8 @@ interface OpenAiCredentialCardProps {
     onTestModel: (model: string, providerId?: string) => void;
     /** 模型从列表中删除时回调，用于清理该模型遗留的测试结果。 */
     onModelRemoved: (model: string, providerId?: string) => void;
+    /** 在显式保存/清除密钥或带草稿测试前立即落盘并等待完成。 */
+    onFlushCredentials?: () => Promise<void>;
     /** 复制文本到剪贴板。 */
     onCopy: (text: string) => void;
     /** 在系统浏览器中打开地址。 */
@@ -74,6 +76,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
     testResults,
     onTestModel,
     onModelRemoved,
+    onFlushCredentials,
     onCopy,
     onOpenUrl,
     disabled,
@@ -82,12 +85,21 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
     const { setValue } = form;
     const [newModel, setNewModel] = React.useState('');
     const [keyDraft, setKeyDraft] = React.useState('');
+    const [keyActionPending, setKeyActionPending] = React.useState<'save' | 'clear' | null>(null);
     const [presetDialogOpen, setPresetDialogOpen] = React.useState(false);
     const [presetDialogMode, setPresetDialogMode] = React.useState<'fill' | 'add'>('fill');
     /** 待确认删除的模型；null 表示没有打开确认弹窗。 */
     const [pendingDeleteModel, setPendingDeleteModel] = React.useState<string | null>(null);
     /** 是否正在确认删除当前选中的服务商配置。 */
     const [confirmDeleteProvider, setConfirmDeleteProvider] = React.useState(false);
+    const mountedRef = React.useRef(true);
+
+    React.useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
 
     const openAiKeyHint = useWatch({ control: form.control, name: 'openai.keyHint' }) ?? '';
     const hasOpenAiKey = useWatch({ control: form.control, name: 'openai.hasKey' }) === true;
@@ -146,6 +158,15 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         [providers, watchedActiveProviderId, emptyFallbackProvider],
     );
 
+    const resolveCurrentActiveId = (): string => {
+        const currentProviders = form.getValues('openai.providers');
+        const currentActiveId = form.getValues('openai.activeProviderId');
+        if (Array.isArray(currentProviders) && currentProviders.length > 0) {
+            return currentProviders.find((item) => item.id === currentActiveId)?.id ?? currentProviders[0]?.id ?? '';
+        }
+        return currentActiveId ?? 'default';
+    };
+
     const endpoint = activeProvider.endpoint;
     const apiFormat = activeProvider.apiFormat;
     const openAiModels = activeProvider.models;
@@ -165,10 +186,17 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         label: apiFormatLabelMap[format],
     })), [apiFormatLabelMap]);
 
-    const updateActiveProvider = (updater: (current: CloudAiProviderProfileFormValue) => CloudAiProviderProfileFormValue) => {
-        const nextProvider = updater(activeProvider);
-        if (hasExplicitProviders) {
-            const nextProviders = providers.map((item) => (item.id === activeProvider.id ? nextProvider : item));
+    const updateProviderById = (
+        targetId: string,
+        updater: (current: CloudAiProviderProfileFormValue) => CloudAiProviderProfileFormValue,
+    ) => {
+        const currentProviders = form.getValues('openai.providers');
+        const currentActiveId = form.getValues('openai.activeProviderId');
+        if (Array.isArray(currentProviders) && currentProviders.length > 0) {
+            const currentTarget = currentProviders.find((item) => item.id === targetId);
+            if (!currentTarget) return;
+            const nextProvider = updater(currentTarget);
+            const nextProviders = currentProviders.map((item) => (item.id === targetId ? nextProvider : item));
             setValue('openai.providers', nextProviders, { shouldDirty: true });
             const allModels = Array.from(new Set(nextProviders.flatMap((p) => p.models)));
             const allEnabled = new Set(
@@ -179,16 +207,43 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
             );
             setValue('openai.models', allModels, { shouldDirty: true });
             setValue('openai.disabledModels', allModels.filter((m) => !allEnabled.has(m)), { shouldDirty: true });
-        } else {
-            setValue('openai.models', nextProvider.models, { shouldDirty: true });
-            setValue('openai.disabledModels', nextProvider.disabledModels ?? [], { shouldDirty: true });
+            const resolvedActiveId = nextProviders.find((item) => item.id === currentActiveId)?.id ?? nextProviders[0]?.id;
+            if (targetId === resolvedActiveId) {
+                setValue('openai.endpoint', nextProvider.endpoint, { shouldDirty: true });
+                setValue('openai.apiFormat', nextProvider.apiFormat, { shouldDirty: true });
+                setValue('openai.hasKey', nextProvider.hasKey, { shouldDirty: true });
+                setValue('openai.keyHint', nextProvider.keyHint, { shouldDirty: true });
+                setValue('openai.key', nextProvider.key, { shouldDirty: true });
+                setValue('openai.clearKey', nextProvider.clearKey, { shouldDirty: true });
+            }
+            return;
         }
+        const currentOpenAi = form.getValues('openai');
+        const currentSingle: CloudAiProviderProfileFormValue = {
+            id: currentActiveId ?? 'default',
+            name: 'Default',
+            apiFormat: currentOpenAi?.apiFormat ?? 'openai',
+            endpoint: currentOpenAi?.endpoint ?? '',
+            hasKey: currentOpenAi?.hasKey === true,
+            keyHint: currentOpenAi?.keyHint ?? '',
+            key: currentOpenAi?.key ?? '',
+            clearKey: currentOpenAi?.clearKey === true,
+            models: currentOpenAi?.models ?? [],
+            disabledModels: currentOpenAi?.disabledModels ?? [],
+        };
+        const nextProvider = updater(currentSingle);
+        setValue('openai.models', nextProvider.models, { shouldDirty: true });
+        setValue('openai.disabledModels', nextProvider.disabledModels ?? [], { shouldDirty: true });
         setValue('openai.endpoint', nextProvider.endpoint, { shouldDirty: true });
         setValue('openai.apiFormat', nextProvider.apiFormat, { shouldDirty: true });
         setValue('openai.hasKey', nextProvider.hasKey, { shouldDirty: true });
         setValue('openai.keyHint', nextProvider.keyHint, { shouldDirty: true });
         setValue('openai.key', nextProvider.key, { shouldDirty: true });
         setValue('openai.clearKey', nextProvider.clearKey, { shouldDirty: true });
+    };
+
+    const updateActiveProvider = (updater: (current: CloudAiProviderProfileFormValue) => CloudAiProviderProfileFormValue) => {
+        updateProviderById(activeProvider.id, updater);
     };
 
     const switchActiveProvider = (targetId: string) => {
@@ -202,6 +257,8 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         setValue('openai.key', target.key, { shouldDirty: true });
         setValue('openai.clearKey', target.clearKey, { shouldDirty: true });
         setKeyDraft('');
+        setNewModel('');
+        setPendingDeleteModel(null);
     };
 
     const addProviderFromPreset = (presetId?: string) => {
@@ -240,6 +297,8 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         setValue('openai.key', '', { shouldDirty: true });
         setValue('openai.clearKey', false, { shouldDirty: true });
         setKeyDraft('');
+        setNewModel('');
+        setPendingDeleteModel(null);
         setPresetDialogOpen(false);
     };
 
@@ -265,6 +324,8 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         setValue('openai.key', fallback?.key ?? '', { shouldDirty: true });
         setValue('openai.clearKey', fallback?.clearKey ?? false, { shouldDirty: true });
         setKeyDraft('');
+        setNewModel('');
+        setPendingDeleteModel(null);
     };
 
     /** 选中预设后回填接口地址与 API 类型；不触碰密钥与模型列表。 */
@@ -283,30 +344,139 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         setPresetDialogOpen(false);
     };
 
-    const handleSaveKey = () => {
+    const handleSaveKey = async () => {
         const trimmed = keyDraft.trim();
-        if (!trimmed) return;
-        updateActiveProvider((current) => ({
+        if (!trimmed || keyActionPending !== null) return;
+        const targetId = activeProvider.id;
+        const previousCreds = {
+            key: activeProvider.key,
+            clearKey: activeProvider.clearKey,
+            hasKey: activeProvider.hasKey,
+            keyHint: activeProvider.keyHint,
+        };
+        updateProviderById(targetId, (current) => ({
             ...current,
             key: trimmed,
             clearKey: false,
             hasKey: true,
             keyHint: maskSecret(trimmed),
         }));
-        setKeyDraft('');
-        toast.success(t('serviceCredentials.openai.keySaved'));
+        if (!onFlushCredentials) {
+            setKeyDraft('');
+            toast.success(t('serviceCredentials.openai.keySaved'));
+            return;
+        }
+        setKeyActionPending('save');
+        try {
+            await onFlushCredentials();
+            if (mountedRef.current && resolveCurrentActiveId() === targetId) {
+                setKeyDraft('');
+            }
+            toast.success(t('serviceCredentials.openai.keySaved'));
+        } catch (error) {
+            if (mountedRef.current) {
+                updateProviderById(targetId, (current) => ({
+                    ...current,
+                    ...previousCreds,
+                }));
+            }
+            toast.error(`${t('common.saveFailed')}\n${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            if (mountedRef.current) {
+                setKeyActionPending(null);
+            }
+        }
     };
 
-    const handleClearKey = () => {
-        updateActiveProvider((current) => ({
+    const handleClearKey = async () => {
+        if (keyActionPending !== null) return;
+        const targetId = activeProvider.id;
+        const previousCreds = {
+            key: activeProvider.key,
+            clearKey: activeProvider.clearKey,
+            hasKey: activeProvider.hasKey,
+            keyHint: activeProvider.keyHint,
+        };
+        updateProviderById(targetId, (current) => ({
             ...current,
             key: '',
             clearKey: true,
             hasKey: false,
             keyHint: '',
         }));
-        setKeyDraft('');
-        toast.success(t('serviceCredentials.openai.keyCleared'));
+        if (!onFlushCredentials) {
+            setKeyDraft('');
+            toast.success(t('serviceCredentials.openai.keyCleared'));
+            return;
+        }
+        setKeyActionPending('clear');
+        try {
+            await onFlushCredentials();
+            if (mountedRef.current && resolveCurrentActiveId() === targetId) {
+                setKeyDraft('');
+            }
+            toast.success(t('serviceCredentials.openai.keyCleared'));
+        } catch (error) {
+            if (mountedRef.current) {
+                updateProviderById(targetId, (current) => ({
+                    ...current,
+                    ...previousCreds,
+                }));
+            }
+            toast.error(`${t('common.saveFailed')}\n${error instanceof Error ? error.message : String(error)}`);
+        } finally {
+            if (mountedRef.current) {
+                setKeyActionPending(null);
+            }
+        }
+    };
+
+    const handleTestModel = async (model: string) => {
+        const providerId = hasExplicitProviders ? activeProvider.id : undefined;
+        const trimmedDraft = keyDraft.trim();
+        if (trimmedDraft.length > 0) {
+            if (keyActionPending !== null) return;
+            const targetId = activeProvider.id;
+            const previousCreds = {
+                key: activeProvider.key,
+                clearKey: activeProvider.clearKey,
+                hasKey: activeProvider.hasKey,
+                keyHint: activeProvider.keyHint,
+            };
+            updateProviderById(targetId, (current) => ({
+                ...current,
+                key: trimmedDraft,
+                clearKey: false,
+                hasKey: true,
+                keyHint: maskSecret(trimmedDraft),
+            }));
+            if (onFlushCredentials) {
+                setKeyActionPending('save');
+                try {
+                    await onFlushCredentials();
+                    if (mountedRef.current && resolveCurrentActiveId() === targetId) {
+                        setKeyDraft('');
+                    }
+                } catch (error) {
+                    if (mountedRef.current) {
+                        updateProviderById(targetId, (current) => ({
+                            ...current,
+                            ...previousCreds,
+                        }));
+                    }
+                    toast.error(`${t('common.saveFailed')}\n${error instanceof Error ? error.message : String(error)}`);
+                    return;
+                } finally {
+                    if (mountedRef.current) {
+                        setKeyActionPending(null);
+                    }
+                }
+            } else {
+                setKeyDraft('');
+            }
+        }
+        if (!mountedRef.current) return;
+        onTestModel(model, providerId);
     };
 
     const handleAddModel = () => {
@@ -432,7 +602,8 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                         isLabelHidden
                         value={keyDraft}
                         onChange={setKeyDraft}
-                        onEnter={handleSaveKey}
+                        onEnter={() => { void handleSaveKey(); }}
+                        isDisabled={disabled || keyActionPending !== null}
                         placeholder={activeProvider.hasKey
                             ? t('serviceCredentials.openai.keyPlaceholderSaved', {
                                 hint: activeProvider.keyHint || '••••',
@@ -447,13 +618,15 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                                 label={t('serviceCredentials.openai.saveKey')}
                                 size="sm"
                                 variant="primary"
-                                isDisabled={disabled}
-                                onClick={handleSaveKey}
+                                isLoading={keyActionPending === 'save'}
+                                isDisabled={disabled || keyActionPending !== null}
+                                onClick={() => { void handleSaveKey(); }}
                             />
                             <Button
                                 label={t('serviceCredentials.openai.cancelKeyEdit')}
                                 size="sm"
                                 variant="ghost"
+                                isDisabled={keyActionPending !== null}
                                 onClick={() => setKeyDraft('')}
                             />
                         </>
@@ -463,8 +636,9 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                                 label={t('serviceCredentials.openai.clearKey')}
                                 size="sm"
                                 variant="ghost"
-                                isDisabled={disabled}
-                                onClick={handleClearKey}
+                                isLoading={keyActionPending === 'clear'}
+                                isDisabled={disabled || keyActionPending !== null}
+                                onClick={() => { void handleClearKey(); }}
                             />
                         )
                     )}
@@ -570,10 +744,11 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                                                         <Icon
                                                             icon={(result.success ? CheckCircle2 : XCircle) as unknown as IconType}
                                                             size="xsm"
+                                                            className={result.success ? 'text-success-text' : 'text-error-text'}
                                                         />
                                                         <Text
                                                             type="supporting"
-                                                            color={result.success ? 'primary' : 'disabled'}
+                                                            className={result.success ? 'text-success-text' : 'text-error-text'}
                                                             maxLines={1}
                                                         >
                                                             {result.message}
@@ -595,9 +770,9 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                                                     size="sm"
                                                     variant="secondary"
                                                     isLoading={isTestingThisModel}
-                                                    isDisabled={disabled || testingModel !== null}
+                                                    isDisabled={disabled || testingModel !== null || keyActionPending !== null}
                                                     icon={<Icon icon={TestTube as unknown as IconType} size="sm" />}
-                                                    onClick={() => onTestModel(model, hasExplicitProviders ? activeProvider.id : undefined)}
+                                                    onClick={() => { void handleTestModel(model); }}
                                                 />
                                                 <IconButton
                                                     label={t('common.delete')}
@@ -625,12 +800,14 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                         onChange={setNewModel}
                         placeholder={t('serviceCredentials.openai.addPlaceholder')}
                         onEnter={handleAddModel}
+                        isDisabled={disabled}
                         size="sm"
                     />
                     <Button
                         label={t('serviceCredentials.openai.addButton')}
                         size="sm"
                         variant="secondary"
+                        isDisabled={disabled}
                         icon={<Icon icon={Plus as unknown as IconType} size="sm" />}
                         onClick={handleAddModel}
                     />

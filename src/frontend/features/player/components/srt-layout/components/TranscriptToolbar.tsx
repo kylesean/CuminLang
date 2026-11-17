@@ -65,8 +65,8 @@ export function TranscriptToolbar({
     const { t } = useI18nTranslation('player');
 
     return (
-        <div className="shrink-0 px-3.5 py-2 flex items-center justify-between border-b border-border/40 bg-surface/50 backdrop-blur-md z-10 text-sm">
-            <div className="flex items-center gap-2 min-w-0 shrink-0">
+        <div className="shrink-0 px-3.5 py-2 flex items-center justify-between gap-2 border-b border-border/40 bg-surface/50 backdrop-blur-md z-10 text-sm overflow-x-hidden">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
                 <div className="shrink-0">
                     <SegmentedControl
                         value={transcriptViewMode}
@@ -85,17 +85,18 @@ export function TranscriptToolbar({
                     </SegmentedControl>
                 </div>
                 {loopSentenceCount > 1 && (
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 min-w-0">
                         <Badge
                             variant="teal"
-                            icon={<Repeat className="w-2.5 h-2.5" />}
+                            icon={<Repeat className="w-2.5 h-2.5 shrink-0" />}
                             label={t('nSentencesLoop', { count: loopSentenceCount, defaultValue: `${loopSentenceCount} 句循环` })}
+                            className="max-w-full truncate"
                         />
                         <Tooltip content={t('cancelLoop')} placement="below">
                             <button
                                 type="button"
                                 onClick={onCancelLoop}
-                                className="p-0.5 rounded-full text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
+                                className="p-0.5 rounded-full text-secondary hover:text-primary hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring transition-colors cursor-pointer shrink-0"
                                 aria-label={t('cancelLoop')}
                             >
                                 <X className="w-3 h-3" />
@@ -111,7 +112,7 @@ export function TranscriptToolbar({
                         type="button"
                         onClick={onToggleSearch}
                         className={cn(
-                            'p-1 rounded-md transition-colors cursor-pointer',
+                            'p-1 rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                             isSearchOpen
                                 ? 'text-accent bg-accent-muted/20'
                                 : 'text-secondary hover:text-primary hover:bg-muted/80',
@@ -175,7 +176,7 @@ export function TranscriptToolbar({
                         aria-label={t('controlBox.showSideTranslation')}
                         onClick={onToggleSideTranslation}
                         className={cn(
-                            'p-1 rounded-md transition-colors cursor-pointer',
+                            'p-1 rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                             showSideTranslation
                                 ? 'text-accent hover:bg-accent-muted/20'
                                 : 'text-secondary hover:text-primary hover:bg-muted/80',
@@ -194,7 +195,7 @@ export function TranscriptToolbar({
                     <button
                         type="button"
                         onClick={onToggleTranscriptPosition}
-                        className="p-1 rounded-md text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
+                        className="p-1 rounded-md text-secondary hover:text-primary hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring transition-colors cursor-pointer"
                         aria-label={transcriptPosition === 'right' ? t('dockToLeft') : t('dockToRight')}
                     >
                         {transcriptPosition === 'right' ? (
@@ -209,7 +210,7 @@ export function TranscriptToolbar({
                     <button
                         type="button"
                         onClick={onCloseTranscript}
-                        className="p-1 rounded-md text-secondary hover:text-primary hover:bg-muted/80 transition-colors cursor-pointer"
+                        className="p-1 rounded-md text-secondary hover:text-primary hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring transition-colors cursor-pointer"
                         aria-label={t('controlButton.closeTranscript', { defaultValue: '收起字幕文稿' })}
                     >
                         {transcriptPosition === 'right' ? (

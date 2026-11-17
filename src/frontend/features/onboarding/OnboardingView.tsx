@@ -168,6 +168,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
         allBundleEntries,
         bundleEntries,
         downloadingBundle,
+        cancellingBundle,
         overallPercent,
         progressLabel,
         live,
@@ -337,7 +338,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
                             <p className="text-sm text-secondary leading-relaxed">{t('steps.storage.note')}</p>
 
                             {!storageAvailable && (
-                                <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+                                <div className="flex items-center gap-2 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error-text">
                                     <XCircle className="h-3.5 w-3.5 shrink-0" />
                                     <span>{t('steps.storage.unavailable')}</span>
                                 </div>
@@ -401,7 +402,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
                                             disabled={downloadingBundle}
                                             data-testid={`onboarding-tier-${tier.key}`}
                                             onClick={() => selectTier(tier.key)}
-                                            className={`flex flex-col gap-1.5 rounded-xl border p-3.5 text-left transition-colors ${
+                                            className={`flex flex-col gap-1.5 rounded-xl border p-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${
                                                 active
                                                     ? 'border-accent bg-accent-bg/10'
                                                     : 'border-border/70 bg-card/70 hover:bg-card'
@@ -483,6 +484,8 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
                                         label={t('steps.download.cancel')}
                                         variant="ghost"
                                         size="sm"
+                                        isLoading={cancellingBundle}
+                                        isDisabled={cancellingBundle}
                                         onClick={() => { void cancelBundleDownload(); }}
                                     />
                                 </div>
@@ -520,7 +523,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
                                         </HStack>
                                     </Button>
                                     {bundleError && (
-                                        <span className="flex items-center gap-1.5 text-sm text-error">
+                                        <span className="flex items-center gap-1.5 text-sm text-error-text">
                                             <XCircle className="h-3.5 w-3.5 shrink-0" />
                                             <span className="break-all">{bundleError}</span>
                                         </span>
@@ -532,14 +535,15 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
                             <div className="w-full text-left">
                                 <button
                                     type="button"
-                                    onClick={() => setCloudQuickOpen(!cloudQuickOpen)}
-                                    className="flex w-full items-center justify-center gap-1.5 text-xs font-medium text-secondary hover:text-primary"
+                                    aria-expanded={cloudQuickOpen}
+                                    onClick={setCloudQuickOpen}
+                                    className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-xs font-medium text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring cursor-pointer"
                                 >
                                     <Cloud className="h-3.5 w-3.5" />
                                     <span>{t('steps.download.cloud.toggle')}</span>
                                 </button>
 
-                                {(cloudQuickOpen || advice.preferCloudLlm) && (
+                                {cloudQuickOpen && (
                                     <div className="mt-2.5 space-y-3 rounded-xl border border-border/60 bg-card/75 p-3.5">
                                         {advice.preferCloudLlm && (
                                             <p className="text-xs text-secondary">{t('steps.download.cloud.preferHint')}</p>

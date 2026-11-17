@@ -50,9 +50,11 @@ export default function ConfirmDeleteButton({
           }
         }}
         disabled={isLoading}
+        aria-label={title}
         className={cn(
-          'p-1 rounded-md transition-all cursor-pointer shrink-0',
-          'text-secondary hover:text-error hover:bg-error/10',
+          'p-1 rounded-lg transition-all cursor-pointer shrink-0',
+          'text-secondary hover:text-error-text hover:bg-error/10',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
           isLoading && 'opacity-60 cursor-not-allowed',
           triggerClassName
         )}

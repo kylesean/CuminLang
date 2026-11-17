@@ -36,6 +36,7 @@ import type { EngineSelectionSettingVO } from '@/common/types/vo/engine-selectio
 import type { ServiceCredentialSettingSaveVO } from '@/common/types/vo/service-credentials-setting-vo';
 import type { ShortcutSettingSaveVO } from '@/common/types/vo/shortcut-setting-vo';
 import { AI_API_FORMATS, type AiApiFormat } from '@/common/utils/cloud-ai-api-format';
+import { validateCustomProxyUrl } from '@/common/utils/proxy-url';
 
 /** 非空字符串基础校验。 */
 export const nonEmptyStringSchema = z.string().min(1);
@@ -75,6 +76,7 @@ export const runtimeSettingSaveSchema: z.ZodType<RuntimeSettingSaveRequest> = z.
         'player.sceneCues',
         'subtitle.autoRefineWithLocalAsr',
         'userSelect.playbackRateStack',
+        'providers.embedding',
         'learning.activePromptPresetId',
     ]),
     value: z.string(),
@@ -127,10 +129,12 @@ export const engineSelectionSaveSchema: z.ZodType<EngineSelectionSettingVO> = z.
     providers: z.object({
         subtitleTranslationEngine: z.enum(['openai', 'tencent', 'none', 'invalid']),
         dictionaryEngine: z.enum(['openai', 'none', 'invalid']),
+        embeddingEngine: z.enum(['auto', 'local', 'openai', 'none', 'invalid']).optional(),
     }),
     invalidValues: z.object({
         'providers.subtitleTranslation': z.string().optional(),
         'providers.dictionary': z.string().optional(),
+        'providers.embedding': z.string().optional(),
         'features.openai.subtitleTranslationMode': z.string().optional(),
     }),
 });
@@ -186,6 +190,17 @@ export const proxySettingSaveSchema: z.ZodType<ProxySettingSaveVO> = z.object({
     mode: z.enum(['system', 'custom', 'none']),
     url: z.string(),
     bypassRules: z.string(),
+}).superRefine((value, ctx) => {
+    if (value.mode === 'custom' && value.url.trim().length > 0) {
+        const check = validateCustomProxyUrl(value.url);
+        if (!check.valid) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['url'],
+                message: check.message,
+            });
+        }
+    }
 });
 
 /** 手机端访问设置保存请求校验架构。 */

@@ -481,5 +481,11 @@ describe('ContextStudioPage - Three-column workspace (Words & Sentences)', () =>
         expect(screen.getByText('Stay hungry, stay foolish.')).toBeDefined();
         fireEvent.click(screen.getByRole('button', { name: '脱口而出' }));
         expect(screen.getByText('从第一性原理出发思考。')).toBeDefined();
+
+        // 在下一张金句卡上支持 Space 翻开 + 数字键 3 评分进入完成态
+        fireEvent.keyDown(window, { code: 'Space', key: ' ' });
+        expect(screen.getByText('Think from first principles.')).toBeDefined();
+        fireEvent.keyDown(window, { key: '3' });
+        expect(await screen.findByText('本轮金句表达回忆完成')).toBeDefined();
     });
 });

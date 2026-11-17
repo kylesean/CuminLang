@@ -149,10 +149,13 @@ export class DesktopLyricsWindowManager {
         const { workArea } = screen.getPrimaryDisplay();
         const width = Math.min(DEFAULT_LYRICS_WIDTH, Math.max(MIN_LYRICS_WIDTH, Math.round(workArea.width * 0.56)));
         const height = LYRICS_WINDOW_HEIGHT;
-        const [x, y] = this.lastPosition ?? [
+        const [rawX, rawY] = this.lastPosition ?? [
             Math.round(workArea.x + (workArea.width - width) / 2),
             Math.round(workArea.y + workArea.height - height - SCREEN_BOTTOM_MARGIN),
         ];
+        const targetWorkArea = screen.getDisplayNearestPoint({ x: rawX, y: rawY }).workArea;
+        const x = Math.min(Math.max(rawX, targetWorkArea.x - Math.floor(width * 0.4)), targetWorkArea.x + targetWorkArea.width - Math.floor(width * 0.6));
+        const y = Math.min(Math.max(rawY, targetWorkArea.y), targetWorkArea.y + targetWorkArea.height - Math.floor(height * 0.4));
 
         const win = new BrowserWindow({
             width,

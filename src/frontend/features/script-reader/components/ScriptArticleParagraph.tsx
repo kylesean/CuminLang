@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bookmark, NotebookPen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import type { SavedSentenceVO } from '@/common/types/contextStudio';
 import type { Sentence } from '@/common/types/SentenceC';
 import { renderSentenceTokens } from '@/frontend/features/player/components/srt-layout/sentence-token-renderer';
@@ -125,7 +126,7 @@ function ScriptParagraphZhSpan({
                 }
             }}
             className={cn(
-                'inline cursor-pointer transition-colors',
+                'inline rounded-sm cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                 isCurrent ? 'text-primary font-medium' : 'text-secondary/80 hover:text-primary',
             )}
         >
@@ -134,6 +135,8 @@ function ScriptParagraphZhSpan({
         </span>
     );
 }
+
+const TRANSLATION_LOADING_TIMEOUT_MS = 12_000;
 
 function ScriptParagraphTranslationRow({
     sentences,
@@ -150,15 +153,35 @@ function ScriptParagraphTranslationRow({
 }) {
     const { t } = useTranslation('pages');
     const engine = useSubtitleTranslation((state) => state.engine);
-    const translations = useSubtitleTranslation((state) => state.translations);
+    const activeFileHash = useSubtitleTranslation((state) => state.activeFileHash);
+    const translationKeysSignature = sentences.map((s) => s.translationKey || '').join('|');
+    const aiTranslations = useSubtitleTranslation(
+        useShallow((state) =>
+            sentences.map((s) => (s.translationKey ? state.translations.get(s.translationKey) ?? '' : '')),
+        ),
+    );
+    const [timedOutKey, setTimedOutKey] = useState<string | null>(null);
+    const loadingKey = `${activeFileHash ?? ''}:${engine}:${translationKeysSignature}`;
+    const loadingTimedOut = timedOutKey === loadingKey;
 
-    const hasAnyTranslation = sentences.some((s) => {
+    const hasAnyTranslation = sentences.some((s, idx) => {
         if (s.textZH && s.textZH.trim().length > 0) return true;
-        return Boolean(s.translationKey && translations.get(s.translationKey));
+        return Boolean(aiTranslations[idx]);
     });
+    const hasTranslationKeys = sentences.some((s) => Boolean(s.translationKey));
+
+    useEffect(() => {
+        if (hasAnyTranslation || engine === 'none' || !hasTranslationKeys) {
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            setTimedOutKey(loadingKey);
+        }, TRANSLATION_LOADING_TIMEOUT_MS);
+        return () => window.clearTimeout(timer);
+    }, [hasAnyTranslation, engine, hasTranslationKeys, loadingKey]);
 
     if (!hasAnyTranslation) {
-        if (engine === 'none') {
+        if (engine === 'none' || !hasTranslationKeys || loadingTimedOut) {
             return null;
         }
         return (
@@ -168,11 +191,18 @@ function ScriptParagraphTranslationRow({
         );
     }
 
+    const aiTranslationBySentenceIndex = new Map<number, string>();
+    sentences.forEach((s, idx) => {
+        if (aiTranslations[idx]) {
+            aiTranslationBySentenceIndex.set(s.index, aiTranslations[idx]);
+        }
+    });
+
     const renderedItems: Array<{ sentence: Sentence; zhText: string; isCurrent: boolean }> = [];
     for (const unit of units) {
         const isUnitCurrent = unit.sentences.some((s) => s.index === activeSentenceIndex);
         for (const s of unit.sentences) {
-            const aiZh = s.translationKey ? translations.get(s.translationKey) : undefined;
+            const aiZh = aiTranslationBySentenceIndex.get(s.index);
             const zhText = s.textZH || aiZh || '';
             if (zhText) {
                 renderedItems.push({ sentence: s, zhText, isCurrent: isUnitCurrent });
@@ -231,7 +261,7 @@ export function ScriptArticleParagraph({
     return (
         <article className="max-w-2xl mx-auto w-full flex flex-col gap-2">
             {/* 连贯英文阅读流（以完整句单元聚焦高亮） */}
-            <div className="text-[15.5px] leading-[1.85] text-primary/90 select-text break-words">
+            <div className="text-base leading-relaxed text-primary/90 select-text break-words">
                 {logicalUnits.map((unit, uIdx) => {
                     const unitKey = `${unit.repr.fileHash}:${unit.repr.index}`;
                     const lastSentence = unit.sentences[unit.sentences.length - 1];
@@ -285,7 +315,7 @@ export function ScriptArticleParagraph({
                                     }
                                 }}
                                 className={cn(
-                                    'inline cursor-pointer transition-colors rounded-sm',
+                                    'inline cursor-pointer transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                                     isUnitCurrent
                                         ? 'text-primary font-medium underline decoration-accent/70 decoration-[1.5px] underline-offset-[5px]'
                                         : 'hover:text-primary hover:underline hover:decoration-border hover:underline-offset-[5px]',
@@ -349,7 +379,7 @@ export function ScriptArticleParagraph({
                                 key={`margin-${record.sentenceKey}`}
                                 type="button"
                                 onClick={() => onSelectSentence(s)}
-                                className="text-left text-metadata text-secondary hover:text-primary transition-colors cursor-pointer line-clamp-2"
+                                className="text-left rounded-sm text-metadata text-secondary hover:text-primary transition-colors cursor-pointer line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                             >
                                 {record.note}
                             </button>

@@ -97,6 +97,14 @@
         "bypassRulesTitle": "Bypass Rules",
         "bypassRulesDescription": "Comma-separated domains/IPs/CIDRs that bypass proxy (e.g. localhost, 127.0.0.1)",
         "directConnectionWarning": "No effective proxy detected: network requests such as YouTube downloads will go direct and are likely to fail on this network. Switch to Custom and fill in a proxy address if you need one.",
+        "validation": {
+            "missingScheme": "Proxy URL must include a scheme (e.g. http://, https://, or socks5://)",
+            "unsupportedScheme": "Unsupported proxy protocol — use http://, https://, socks5://, or socks4://",
+            "invalidUrl": "Invalid proxy URL format — check the scheme, host, and port",
+            "missingHost": "Proxy URL is missing a host or IP address",
+            "missingSocksPort": "SOCKS proxy URL must include a port (e.g. socks5://127.0.0.1:1080)",
+            "invalidPort": "Proxy port must be between 1 and 65535"
+        },
         "sections": {
             "connection": "Connection",
             "connectionDesc": "How CuminLang reaches the network"
@@ -271,7 +279,9 @@
         },
         "rerecord": "Record again",
         "cancel": "Cancel",
-        "listeningPromptHint": "Waiting for a keypress... (you can press a new combination any time)"
+        "listeningPromptHint": "Waiting for a keypress... (you can press a new combination any time)",
+        "reservedConflict": "Conflicts with reserved shortcut {{key}}",
+        "actionConflict": "Conflicts with \"{{actions}}\""
     },
     "about": {
         "title": "About & Updates",

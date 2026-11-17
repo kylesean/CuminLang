@@ -128,6 +128,8 @@ export default function ScriptReaderPage() {
     const plainScrollerRef = useRef<HTMLDivElement | null>(null);
     const audioEpochRef = useRef(0);
     const showTranslationRef = useRef(showTranslation);
+    const pendingScrollRef = useRef<{ videoId: string; index: number } | null>(null);
+    const [scrollTick, setScrollTick] = useState(0);
 
     useEffect(() => {
         showTranslationRef.current = showTranslation;
@@ -204,6 +206,22 @@ export default function ScriptReaderPage() {
         stopActiveAudio();
         setPlayingAudioScope(null);
     }, []);
+
+    // 当 routeVideoId（如浏览器前进/后退或外部跳链）切换篇目时，立即停止上一篇单句点读音频并重置筛选态
+    const prevEffectiveVideoIdRef = useRef(effectiveVideoId);
+    useEffect(() => {
+        if (prevEffectiveVideoIdRef.current !== effectiveVideoId) {
+            const hadPrevious = prevEffectiveVideoIdRef.current !== '';
+            prevEffectiveVideoIdRef.current = effectiveVideoId;
+            stopSingleAudio();
+            if (hadPrevious) {
+                setFilter('all');
+                setSearchQuery('');
+                setEditingState(null);
+                setAsrMissingForVideoId(null);
+            }
+        }
+    }, [effectiveVideoId, stopSingleAudio]);
 
     const handleSelectDoc = useCallback((nextVideoId: string) => {
         stopSingleAudio();
@@ -339,8 +357,9 @@ export default function ScriptReaderPage() {
     );
 
     const searchActive = searchQuery.trim() !== '';
-    const allTranslations = useSubtitleTranslation((state) => state.translations);
-    const searchTranslations = searchActive ? allTranslations : EMPTY_TRANSLATIONS;
+    const searchTranslations = useSubtitleTranslation(
+        (state) => (searchActive ? state.translations : EMPTY_TRANSLATIONS),
+    );
 
     const effectiveCandidateWords = useMemo(() => {
         if (!activeDoc || candidateState.videoId !== activeDoc.videoId || candidateState.words.length === 0) {
@@ -456,9 +475,20 @@ export default function ScriptReaderPage() {
         saveReaderProgress(activeDoc.videoId, sentenceIndex);
         requestReaderTranslation(activeSentences[0]?.fileHash, sentenceIndex);
         if (shouldScroll) {
-            setTimeout(() => scrollToSentenceIndex(sentenceIndex), 0);
+            pendingScrollRef.current = { videoId: activeDoc.videoId, index: sentenceIndex };
+            setScrollTick((tick) => tick + 1);
         }
-    }, [activeDoc, activeSentences, requestReaderTranslation, scrollToSentenceIndex]);
+    }, [activeDoc, activeSentences, requestReaderTranslation]);
+
+    // 在最新 paragraphs / Virtuoso 提交后再执行滚动，避免筛选清空跨越虚拟化阈值时命中过期闭包
+    useEffect(() => {
+        const pending = pendingScrollRef.current;
+        if (!pending || !activeDoc || loadingScript || pending.videoId !== activeDoc.videoId) {
+            return;
+        }
+        pendingScrollRef.current = null;
+        scrollToSentenceIndex(pending.index);
+    }, [activeDoc, loadingScript, paragraphs, scrollTick, scrollToSentenceIndex]);
 
     // 初次加载文档字幕完成时滚动到初始聚焦句并拉取译文
     useEffect(() => {
@@ -805,7 +835,7 @@ export default function ScriptReaderPage() {
             const markdown = buildReaderMarkdown({
                 doc: activeDoc,
                 paragraphs,
-                translations: allTranslations,
+                translations: useSubtitleTranslation.getState().translations,
                 savedByKey,
                 vocabSummary,
                 includeTranslation: showTranslation,
@@ -824,7 +854,7 @@ export default function ScriptReaderPage() {
         } finally {
             setExporting(false);
         }
-    }, [activeDoc, allTranslations, exporting, paragraphs, savedByKey, showTranslation, t, vocabSummary]);
+    }, [activeDoc, exporting, paragraphs, savedByKey, showTranslation, t, vocabSummary]);
 
     const handleJumpToPlayer = useCallback(
         (targetSentence: Sentence | null, withPractice = false) => {

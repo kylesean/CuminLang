@@ -33,16 +33,25 @@ export function useReaderSentenceCopilot({
         ? `${videoId}:${sentenceFileHash}:${sentenceIndex}`
         : '';
 
-    const [sessionState, setSessionState] = useState<{ key: string; id: string }>({ key: '', id: '' });
+    const [sessionState, setSessionState] = useState<{
+        key: string;
+        id: string;
+        restoredMessages: NonNullable<Awaited<ReturnType<typeof chatApi.getStudyNote>>>['messages'];
+    }>({ key: '', id: '', restoredMessages: [] });
     const [cloudAvailable, setCloudAvailable] = useState(false);
     const [input, setInput] = useState('');
     const [attachedFocusExpr, setAttachedFocusExpr] = useState<string | null>(null);
     const sessionIdRef = useRef('');
     const epochRef = useRef(0);
+    const hydratedSessionRef = useRef('');
     const sentencesRef = useRef(allSentences);
     const sentenceTextRef = useRef(sentenceText);
 
     const activeSessionId = sessionState.key === activeKey ? sessionState.id : '';
+    const activeRestoredMessages = useMemo(
+        () => (sessionState.key === activeKey ? sessionState.restoredMessages : []),
+        [sessionState, activeKey],
+    );
     const transport = useMemo(() => new ElectronChatTransport(), []);
     const chat = useChat({
         id: activeSessionId || 'reader-inactive-chat',
@@ -50,14 +59,27 @@ export function useReaderSentenceCopilot({
         throttle: 40,
     });
     const { messages, sendMessage, setMessages, status, stop, error: chatError } = chat;
-    const setMessagesRef = useRef(setMessages);
     const isBusy = status === 'submitted' || status === 'streaming';
 
     useEffect(() => {
         sentencesRef.current = allSentences;
         sentenceTextRef.current = sentenceText;
-        setMessagesRef.current = setMessages;
     });
+
+    // 在 useChat 切换到真实 activeSessionId 之后再注入恢复的历史消息，避免被切 id 丢弃。
+    useEffect(() => {
+        if (!activeSessionId) {
+            hydratedSessionRef.current = '';
+            return;
+        }
+        if (hydratedSessionRef.current === activeSessionId) {
+            return;
+        }
+        hydratedSessionRef.current = activeSessionId;
+        if (activeRestoredMessages.length > 0 && messages.length === 0) {
+            setMessages(persistedToUiMessages(activeRestoredMessages));
+        }
+    }, [activeRestoredMessages, activeSessionId, messages.length, setMessages]);
 
     useEffect(() => {
         const epoch = ++epochRef.current;
@@ -120,8 +142,11 @@ export function useReaderSentenceCopilot({
 
                 if (created?.sessionId) {
                     sessionIdRef.current = created.sessionId;
-                    setSessionState({ key: activeKey, id: created.sessionId });
-                    setMessagesRef.current(restoredMessages.length > 0 ? persistedToUiMessages(restoredMessages) : []);
+                    setSessionState({
+                        key: activeKey,
+                        id: created.sessionId,
+                        restoredMessages,
+                    });
                 }
             } catch {
                 // 会话初始化失败保持静默离线降级，不阻塞左侧文本精读

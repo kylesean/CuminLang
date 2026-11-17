@@ -195,6 +195,18 @@ export default function Subtitle() {
      */
     const [vocabularyFilter, setVocabularyFilter] = useState<TranscriptVocabularyFilter>('all');
 
+    // 切换视频时重置搜索词、置顶匹配与词汇筛选，避免上一个视频的过滤条件藏住新字幕
+    const prevVideoIdRef = useRef<string | null>(activeVideoId);
+    useEffect(() => {
+        if (prevVideoIdRef.current !== activeVideoId) {
+            prevVideoIdRef.current = activeVideoId;
+            setIsSearchOpen(false);
+            setSearchQuery('');
+            setPinnedMatch({ query: '', index: -1 });
+            setVocabularyFilter('all');
+        }
+    }, [activeVideoId]);
+
     /** 整份文稿的词汇标记统计，一次算完供筛选使用。 */
     const vocabularyCounts = useTranscriptVocabularyCounts(subtitle);
 

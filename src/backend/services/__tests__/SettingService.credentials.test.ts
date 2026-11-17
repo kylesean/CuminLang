@@ -161,3 +161,48 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         expect(selection.openai.featureModels.sentenceLearning).toBe('gpt-4o-mini');
     });
 });
+
+describe('代理设置校验与落盘', () => {
+    it.each([
+        '127.0.0.1:7890',
+        'http://',
+        'socks5://127.0.0.1',
+        'socks5://:1080',
+        'ftp://127.0.0.1:21',
+    ])('custom 模式下拒绝非法代理地址 %s 且不覆盖旧配置', async (badUrl) => {
+        const store = createStore({
+            'proxy.mode': 'custom',
+            'proxy.url': 'http://127.0.0.1:7890',
+            'proxy.bypass_rules': 'localhost',
+        });
+        const service = createService(store);
+
+        await expect(
+            service.saveProxySettings({ mode: 'custom', url: badUrl, bypassRules: '127.0.0.1' }),
+        ).rejects.toThrow();
+
+        expect(store.values.get('proxy.mode')).toBe('custom');
+        expect(store.values.get('proxy.url')).toBe('http://127.0.0.1:7890');
+        expect(store.values.get('proxy.bypass_rules')).toBe('localhost');
+    });
+
+    it('合法 custom 地址会去掉首尾空白后保存，非 custom 模式不拦截旧 URL', async () => {
+        const store = createStore();
+        const service = createService(store);
+
+        await service.saveProxySettings({
+            mode: 'custom',
+            url: '  socks5://127.0.0.1:1080  ',
+            bypassRules: 'localhost',
+        });
+        expect(store.values.get('proxy.mode')).toBe('custom');
+        expect(store.values.get('proxy.url')).toBe('socks5://127.0.0.1:1080');
+
+        await service.saveProxySettings({
+            mode: 'none',
+            url: '127.0.0.1:7890',
+            bypassRules: '',
+        });
+        expect(store.values.get('proxy.mode')).toBe('none');
+    });
+});

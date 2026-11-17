@@ -168,15 +168,17 @@ export function useOnboardingBundle() {
     );
 
     // 可选云端快速配置状态
-    const [cloudQuickOpen, setCloudQuickOpen] = React.useState(false);
+    const [cloudQuickOpen, setCloudQuickOpen] = React.useState<boolean | null>(null);
     const [cloudPresetId, setCloudPresetId] = React.useState('deepseek');
     const [cloudApiKey, setCloudApiKey] = React.useState('');
     const [cloudModelId, setCloudModelId] = React.useState('');
     const [cloudSaving, setCloudSaving] = React.useState(false);
     const [cloudSavedProvider, setCloudSavedProvider] = React.useState<string | null>(null);
+    const cloudSavedModelRef = React.useRef('');
 
     // 下载过程状态
     const [downloadingBundle, setDownloadingBundle] = React.useState(false);
+    const [cancellingBundle, setCancellingBundle] = React.useState(false);
     const downloadingBundleRef = React.useRef(false);
     const finishingRef = React.useRef(false);
     const choosingStorageRef = React.useRef(false);
@@ -260,8 +262,19 @@ export function useOnboardingBundle() {
 
     React.useEffect(() => {
         const unsubArchive = subscribeArchiveDownloadProgress((detail) => {
-            if (activeItemRef.current !== 'tts' && activeItemRef.current !== 'transcription') {
+            const currentKey = activeItemRef.current;
+            if (currentKey !== 'tts' && currentKey !== 'transcription') {
                 return;
+            }
+            if (detail.source) {
+                if (currentKey === 'tts' && detail.source !== 'tts') return;
+                if (
+                    currentKey === 'transcription'
+                    && detail.source !== 'whisper-cpp'
+                    && detail.source !== 'parakeet'
+                ) {
+                    return;
+                }
             }
             setActivePhase(detail.phase);
             if (detail.phase === 'downloading' && detail.total > 0) {
@@ -299,7 +312,23 @@ export function useOnboardingBundle() {
 
     const selectCloudPreset = React.useCallback((presetId: string) => {
         setCloudPresetId(presetId);
+        setCloudSavedProvider(null);
     }, []);
+
+    const updateCloudApiKey = React.useCallback((value: string) => {
+        setCloudApiKey(value);
+        setCloudSavedProvider(null);
+    }, []);
+
+    const updateCloudModelId = React.useCallback((value: string) => {
+        setCloudModelId(value);
+        setCloudSavedProvider(null);
+    }, []);
+
+    const effectiveCloudQuickOpen = cloudQuickOpen ?? advice.preferCloudLlm;
+    const toggleCloudQuickOpen = React.useCallback(() => {
+        setCloudQuickOpen((prev) => !(prev ?? advice.preferCloudLlm));
+    }, [advice.preferCloudLlm]);
 
     /** 引导内快速保存云端或本地推理服务凭据（可选）。 */
     const saveQuickCloudSetup = React.useCallback(async () => {
@@ -314,7 +343,7 @@ export function useOnboardingBundle() {
         setCloudSaving(true);
         try {
             const current = await settingsApi.getServiceCredentials();
-            const mergedModels = Array.from(new Set([...current.openai.models, trimmedModel]));
+            const mergedModels = Array.from(new Set([trimmedModel, ...current.openai.models]));
             await settingsApi.saveServiceCredentials({
                 openai: {
                     key: trimmedKey,
@@ -324,6 +353,7 @@ export function useOnboardingBundle() {
                 },
                 tencent: {},
             });
+            cloudSavedModelRef.current = trimmedModel;
             setCloudSavedProvider(preset.name);
             toast.success(t('steps.download.cloud.savedBadge', { provider: preset.name }));
         } catch (error) {
@@ -563,7 +593,7 @@ export function useOnboardingBundle() {
                 && credentials.openai.models.length > 0
                 && (credentials.openai.hasKey || isLocalLlmEndpoint(credentials.openai.endpoint)),
             );
-            const fallbackCloudModel = credentials?.openai.models[0] ?? '';
+            const fallbackCloudModel = cloudSavedModelRef.current || credentials?.openai.models[0] || '';
             const useCloudForAi = Boolean(cloudSavedProvider && hasCloudCreds);
 
             if (useCloudForAi) {
@@ -710,6 +740,7 @@ export function useOnboardingBundle() {
             downloadingBundleRef.current = false;
             setActiveItem(null);
             setActivePhase(null);
+            setCancellingBundle(false);
             setDownloadingBundle(false);
         }
     };
@@ -722,12 +753,15 @@ export function useOnboardingBundle() {
     };
 
     const cancelBundleDownload = async () => {
+        if (cancellingBundle) return;
         cancelRequestedRef.current = true;
         const currentKey = activeItemRef.current ?? activeItem;
         if (!currentKey) return;
+        setCancellingBundle(true);
         try {
             await cancelBundleEntry(currentKey);
         } catch (error) {
+            setCancellingBundle(false);
             toast.error(error instanceof Error ? error.message : String(error));
         }
     };
@@ -748,6 +782,7 @@ export function useOnboardingBundle() {
         allBundleEntries,
         bundleEntries,
         downloadingBundle,
+        cancellingBundle,
         overallPercent,
         progressLabel,
         live,
@@ -755,14 +790,14 @@ export function useOnboardingBundle() {
         pendingSizeLabel,
         bundleError,
         remainingLabel,
-        cloudQuickOpen,
-        setCloudQuickOpen,
+        cloudQuickOpen: effectiveCloudQuickOpen,
+        setCloudQuickOpen: toggleCloudQuickOpen,
         cloudPresetId,
         selectCloudPreset,
         cloudApiKey,
-        setCloudApiKey,
+        setCloudApiKey: updateCloudApiKey,
         cloudModelId,
-        setCloudModelId,
+        setCloudModelId: updateCloudModelId,
         cloudSaving,
         cloudSavedProvider,
         saveQuickCloudSetup,

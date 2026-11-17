@@ -22,4 +22,11 @@ export default interface RolePlayTurnRepository {
      * @param sessionKey 会话键。
      */
     listBySession(sessionKey: string): Promise<RolePlayTurn[]>;
+
+    /**
+     * 清空某个会话的全部已落库轮次。
+     *
+     * @param sessionKey 会话键。
+     */
+    deleteBySession(sessionKey: string): Promise<void>;
 }

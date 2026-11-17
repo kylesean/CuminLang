@@ -1,7 +1,14 @@
 import { useSyncExternalStore } from 'react';
-import { subscribeArchiveDownloadProgress } from '@/frontend/features/settings/settingsEvents';
+import {
+    subscribeArchiveDownloadProgress,
+    type ArchiveProgressSource,
+} from '@/frontend/features/settings/settingsEvents';
 import { createDownloadProgressTracker, type DownloadLiveSnapshot } from '@/frontend/lib/downloadProgressTracker';
 import type { ModelDownloadPhase } from '@/common/contracts/model-download-phase';
+
+export const SETTINGS_RESOURCE_PACK_ID = 'settings-resource-pack';
+export const SETTINGS_EXTENSIONS_PACK_ID = 'settings-extensions-pack';
+export const TTS_VOICE_DOWNLOAD_ID = 'settings-tts-voice';
 
 const PROGRESS_RENDER_INTERVAL_MS = 200;
 const SPEED_SMOOTHING = 0.25; // 本页调参档（偏稳重），算法见 downloadProgressTracker
@@ -27,6 +34,7 @@ export interface PackDownloadEntry {
 export interface PackDownloadState {
     downloading: boolean;
     activeItemKey: string | null;
+    queuedKeys: string[];
     activePhase: ModelDownloadPhase | null;
     packProgress: PackDownloadProgress;
     live: DownloadLiveStats;
@@ -36,6 +44,7 @@ export interface PackDownloadState {
 export const INITIAL_PACK_DOWNLOAD_STATE: PackDownloadState = {
     downloading: false,
     activeItemKey: null,
+    queuedKeys: [],
     activePhase: null,
     packProgress: { completed: 0, count: 0 },
     live: { percent: 0, downloaded: 0, total: 0, speed: 0 },
@@ -46,11 +55,22 @@ interface PackRuntime {
     epoch: number;
     cancelRequested: boolean;
     activeEntry: PackDownloadEntry | null;
+    queuedKeys: Set<string>;
     tracker: ReturnType<typeof createDownloadProgressTracker>;
     renderTimer: ReturnType<typeof setInterval> | null;
     unsubscribeProgress: (() => void) | null;
     onRefresh?: () => void;
     onComplete?: () => void;
+}
+
+function matchesArchiveSource(entryKey: string, source?: ArchiveProgressSource): boolean {
+    if (!source) return true;
+    if (entryKey === 'tts') return source === 'tts';
+    if (entryKey === 'transcription') return source === 'whisper-cpp' || source === 'parakeet';
+    if (entryKey === 'diarization') return source === 'diarization';
+    if (entryKey === 'phonemeGop') return source === 'phonemeGop';
+    if (entryKey === 'senseVoice') return source === 'senseVoice';
+    return false;
 }
 
 const packStates = new Map<string, PackDownloadState>();
@@ -105,6 +125,16 @@ export async function startPackDownload(options: {
         return;
     }
 
+    // 防止不同包（如核心资源包与音色卡片）并发下载同一资源项导致进度与后端状态冲突
+    for (const [otherPackId, otherState] of packStates.entries()) {
+        if (otherPackId === packId || !otherState.downloading) continue;
+        const otherRuntime = packRuntimes.get(otherPackId);
+        if (!otherRuntime) continue;
+        if (entries.some((entry) => otherRuntime.queuedKeys.has(entry.key))) {
+            return;
+        }
+    }
+
     const prevRuntime = packRuntimes.get(packId);
     if (prevRuntime) {
         stopRuntimeTimers(prevRuntime);
@@ -115,6 +145,7 @@ export async function startPackDownload(options: {
         epoch,
         cancelRequested: false,
         activeEntry: null,
+        queuedKeys: new Set(entries.map((entry) => entry.key)),
         tracker: createDownloadProgressTracker(SPEED_SMOOTHING),
         renderTimer: null,
         unsubscribeProgress: null,
@@ -125,6 +156,10 @@ export async function startPackDownload(options: {
 
     runtime.unsubscribeProgress = subscribeArchiveDownloadProgress((detail) => {
         if (packRuntimes.get(packId)?.epoch !== epoch) return;
+        const activeKey = runtime.activeEntry?.key;
+        if (!activeKey || !matchesArchiveSource(activeKey, detail.source)) {
+            return;
+        }
         setPackState(packId, (prev) => ({ ...prev, activePhase: detail.phase }));
         if (detail.phase === 'downloading' && detail.total > 0) {
             runtime.tracker.track(detail.downloaded, detail.total);
@@ -153,6 +188,7 @@ export async function startPackDownload(options: {
     setPackState(packId, () => ({
         downloading: true,
         activeItemKey: null,
+        queuedKeys: entries.map((entry) => entry.key),
         activePhase: null,
         packProgress: { completed: 0, count: entries.length },
         live: { percent: 0, downloaded: 0, total: 0, speed: 0 },
@@ -170,11 +206,13 @@ export async function startPackDownload(options: {
                 live: { percent: 0, downloaded: 0, total: 0, speed: 0 },
             }));
             await entry.download();
+            runtime.queuedKeys.delete(entry.key);
             if (runtime.cancelRequested || packRuntimes.get(packId)?.epoch !== epoch) {
                 break;
             }
             setPackState(packId, (prev) => ({
                 ...prev,
+                queuedKeys: prev.queuedKeys.filter((k) => k !== entry.key),
                 packProgress: { ...prev.packProgress, completed: prev.packProgress.completed + 1 },
             }));
         }
@@ -190,10 +228,12 @@ export async function startPackDownload(options: {
         stopRuntimeTimers(runtime);
         if (packRuntimes.get(packId)?.epoch === epoch) {
             runtime.activeEntry = null;
+            runtime.queuedKeys.clear();
             setPackState(packId, (prev) => ({
                 ...prev,
                 downloading: false,
                 activeItemKey: null,
+                queuedKeys: [],
                 activePhase: null,
             }));
             runtime.onRefresh?.();

@@ -49,4 +49,10 @@ export default class RolePlayTurnRepositoryImpl implements RolePlayTurnRepositor
             .where(eq(rolePlayTurn.session_key, sessionKey))
             .orderBy(asc(rolePlayTurn.turn));
     }
+
+    public async deleteBySession(sessionKey: string): Promise<void> {
+        await this.db
+            .delete(rolePlayTurn)
+            .where(eq(rolePlayTurn.session_key, sessionKey));
+    }
 }

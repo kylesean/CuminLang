@@ -168,12 +168,20 @@ export class ContentCompassServiceImpl implements ContentCompassService {
     public async list(params: ContentCompassListParams): Promise<ContentCompassVO> {
         const limit = Math.max(1, Math.min(6, Math.trunc(params.limit ?? 3)));
         const excluded = new Set(params.excludeVideoIds ?? []);
-        const [fileRecords, directoryRecords, userWords, reviewCards] = await Promise.all([
+        const [fileRecords, directoryRecords, userWords, reviewCards, recentEvents] = await Promise.all([
             this.watchHistoryRepository.listByProjectType(WatchHistoryProjectType.FILE),
             this.watchHistoryRepository.listByProjectType(WatchHistoryProjectType.DIRECTORY),
             this.learningDataRepository.listUserWords(),
             this.learningDataRepository.listReviewCards(),
+            this.learningDataRepository.listRecommendationEventsSince(
+                new Date(Date.now() - DEFAULT_STATS_DAYS * DAY_MS).toISOString(),
+            ),
         ]);
+        for (const event of recentEvents) {
+            if (event.action === 'dismissed') {
+                excluded.add(event.video_id);
+            }
+        }
         const records = this.dedupeRecords([...fileRecords, ...directoryRecords]);
         const candidates = await this.resolveCandidatesWithSubtitles(
             this.selectCandidates(records, excluded),

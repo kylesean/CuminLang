@@ -1,5 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import useLayout from '@/frontend/app/stores/layoutStore';
 import { fileBrowserApi } from '@/frontend/features/file-browser/fileBrowserApi';
 import useYoutubeImportUi from './youtubeImportUiStore';
 import YoutubeImportDialog from './YoutubeImportDialog';
@@ -13,19 +15,30 @@ import YoutubeImportDialog from './YoutubeImportDialog';
  */
 const YoutubeImportDialogHost = () => {
     const navigate = useNavigate();
+    const changeSideBar = useLayout((s) => s.changeSideBar);
     const open = useYoutubeImportUi((s) => s.open);
     const setOpen = useYoutubeImportUi((s) => s.setOpen);
     const playTarget = useYoutubeImportUi((s) => s.playTarget);
     const consumePlay = useYoutubeImportUi((s) => s.consumePlay);
+    const navigatingRef = useRef(false);
 
     useEffect(() => {
-        if (!playTarget) return;
+        if (!playTarget || navigatingRef.current) return;
+        navigatingRef.current = true;
         consumePlay();
         setOpen(false);
-        void fileBrowserApi.changeWindowSize('player').then(() => {
-            navigate(`/player/${playTarget.videoId}`);
-        });
-    }, [consumePlay, navigate, playTarget, setOpen]);
+        void fileBrowserApi.changeWindowSize('player')
+            .then(() => {
+                changeSideBar(false);
+                navigate(`/player/${playTarget.videoId}`);
+            })
+            .catch((error) => {
+                toast.error(error instanceof Error ? error.message : String(error));
+            })
+            .finally(() => {
+                navigatingRef.current = false;
+            });
+    }, [changeSideBar, consumePlay, navigate, playTarget, setOpen]);
 
     return <YoutubeImportDialog open={open} onOpenChange={setOpen} />;
 };

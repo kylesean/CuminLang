@@ -6,7 +6,19 @@ import '@/frontend/i18n';
 
 import TtsVoiceCard from '../TtsVoiceCard';
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
-import { resetPackDownloadStateForTests } from '@/frontend/features/settings/resourcePackDownloadStore';
+import {
+    SETTINGS_RESOURCE_PACK_ID,
+    resetPackDownloadStateForTests,
+    startPackDownload,
+} from '@/frontend/features/settings/resourcePackDownloadStore';
+import { toast } from 'react-hot-toast';
+
+vi.mock('react-hot-toast', () => ({
+    toast: {
+        success: vi.fn(),
+        error: vi.fn(),
+    },
+}));
 
 vi.mock('@/frontend/features/settings/settingsApi', () => ({
     settingsApi: {
@@ -95,5 +107,110 @@ describe('TtsVoiceCard', () => {
         await waitFor(() => {
             expect(settingsApi.downloadSherpaTtsModel).toHaveBeenCalledTimes(1);
         });
+    });
+
+    it('下载接口返回 success: false 时不误报成功提示，并展示错误状态', async () => {
+        vi.mocked(settingsApi.listTtsVoices).mockResolvedValue({
+            selected: 'kokoro-en-US-bella',
+            voices: [
+                {
+                    id: 'kokoro-en-US-bella',
+                    name: 'Kokoro Bella',
+                    accent: 'en-US',
+                    gender: 'female',
+                    quality: 'high',
+                    installed: false,
+                },
+            ],
+        });
+        vi.mocked(settingsApi.downloadSherpaTtsModel).mockResolvedValue({
+            success: false,
+            message: 'network failed',
+        });
+
+        render(
+            <SWRConfig value={{ provider: () => new Map() }}>
+                <TtsVoiceCard />
+            </SWRConfig>,
+        );
+
+        const downloadBtn = await screen.findByRole('button', { name: /下载音色|Download voice/ });
+        await userEvent.click(downloadBtn);
+
+        expect(await screen.findByText('network failed')).toBeDefined();
+        expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('使用 Astryx Slider 渲染音量滑块且具备无障碍 slider 语义', async () => {
+        vi.mocked(settingsApi.listTtsVoices).mockResolvedValue({
+            selected: 'en-US-lessac-medium',
+            voices: [
+                {
+                    id: 'en-US-lessac-medium',
+                    name: 'Piper Lessac',
+                    accent: 'en-US',
+                    gender: 'female',
+                    quality: 'medium',
+                    installed: true,
+                },
+            ],
+        });
+
+        render(
+            <SWRConfig value={{ provider: () => new Map() }}>
+                <TtsVoiceCard />
+            </SWRConfig>,
+        );
+
+        const slider = await screen.findByRole('slider');
+        expect(slider).toBeDefined();
+    });
+
+    it('核心资源包尚有 tts 在队列中时禁用音色下载，完成后恢复可用', async () => {
+        vi.mocked(settingsApi.listTtsVoices).mockResolvedValue({
+            selected: 'kokoro-en-US-bella',
+            voices: [
+                {
+                    id: 'kokoro-en-US-bella',
+                    name: 'Kokoro Bella',
+                    accent: 'en-US',
+                    gender: 'female',
+                    quality: 'high',
+                    installed: false,
+                },
+            ],
+        });
+
+        let resolveOther!: () => void;
+        let resolveTts!: () => void;
+        void startPackDownload({
+            packId: SETTINGS_RESOURCE_PACK_ID,
+            entries: [
+                {
+                    key: 'transcription',
+                    download: () => new Promise<void>((resolve) => { resolveOther = resolve; }),
+                    cancel: async () => undefined,
+                },
+                {
+                    key: 'tts',
+                    download: () => new Promise<void>((resolve) => { resolveTts = resolve; }),
+                    cancel: async () => undefined,
+                },
+            ],
+        });
+
+        render(
+            <SWRConfig value={{ provider: () => new Map() }}>
+                <TtsVoiceCard />
+            </SWRConfig>,
+        );
+
+        const downloadBtn = await screen.findByRole('button', { name: /下载音色|Download voice/ }) as HTMLButtonElement;
+        expect(downloadBtn.disabled).toBe(true);
+
+        resolveOther();
+        await waitFor(() => expect(downloadBtn.disabled).toBe(true));
+        resolveTts();
+        await waitFor(() => expect(downloadBtn.disabled).toBe(false));
     });
 });

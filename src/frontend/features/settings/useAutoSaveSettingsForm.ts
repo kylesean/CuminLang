@@ -40,13 +40,35 @@ export interface UseAutoSaveSettingsFormResult<TFormValues extends FieldValues> 
     initialize: (values: TFormValues) => void;
     /** 立即保存当前值（跳过防抖）。 */
     flush: () => Promise<void>;
+    /** 立即保存当前值并等待所有在途及排队保存彻底落盘或失败。 */
+    flushSettled: () => Promise<void>;
+}
+
+/**
+ * 规范化值为键顺序无关的稳定 JSON 表示，避免字段注册顺序差异导致误判为脏状态。
+ */
+function normalizeSnapshotValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(normalizeSnapshotValue);
+    }
+    if (value && typeof value === 'object') {
+        const sorted: Record<string, unknown> = {};
+        for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+            const prop = (value as Record<string, unknown>)[key];
+            if (prop !== undefined) {
+                sorted[key] = normalizeSnapshotValue(prop);
+            }
+        }
+        return sorted;
+    }
+    return value;
 }
 
 /**
  * 将表单值序列化为稳定快照，用于判断是否有未保存变更。
  */
 function snapshotOf<TFormValues extends FieldValues>(values: TFormValues): string {
-    return JSON.stringify(values);
+    return JSON.stringify(normalizeSnapshotValue(values));
 }
 
 /**
@@ -74,8 +96,16 @@ export function useAutoSaveSettingsForm<TFormValues extends FieldValues>(
     const saveInFlightRef = React.useRef(false);
     const saveQueuedRef = React.useRef(false);
     const lastCommitAttemptedRef = React.useRef(false);
+    const inFlightPromiseRef = React.useRef<Promise<void> | null>(null);
+    const inFlightFailedRef = React.useRef<{ snapshot: string; error: unknown } | null>(null);
     const commitRef = React.useRef<() => Promise<void>>(async () => undefined);
+    const onSaveRef = React.useRef(onSave);
     const tRef = React.useRef(t);
+    const mountedRef = React.useRef(true);
+
+    React.useEffect(() => {
+        onSaveRef.current = onSave;
+    }, [onSave]);
 
     React.useEffect(() => {
         tRef.current = t;
@@ -92,6 +122,9 @@ export function useAutoSaveSettingsForm<TFormValues extends FieldValues>(
         const latestValues = getValues();
         const latestSnapshot = snapshotOf(latestValues);
         if (latestSnapshot === baselineSnapshotRef.current) {
+            if (mountedRef.current) {
+                setError(null);
+            }
             return;
         }
 
@@ -102,45 +135,65 @@ export function useAutoSaveSettingsForm<TFormValues extends FieldValues>(
 
         lastCommitAttemptedRef.current = true;
         saveInFlightRef.current = true;
-        setSaving(true);
-        setError(null);
-        let thrownError: unknown = null;
-        let shouldCommitAgain = false;
-
-        try {
-            await onSave(latestValues);
-            // 保存成功后缓存里的详情已经过时，立刻重取一次拉平，免得下次进入页面先闪一眼旧值。
-            // 失败不影响保存结果本身，这里只吞掉错误交给下次进入页面时重拉。
-            if (detailKey) {
-                void mutate(detailKey).catch(() => undefined);
-            }
-            baselineSnapshotRef.current = latestSnapshot;
-        } catch (saveError) {
-            setError(saveError instanceof Error ? saveError.message : String(saveError));
-            thrownError = saveError;
-        } finally {
-            setSaving(false);
-            const phase = deriveAutoSavePhase({
-                dirty: saveQueuedRef.current,
-                inFlight: true,
-                failed: false,
-            });
-            saveInFlightRef.current = false;
-            saveQueuedRef.current = false;
-            shouldCommitAgain = shouldCommitAgainPhase(phase);
+        inFlightFailedRef.current = null;
+        if (mountedRef.current) {
+            setSaving(true);
+            setError(null);
         }
-        if (shouldCommitAgain) {
-            lastCommitAttemptedRef.current = false;
-            await commitRef.current();
-            if (thrownError && !lastCommitAttemptedRef.current) {
+
+        const runCycle = async (): Promise<void> => {
+            let thrownError: unknown = null;
+            let shouldCommitAgain = false;
+
+            try {
+                await onSaveRef.current(latestValues);
+                // 保存成功后缓存里的详情已经过时，立刻重取一次拉平，免得下次进入页面先闪一眼旧值。
+                // 失败不影响保存结果本身，这里只吞掉错误交给下次进入页面时重拉。
+                if (detailKey) {
+                    void mutate(detailKey).catch(() => undefined);
+                }
+                baselineSnapshotRef.current = latestSnapshot;
+                inFlightFailedRef.current = null;
+            } catch (saveError) {
+                if (mountedRef.current) {
+                    setError(saveError instanceof Error ? saveError.message : String(saveError));
+                }
+                inFlightFailedRef.current = { snapshot: latestSnapshot, error: saveError };
+                thrownError = saveError;
+            } finally {
+                if (mountedRef.current) {
+                    setSaving(false);
+                }
+                const phase = deriveAutoSavePhase({
+                    dirty: saveQueuedRef.current,
+                    inFlight: true,
+                    failed: false,
+                });
+                saveInFlightRef.current = false;
+                saveQueuedRef.current = false;
+                shouldCommitAgain = shouldCommitAgainPhase(phase);
+            }
+            if (shouldCommitAgain) {
+                lastCommitAttemptedRef.current = false;
+                await commitRef.current();
+                if (thrownError && !lastCommitAttemptedRef.current) {
+                    throw thrownError;
+                }
+                return;
+            }
+            if (thrownError) {
                 throw thrownError;
             }
-            return;
-        }
-        if (thrownError) {
-            throw thrownError;
-        }
-    }, [detailKey, getValues, mutate, onSave, ready]);
+        };
+
+        const cyclePromise = runCycle().finally(() => {
+            if (inFlightPromiseRef.current === cyclePromise) {
+                inFlightPromiseRef.current = null;
+            }
+        });
+        inFlightPromiseRef.current = cyclePromise;
+        await cyclePromise;
+    }, [detailKey, getValues, mutate, ready]);
 
     React.useEffect(() => {
         commitRef.current = commit;
@@ -185,6 +238,28 @@ export function useAutoSaveSettingsForm<TFormValues extends FieldValues>(
         await commit();
     }, [commit]);
 
+    /**
+     * 取消防抖并等待当前在途保存及最新表单值全部落盘或失败。
+     */
+    const flushSettled = React.useCallback(async () => {
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+        }
+        while (inFlightPromiseRef.current) {
+            const pending = inFlightPromiseRef.current;
+            try {
+                await pending;
+            } catch {
+                const currentSnapshot = snapshotOf(getValues());
+                if (inFlightFailedRef.current && inFlightFailedRef.current.snapshot === currentSnapshot) {
+                    throw inFlightFailedRef.current.error;
+                }
+            }
+        }
+        await commit();
+    }, [commit, getValues]);
+
     React.useEffect(() => {
         const subscription = watch(() => {
             if (!ready) {
@@ -192,13 +267,28 @@ export function useAutoSaveSettingsForm<TFormValues extends FieldValues>(
             }
             const latestSnapshot = snapshotOf(getValues());
             if (latestSnapshot === baselineSnapshotRef.current) {
+                if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current);
+                    debounceTimerRef.current = null;
+                }
+                if (mountedRef.current) {
+                    setError(null);
+                }
                 return;
             }
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }
             debounceTimerRef.current = setTimeout(() => {
-                commit().catch(() => undefined);
+                commit().catch((saveError) => {
+                    if (!mountedRef.current) {
+                        showNotification({
+                            variant: 'error',
+                            title: tRef.current('common.saveFailed'),
+                            message: saveError instanceof Error ? saveError.message : String(saveError),
+                        });
+                    }
+                });
             }, debounceMs);
         });
 
@@ -208,7 +298,9 @@ export function useAutoSaveSettingsForm<TFormValues extends FieldValues>(
     }, [commit, debounceMs, getValues, ready, watch]);
 
     React.useEffect(() => {
+        mountedRef.current = true;
         return () => {
+            mountedRef.current = false;
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
                 debounceTimerRef.current = null;
@@ -232,5 +324,6 @@ export function useAutoSaveSettingsForm<TFormValues extends FieldValues>(
         ready,
         initialize,
         flush,
+        flushSettled,
     };
 }

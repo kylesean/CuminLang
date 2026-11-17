@@ -14,12 +14,18 @@ import {
     settingsApi,
 } from '@/frontend/features/settings/settingsApi';
 import type { ProxySettingDetailVO } from '@/common/contracts/proxy-setting-vo';
+import {
+    type ProxyUrlValidationCode,
+    validateCustomProxyUrl,
+} from '@/common/utils/proxy-url';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { TextArea } from '@astryxdesign/core/TextArea';
 import { Banner } from '@astryxdesign/core/Banner';
 import { Divider } from '@astryxdesign/core/Divider';
+import { Text } from '@astryxdesign/core/Text';
+import { VStack } from '@astryxdesign/core/VStack';
 
 /** 网络代理表单数据结构。 */
 type ProxyFormValues = {
@@ -39,6 +45,15 @@ const normalizeMode = (value: string | undefined): ProxyFormValues['mode'] => {
         return value;
     }
     return 'system';
+};
+
+const VALIDATION_CODE_TO_I18N_KEY: Record<Exclude<ProxyUrlValidationCode, 'empty'>, string> = {
+    missing_scheme: 'proxy.validation.missingScheme',
+    unsupported_scheme: 'proxy.validation.unsupportedScheme',
+    invalid_url: 'proxy.validation.invalidUrl',
+    missing_host: 'proxy.validation.missingHost',
+    missing_socks_port: 'proxy.validation.missingSocksPort',
+    invalid_port: 'proxy.validation.invalidPort',
 };
 
 /**
@@ -68,10 +83,22 @@ const ProxySetting: React.FC = () => {
         name: ['url', 'bypassRules'],
     });
 
+    const trimmedUrl = (url ?? '').trim();
+    const urlValidationError = React.useMemo(() => {
+        if (currentMode !== 'custom' || trimmedUrl.length === 0) {
+            return null;
+        }
+        const check = validateCustomProxyUrl(trimmedUrl);
+        if (check.valid || check.code === 'empty') {
+            return null;
+        }
+        return t(VALIDATION_CODE_TO_I18N_KEY[check.code]);
+    }, [currentMode, trimmedUrl, t]);
+
     // 实际生效代理为空时显式警告：system 模式未探测到系统代理，或 custom 模式地址为空。
     const effectiveNoProxy =
         (currentMode === 'system' && settings?.systemProxy?.detected === false) ||
-        (currentMode === 'custom' && !(url ?? '').trim());
+        (currentMode === 'custom' && trimmedUrl.length === 0);
 
     const {
         ready,
@@ -82,6 +109,12 @@ const ProxySetting: React.FC = () => {
         form,
         detailKey: 'settings/proxy/detail',
         onSave: async (values) => {
+            if (values.mode === 'custom' && values.url.trim().length > 0) {
+                const check = validateCustomProxyUrl(values.url);
+                if (!check.valid && check.code !== 'empty') {
+                    throw new Error(t(VALIDATION_CODE_TO_I18N_KEY[check.code]));
+                }
+            }
             await settingsApi.saveProxy({
                 mode: values.mode,
                 url: values.url,
@@ -193,20 +226,28 @@ const ProxySetting: React.FC = () => {
                                 title={t('proxy.urlTitle')}
                                 description={t('proxy.urlDescription')}
                             >
-                                <TextInput
-                                    label={t('proxy.urlTitle')}
-                                    isLabelHidden
-                                    value={url ?? ''}
-                                    placeholder="http://127.0.0.1:7890"
-                                    size="sm"
-                                    width={320}
-                                    onChange={(value) => {
-                                        setValue('url', value, {
-                                            shouldDirty: true,
-                                            shouldTouch: true,
-                                        });
-                                    }}
-                                />
+                                <VStack gap={1}>
+                                    <TextInput
+                                        label={t('proxy.urlTitle')}
+                                        isLabelHidden
+                                        value={url ?? ''}
+                                        placeholder="http://127.0.0.1:7890"
+                                        status={urlValidationError ? { type: 'error' } : undefined}
+                                        size="sm"
+                                        width={320}
+                                        onChange={(value) => {
+                                            setValue('url', value, {
+                                                shouldDirty: true,
+                                                shouldTouch: true,
+                                            });
+                                        }}
+                                    />
+                                    {urlValidationError && (
+                                        <Text type="supporting" className="text-error-text">
+                                            {urlValidationError}
+                                        </Text>
+                                    )}
+                                </VStack>
                             </SettingField>
 
                             <Divider variant="subtle" />

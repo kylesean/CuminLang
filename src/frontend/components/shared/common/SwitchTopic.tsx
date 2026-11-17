@@ -19,7 +19,7 @@ export interface SwitchTopicProps {
 /**
  * 渲染“完整版原文 + 切换按钮”组合，便于用户先看到完整句子，再决定是否切换学习主题。
  */
-const SwitchTopic = ({ encoded, label, className }: SwitchTopicProps) => {
+const SwitchTopic = ({ encoded, label, className = '' }: SwitchTopicProps) => {
     const { t } = useTranslation('common');
     const logger = getRendererLogger('SwitchTopic');
     const createFromSelect = useChatPanel(s => s.createFromSelect);
@@ -39,7 +39,7 @@ const SwitchTopic = ({ encoded, label, className }: SwitchTopicProps) => {
             <button
                 type="button"
                 className={cn(
-                    'inline-flex items-center text-sm text-secondary underline underline-offset-4 decoration-dashed hover:text-primary',
+                    'inline-flex items-center rounded-md text-sm text-secondary underline underline-offset-4 decoration-dashed hover:text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                 )}
                 onClick={(event) => {
                     event.preventDefault();
@@ -56,10 +56,6 @@ const SwitchTopic = ({ encoded, label, className }: SwitchTopicProps) => {
             </button>
         </span>
     );
-};
-
-SwitchTopic.defaultProps = {
-    className: '',
 };
 
 export default SwitchTopic;

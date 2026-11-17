@@ -4,6 +4,11 @@ import {
     type SentenceVocabularyCount,
     type TranscriptVocabularyFilter,
 } from '@/frontend/features/player/transcriptVocabulary';
+import {
+    groupSentencesIntoBlocks,
+    needsBilingualCueSpace,
+    type SentenceBlock,
+} from '@/frontend/features/player/lib/sentence-grouping';
 import { cleanWord, isWordToken, splitWords } from '@/common/utils/subtitle';
 import type { WordStatus } from '@/common/types/vocabulary';
 import type { Sentence } from '@/common/types/SentenceC';
@@ -94,8 +99,27 @@ const extractNormalizedSentenceWords = (sentence: Sentence): string[] => {
         .filter(Boolean);
 };
 
+const joinBlockTranslations = (
+    block: SentenceBlock,
+    translations?: ReadonlyMap<string, string>,
+): string => {
+    const parts: string[] = [];
+    for (const s of block.sentences) {
+        const aiZh = s.translationKey ? translations?.get(s.translationKey) : undefined;
+        const zh = (s.textZH || aiZh || '').trim();
+        if (!zh) continue;
+        const prev = parts[parts.length - 1];
+        if (prev && needsBilingualCueSpace(prev, zh)) {
+            parts.push(' ');
+        }
+        parts.push(zh);
+    }
+    return parts.join('');
+};
+
 /**
  * 综合状态筛选（全部 / 生词（个人待学 + 本地词典考纲难点候选） / 已收藏金句）与关键词搜索。
+ * 先按完整意群块 `SentenceBlock` 归并，再在完整句单元上执行筛选与跨行搜索，避免切碎跨 cue 的半句话。
  */
 export const filterReaderSentences = (params: {
     sentences: Sentence[];
@@ -107,33 +131,58 @@ export const filterReaderSentences = (params: {
     candidateWords?: ReadonlySet<string>;
 }): Sentence[] => {
     const { sentences, filter, query, countOf, savedKeys, translations, candidateWords } = params;
+    const blocks = groupSentencesIntoBlocks(sentences);
 
-    let stage: Sentence[];
+    let stage: SentenceBlock[];
     if (filter === 'saved') {
-        stage = sentences.filter((s) => savedKeys.has(sentenceVocabularyKey(s)));
+        stage = blocks.filter((block) =>
+            block.sentences.some((s) => savedKeys.has(sentenceVocabularyKey(s))),
+        );
     } else if (filter === 'learning' && candidateWords && candidateWords.size > 0) {
-        stage = sentences.filter((s) => {
-            if (countOf(s).learning > 0) {
-                return true;
-            }
-            return extractNormalizedSentenceWords(s).some((w) => candidateWords.has(w));
-        });
+        stage = blocks.filter((block) =>
+            block.sentences.some((s) => {
+                if (countOf(s).learning > 0) {
+                    return true;
+                }
+                return extractNormalizedSentenceWords(s).some((w) => candidateWords.has(w));
+            }),
+        );
+    } else if (filter === 'all') {
+        stage = blocks;
     } else {
-        stage = filterTranscriptSentences(sentences, filter, countOf, undefined);
+        stage = blocks.filter((block) =>
+            filterTranscriptSentences(block.sentences, filter, countOf, undefined).length > 0,
+        );
     }
 
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) {
-        return stage;
+        return stage.flatMap((block) => block.sentences);
     }
-    return stage.filter((s) => {
-        const aiZh = s.translationKey ? translations?.get(s.translationKey) : undefined;
-        return (
-            s.text.toLowerCase().includes(normalizedQuery)
-            || (s.textZH && s.textZH.toLowerCase().includes(normalizedQuery))
-            || (aiZh && aiZh.toLowerCase().includes(normalizedQuery))
-        );
-    });
+    return stage
+        .filter((block) => {
+            const mergedEn = block.sentences
+                .map((s) => s.text.trim())
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+            if (mergedEn.includes(normalizedQuery)) {
+                return true;
+            }
+            const mergedZh = joinBlockTranslations(block, translations).toLowerCase();
+            if (mergedZh.includes(normalizedQuery)) {
+                return true;
+            }
+            return block.sentences.some((s) => {
+                const aiZh = s.translationKey ? translations?.get(s.translationKey) : undefined;
+                return (
+                    s.text.toLowerCase().includes(normalizedQuery)
+                    || (s.textZH && s.textZH.toLowerCase().includes(normalizedQuery))
+                    || (aiZh && aiZh.toLowerCase().includes(normalizedQuery))
+                );
+            });
+        })
+        .flatMap((block) => block.sentences);
 };
 
 /**

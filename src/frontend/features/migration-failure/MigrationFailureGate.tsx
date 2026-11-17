@@ -98,84 +98,86 @@ export const MigrationFailureGate: React.FC<MigrationFailureGateProps> = ({ fail
     };
 
     return (
-        <VStack height="100%" width="100%" gap={0}>
+        <VStack height="100%" width="100%" gap={0} className="overflow-hidden">
             {/* 顶栏控制区域 */}
-            <VStack width="100%" height={TITLE_BAR_HEIGHT} justify="center">
+            <VStack width="100%" height={TITLE_BAR_HEIGHT} justify="center" className="shrink-0">
                 <TitleBar maximizable={false} className="top-0 left-0 w-full z-50" />
             </VStack>
 
-            {/* 主恢复操作卡片区域 */}
-            <Center width="100%" height="fill" padding={4}>
-                <VStack width="100%" maxWidth={540} gap={6} hAlign="center">
-                    {/* 警告指示图标 */}
-                    <Center
-                        width={64}
-                        height={64}
-                        className="rounded-2xl bg-warning/12 text-warning-text"
-                    >
-                        <Icon icon={AlertTriangle as unknown as IconType} size="lg" />
-                    </Center>
+            {/* 主恢复操作卡片区域（视口较矮时可纵向滚动，避免按钮被裁切） */}
+            <div className="min-h-0 flex-1 w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full">
+                <Center width="100%" minHeight="100%" padding={4}>
+                    <VStack width="100%" maxWidth={540} gap={6} hAlign="center">
+                        {/* 警告指示图标 */}
+                        <Center
+                            width={64}
+                            height={64}
+                            className="rounded-2xl bg-warning/12 text-warning-text"
+                        >
+                            <Icon icon={AlertTriangle as unknown as IconType} size="lg" />
+                        </Center>
 
-                    <VStack gap={2} hAlign="center">
-                        <Heading level={1} weight="bold" textWrap="balance">
-                            {t('title')}
-                        </Heading>
-                        <Text type="supporting" color="secondary" justify="center">
-                            {t('desc')}
-                        </Text>
-                    </VStack>
-
-                    {/* 失败详情卡片 */}
-                    <Card variant="default" padding={4} width="100%">
-                        <VStack gap={2} width="100%">
-                            <HStack justify="between" align="center" width="100%">
-                                <Text type="supporting" color="secondary" weight="medium">
-                                    {t('detailLabel')}
-                                </Text>
-                                <Button
-                                    label={copied ? t('copied') : t('copy')}
-                                    variant="ghost"
-                                    size="sm"
-                                    icon={<Icon icon={Copy as unknown as IconType} size="sm" />}
-                                    onClick={() => { void copy(detailText); }}
-                                />
-                            </HStack>
-                            <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-border/50 bg-surface/60 p-2.5 font-mono text-metadata leading-relaxed text-secondary select-text">
-                                {detailText}
-                            </pre>
+                        <VStack gap={2} hAlign="center">
+                            <Heading level={1} weight="bold" textWrap="balance">
+                                {t('title')}
+                            </Heading>
+                            <Text type="supporting" color="secondary" justify="center">
+                                {t('desc')}
+                            </Text>
                         </VStack>
-                    </Card>
 
-                    {resetError && (
-                        <Banner
-                            status="error"
-                            title={`${t('resetFailed')}: ${resetError}`}
-                        />
-                    )}
+                        {/* 失败详情卡片 */}
+                        <Card variant="default" padding={4} width="100%">
+                            <VStack gap={2} width="100%">
+                                <HStack justify="between" align="center" width="100%">
+                                    <Text type="supporting" color="secondary" weight="medium">
+                                        {t('detailLabel')}
+                                    </Text>
+                                    <Button
+                                        label={copied ? t('copied') : t('copy')}
+                                        variant="ghost"
+                                        size="sm"
+                                        icon={<Icon icon={Copy as unknown as IconType} size="sm" />}
+                                        onClick={() => { void copy(detailText); }}
+                                    />
+                                </HStack>
+                                <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-border/50 bg-surface/60 p-2.5 font-mono text-metadata leading-relaxed text-secondary select-text">
+                                    {detailText}
+                                </pre>
+                            </VStack>
+                        </Card>
 
-                    {/* 操作按钮组 */}
-                    <HStack gap={3} justify="center" wrap="wrap">
-                        <Button
-                            label={acting === 'retry' ? t('retrying') : t('retry')}
-                            variant="primary"
-                            size="lg"
-                            isLoading={acting === 'retry'}
-                            isDisabled={acting !== null}
-                            icon={<Icon icon={RefreshCw as unknown as IconType} size="sm" />}
-                            onClick={() => { void handleRetry(); }}
-                        />
-                        <Button
-                            label={acting === 'reset' ? t('resetting') : t('reset')}
-                            variant="secondary"
-                            size="lg"
-                            isLoading={acting === 'reset'}
-                            isDisabled={acting !== null}
-                            icon={<Icon icon={Trash2 as unknown as IconType} size="sm" />}
-                            onClick={() => setResetDialogOpen(true)}
-                        />
-                    </HStack>
-                </VStack>
-            </Center>
+                        {resetError && (
+                            <Banner
+                                status="error"
+                                title={`${t('resetFailed')}: ${resetError}`}
+                            />
+                        )}
+
+                        {/* 操作按钮组 */}
+                        <HStack gap={3} justify="center" wrap="wrap">
+                            <Button
+                                label={acting === 'retry' ? t('retrying') : t('retry')}
+                                variant="primary"
+                                size="lg"
+                                isLoading={acting === 'retry'}
+                                isDisabled={acting !== null}
+                                icon={<Icon icon={RefreshCw as unknown as IconType} size="sm" />}
+                                onClick={() => { void handleRetry(); }}
+                            />
+                            <Button
+                                label={acting === 'reset' ? t('resetting') : t('reset')}
+                                variant="secondary"
+                                size="lg"
+                                isLoading={acting === 'reset'}
+                                isDisabled={acting !== null}
+                                icon={<Icon icon={Trash2 as unknown as IconType} size="sm" />}
+                                onClick={() => setResetDialogOpen(true)}
+                            />
+                        </HStack>
+                    </VStack>
+                </Center>
+            </div>
 
             {/* 重置有损确认弹窗 */}
             <AlertDialog

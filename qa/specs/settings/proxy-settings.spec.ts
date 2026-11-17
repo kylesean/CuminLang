@@ -78,4 +78,26 @@ test.describe('网络代理设置', () => {
         await expect(proxyModeRadio(page, '自定义')).toBeChecked();
         await expect(page.getByPlaceholder('http://127.0.0.1:7890')).toHaveValue(PROXY_URL);
     });
+
+    test('[SET-PRX-06] 自定义代理填写非法地址时显式提示校验错误，且不覆盖已保存的合法地址', async ({ session, userDataDir }) => {
+        const page = session.page;
+        await openProxySetting(page);
+
+        await proxyModeRadio(page, '自定义').click();
+        const urlInput = page.getByPlaceholder('http://127.0.0.1:7890');
+        await urlInput.fill(PROXY_URL);
+        await expect.poll(() => readConfigValue(userDataDir, 'proxy.url')).toBe(PROXY_URL);
+
+        // 改为缺少协议前缀的非法地址：页面应显式暴露错误，同时保留已落盘的合法代理地址
+        await urlInput.fill('127.0.0.1:7890');
+
+        const saveError = page.getByRole('main').getByRole('alert');
+        await expect(saveError).toBeVisible();
+        await expect(saveError).toContainText('缺少协议前缀');
+        expect(readConfigValue(userDataDir, 'proxy.url')).toBe(PROXY_URL);
+
+        // 重进页面：界面回显的是真正存下来的合法地址，而非刚才的非法输入
+        await reloadSettingsPage(page, page.getByRole('heading', { name: '网络代理' }));
+        await expect(page.getByPlaceholder('http://127.0.0.1:7890')).toHaveValue(PROXY_URL);
+    });
 });

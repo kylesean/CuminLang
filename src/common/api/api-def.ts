@@ -628,6 +628,11 @@ interface LearningDataDef {
         params: RolePlaySessionParams,
         return: RolePlaySessionVO
     };
+    /** 清空某个多轮场景对话的已落库轮次。 */
+    'learning-data/role-play-session-reset': {
+        params: RolePlaySessionParams,
+        return: void
+    };
     /** 读取某个视频下最近的复述 / 角色扮演结果。 */
     'learning-data/production-practice': {
         params: ProductionPracticeListParams,
@@ -868,6 +873,7 @@ export const API_ROUTE_KEYS = [
     'learning-data/role-play-feedback',
     'learning-data/role-play-turn',
     'learning-data/role-play-session',
+    'learning-data/role-play-session-reset',
     'learning-data/session-summary',
     'local-ai/embedding-cancel-download',
     'local-ai/embedding-download',

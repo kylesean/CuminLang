@@ -27,6 +27,7 @@ vi.mock('@/frontend/features/learning-data/learningDataApi', () => ({
         evaluateRetell: vi.fn(),
         evaluateSpokenRetell: vi.fn(),
         evaluateRolePlayTurn: vi.fn(),
+        resetRolePlaySession: vi.fn(async () => ({ deleted: 1 })),
         getRolePlaySession: vi.fn(async ({ sessionKey }: { sessionKey: string }) => ({
             sessionKey,
             turns: [],
@@ -410,5 +411,75 @@ describe('LearningRecapContent', () => {
 
         releaseRolePlay();
         await waitFor(() => expect(restartBtn.disabled).toBe(false));
+    });
+
+    it('点击重新开始会清空后端持久化轮次并重置本地对话', async () => {
+        vi.mocked(learningDataApi.getRecap).mockResolvedValue(aiRecap);
+        vi.mocked(learningDataApi.getRolePlaySession).mockResolvedValueOnce({
+            sessionKey: 'restored-reset',
+            turns: [{
+                turn: 1,
+                partnerLine: 'I bet you were exhausted after that drive.',
+                partnerIndex: 1,
+                response: 'I slept right away.',
+                level: 'good',
+                feedback: '已恢复的旧对话',
+                improved: '',
+                usedExpressions: [],
+                source: 'ai',
+            }],
+        });
+        renderContent('video-role-play-reset');
+
+        expect(await screen.findByText('已恢复的旧对话')).toBeDefined();
+        const restartBtn = screen.getByTestId('learning-role-play-restart');
+        fireEvent.click(restartBtn);
+
+        await waitFor(() => {
+            expect(learningDataApi.resetRolePlaySession).toHaveBeenCalledTimes(1);
+            expect(screen.queryByText('已恢复的旧对话')).toBeNull();
+        });
+    });
+
+    it('录音转写期间按钮展示 transcribing 且禁止提交文字复述', async () => {
+        recorderStub.phase = 'processing';
+        vi.mocked(learningDataApi.getRecap).mockResolvedValue(aiRecap);
+        renderContent('video-retell-processing');
+
+        const recordBtn = await screen.findByTestId('learning-retell-record');
+        expect(recordBtn.textContent).toContain('transcribing');
+
+        fireEvent.change(screen.getByTestId('learning-retell-input'), { target: { value: 'Draft text' } });
+        const submitBtn = screen.getByTestId('learning-retell-submit') as HTMLButtonElement;
+        expect(submitBtn.disabled).toBe(true);
+        recorderStub.phase = 'idle';
+    });
+
+    it('达到轮次上限且输入框隐藏时，重新开始失败仍会展示可见错误提示', async () => {
+        vi.mocked(learningDataApi.getRecap).mockResolvedValue(aiRecap);
+        vi.mocked(learningDataApi.getRolePlaySession).mockResolvedValueOnce({
+            sessionKey: 'restored-max-turns',
+            turns: Array.from({ length: 6 }, (_, idx) => ({
+                turn: idx + 1,
+                partnerLine: `Line ${idx + 1}`,
+                partnerIndex: idx + 1,
+                response: `Reply ${idx + 1}`,
+                level: 'good' as const,
+                feedback: 'ok',
+                improved: '',
+                usedExpressions: [],
+                source: 'ai' as const,
+            })),
+        });
+        vi.mocked(learningDataApi.resetRolePlaySession).mockRejectedValueOnce(new Error('reset failed'));
+
+        renderContent('video-role-play-max-error');
+
+        const restartBtn = await screen.findByTestId('learning-role-play-restart');
+        expect(screen.queryByTestId('learning-role-play-composer')).toBeNull();
+
+        fireEvent.click(restartBtn);
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('rolePlayFailed');
     });
 });

@@ -1,5 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
+import { SWRConfig } from 'swr';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DailyStudyPulse } from '../DailyStudyPulse';
 
@@ -45,9 +46,11 @@ describe('DailyStudyPulse', () => {
         mockListReaderDocuments.mockResolvedValue([]);
 
         const { container } = render(
-            <MemoryRouter>
-                <DailyStudyPulse />
-            </MemoryRouter>,
+            <SWRConfig value={{ provider: () => new Map() }}>
+                <MemoryRouter>
+                    <DailyStudyPulse />
+                </MemoryRouter>
+            </SWRConfig>,
         );
 
         await waitFor(() => {
@@ -62,10 +65,12 @@ describe('DailyStudyPulse', () => {
         mockGetLatestSavedReaderProgress.mockReturnValue({ videoId: 'vid-9', sentenceIndex: 12 });
 
         render(
-            <MemoryRouter>
-                <LocationProbe />
-                <DailyStudyPulse />
-            </MemoryRouter>,
+            <SWRConfig value={{ provider: () => new Map() }}>
+                <MemoryRouter>
+                    <LocationProbe />
+                    <DailyStudyPulse />
+                </MemoryRouter>
+            </SWRConfig>,
         );
 
         const pulse = await screen.findByTestId('daily-study-pulse');

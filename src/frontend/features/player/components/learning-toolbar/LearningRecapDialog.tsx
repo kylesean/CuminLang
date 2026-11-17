@@ -61,6 +61,7 @@ export default function LearningRecapDialog({
                         onOpenChange={() => onOpenChange(false)}
                     />
                     <LearningRecapContent
+                        key={`${videoId ?? ''}:${fileHash ?? ''}:${since}`}
                         videoId={videoId}
                         fileHash={fileHash}
                         since={since}
@@ -76,7 +77,22 @@ export default function LearningRecapDialog({
 /**
  * 复盘内容区，独立导出以便组件测试绕过弹窗 Portal。
  */
-export function LearningRecapContent({
+export function LearningRecapContent(props: {
+    videoId?: string;
+    fileHash?: string;
+    since: string;
+    locale: 'zh-CN' | 'en-US';
+    onClose: () => void;
+}) {
+    return (
+        <LearningRecapContentBody
+            key={`${props.videoId ?? ''}:${props.fileHash ?? ''}:${props.since}`}
+            {...props}
+        />
+    );
+}
+
+function LearningRecapContentBody({
     videoId,
     fileHash,
     since,
@@ -254,7 +270,7 @@ export function LearningRecapContent({
                         <button
                             type="button"
                             onClick={() => { void mutate(); }}
-                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60"
+                            className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2 text-sm text-primary transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                         >
                             <RotateCcw className="h-3.5 w-3.5" />
                             {t('retry')}
@@ -288,7 +304,7 @@ export function LearningRecapContent({
                 <button
                     type="button"
                     onClick={onClose}
-                    className="flex h-7 items-center rounded-lg px-2.5 text-sm text-secondary transition-colors hover:bg-muted/60 hover:text-primary"
+                    className="flex h-7 items-center rounded-lg px-2.5 text-sm text-secondary transition-colors hover:bg-muted/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                 >
                     {t('close')}
                 </button>
@@ -375,7 +391,7 @@ function RecapBody({
                     aria-busy={refreshing || undefined}
                     disabled={refreshing || retellLoading || recorderPhase !== 'idle'}
                     onClick={onRefresh}
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-secondary transition-colors hover:bg-muted/60 hover:text-primary disabled:opacity-50"
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-secondary transition-colors hover:bg-muted/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:opacity-50"
                 >
                     <RefreshCw className={cn('h-3 w-3', refreshing && 'animate-spin')} />
                 </button>
@@ -458,7 +474,7 @@ function RecapBody({
                             disabled={retellLoading || recorderPhase === 'processing'}
                             onClick={recorderPhase === 'recording' ? onStopRecording : onStartRecording}
                             className={cn(
-                                'flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium transition-colors',
+                                'flex h-7 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
                                 recorderPhase === 'recording'
                                     ? 'border-error/40 bg-error/10 text-error-text'
                                     : 'border-border/70 text-primary hover:bg-muted/60',
@@ -472,7 +488,7 @@ function RecapBody({
                             )}
                             {recorderPhase === 'recording'
                                 ? t('stopSpokenRetell')
-                                : retellLoading
+                                : (retellLoading || recorderPhase === 'processing')
                                     ? t('transcribing')
                                     : t('startSpokenRetell')}
                         </button>
@@ -508,16 +524,16 @@ function RecapBody({
                         <span
                             id="learning-retell-error"
                             role={retellError ? 'alert' : undefined}
-                            className="text-metadata text-secondary/70"
+                            className="text-metadata text-error-text"
                         >
                             {retellError ?? ''}
                         </span>
                         <button
                             type="button"
                             data-testid="learning-retell-submit"
-                            disabled={retellLoading || draft.trim().length === 0}
+                            disabled={retellLoading || recorderPhase !== 'idle' || draft.trim().length === 0}
                             onClick={onCheckRetell}
-                            className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-accent-bg px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-bg/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-secondary"
+                            className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-accent-bg px-3 text-sm font-medium text-on-accent transition-colors hover:bg-accent-bg/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card disabled:cursor-not-allowed disabled:bg-muted disabled:text-secondary"
                         >
                             {retellLoading ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -645,7 +661,7 @@ function RetellLevelBadge({ level, label }: { level: RetellLevel; label: string 
             className={cn(
                 'rounded-md px-1.5 py-0.5 text-metadata font-medium',
                 level === 'great' && 'bg-success/10 text-success-text',
-                level === 'good' && 'bg-warning-muted/60 text-warning-text',
+                level === 'good' && 'bg-warning-muted text-on-warning-muted',
                 level === 'retry' && 'bg-muted text-secondary',
             )}
         >

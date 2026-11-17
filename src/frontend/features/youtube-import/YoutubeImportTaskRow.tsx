@@ -224,6 +224,7 @@ const YoutubeImportTaskRow = ({ entry }: YoutubeImportTaskRowProps) => {
                                         label={t('dialog.retry')}
                                         icon={<Icon icon={RotateCcw as unknown as IconType} size="sm" />}
                                         isLoading={retrying}
+                                        isDisabled={retrying}
                                         onClick={() => void retry()}
                                     />
                                 </HStack>

@@ -1,5 +1,7 @@
+import { useRef, useState } from 'react';
 import { Captions, LockOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'react-hot-toast';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 
 import { cn } from '@/frontend/lib/utils';
@@ -19,17 +21,37 @@ export function DesktopLyricsButton() {
     const locked = useDesktopLyricsStore((s) => s.locked);
     const applyWindowState = useDesktopLyricsStore((s) => s.applyWindowState);
     const style = TOOLBAR_TONE.panel;
+    const [pending, setPending] = useState(false);
+    const pendingRef = useRef(false);
 
-    const handleToggle = () => {
-        void desktopLyricsApi.toggle(!open)
-            .then((next) => applyWindowState(next))
-            .catch(() => undefined);
+    const handleToggle = async () => {
+        if (pendingRef.current) return;
+        pendingRef.current = true;
+        setPending(true);
+        try {
+            const next = await desktopLyricsApi.toggle(!open);
+            applyWindowState(next);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            pendingRef.current = false;
+            setPending(false);
+        }
     };
 
-    const handleUnlock = () => {
-        void desktopLyricsApi.setLocked(false)
-            .then((next) => applyWindowState(next))
-            .catch(() => undefined);
+    const handleUnlock = async () => {
+        if (pendingRef.current) return;
+        pendingRef.current = true;
+        setPending(true);
+        try {
+            const next = await desktopLyricsApi.setLocked(false);
+            applyWindowState(next);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error));
+        } finally {
+            pendingRef.current = false;
+            setPending(false);
+        }
     };
 
     return (
@@ -43,12 +65,14 @@ export function DesktopLyricsButton() {
                 <button
                     type="button"
                     data-testid="player-desktop-lyrics-toggle"
-                    onClick={handleToggle}
+                    disabled={pending}
+                    onClick={() => { void handleToggle(); }}
                     aria-pressed={open}
                     aria-label={t('controlBar.desktopLyrics', { defaultValue: '桌面字幕' })}
                     className={cn(
                         TOOLBAR_ICON_BUTTON,
                         open ? style.accent.amber : style.idle,
+                        pending && 'opacity-60 cursor-wait',
                     )}
                 >
                     <Captions className="w-4 h-4 stroke-[1.9]" />
@@ -63,9 +87,14 @@ export function DesktopLyricsButton() {
                     <button
                         type="button"
                         data-testid="player-desktop-lyrics-unlock"
-                        onClick={handleUnlock}
+                        disabled={pending}
+                        onClick={() => { void handleUnlock(); }}
                         aria-label={t('controlBar.desktopLyricsUnlock', { defaultValue: '解锁桌面字幕交互' })}
-                        className={cn(TOOLBAR_ICON_BUTTON, style.accent.emerald)}
+                        className={cn(
+                            TOOLBAR_ICON_BUTTON,
+                            style.accent.emerald,
+                            pending && 'opacity-60 cursor-wait',
+                        )}
                     >
                         <LockOpen className="w-3.5 h-3.5 stroke-[2]" />
                     </button>

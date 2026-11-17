@@ -174,4 +174,16 @@ describe('EmbeddingModelCard', () => {
             expect(settingsApi.cancelEmbeddingModelDownload).toHaveBeenCalledTimes(1);
         });
     });
+
+    it('下载失败后外部状态更新为 ready 时自动清除陈旧错误提示', async () => {
+        vi.mocked(settingsApi.downloadEmbeddingModel).mockRejectedValueOnce(new Error('校验失败'));
+        const onInstalled = vi.fn();
+        const { rerender } = render(<EmbeddingModelCard status={status} onInstalled={onInstalled} />);
+
+        fireEvent.click(screen.getByRole('button', { name: /resources\.embedding\.install/i }));
+        expect(await screen.findByText('resources.pack.proxyHint')).toBeDefined();
+
+        rerender(<EmbeddingModelCard status={{ ...status, ready: true }} onInstalled={onInstalled} />);
+        expect(screen.queryByText('resources.pack.proxyHint')).toBeNull();
+    });
 });

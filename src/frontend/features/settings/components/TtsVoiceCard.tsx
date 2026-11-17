@@ -10,11 +10,14 @@ import { HStack } from '@astryxdesign/core/HStack';
 import { Icon, type IconType } from '@astryxdesign/core/Icon';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { Selector } from '@astryxdesign/core/Selector';
+import { Slider } from '@astryxdesign/core/Slider';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 
 import { settingsApi } from '@/frontend/features/settings/settingsApi';
 import {
+    SETTINGS_RESOURCE_PACK_ID,
+    TTS_VOICE_DOWNLOAD_ID,
     cancelPackDownload,
     startPackDownload,
     updatePackCallbacks,
@@ -24,7 +27,6 @@ import { clearTtsAudioCache, getTtsUrl, playAudioUrl } from '@/frontend/infrastr
 import { useAudioVolume } from '@/frontend/infrastructure/audio/audioVolume';
 import type { TtsVoiceVO } from '@/common/contracts/tts-voice';
 
-const TTS_VOICE_DOWNLOAD_ID = 'settings-tts-voice';
 const RECOMMENDED_KOKORO_VOICE_ID = 'kokoro-en-US-bella';
 const TTS_PREVIEW_SAMPLE = 'Hello, welcome to CuminLang.';
 
@@ -45,6 +47,10 @@ export default function TtsVoiceCard({ onVoiceChange }: TtsVoiceCardProps) {
     );
 
     const { downloading, live, error } = usePackDownloadState(TTS_VOICE_DOWNLOAD_ID);
+    const corePackDownload = usePackDownloadState(SETTINGS_RESOURCE_PACK_ID);
+    const ttsBusyInCorePack = corePackDownload.downloading
+        && (corePackDownload.activeItemKey === 'tts' || corePackDownload.queuedKeys.includes('tts'));
+    const downloadBusy = downloading || ttsBusyInCorePack;
 
     const refreshAll = useCallback(() => {
         void mutate();
@@ -82,12 +88,17 @@ export default function TtsVoiceCard({ onVoiceChange }: TtsVoiceCardProps) {
     );
 
     const startVoiceDownload = async () => {
-        if (downloading) return;
+        if (downloadBusy) return;
         await startPackDownload({
             packId: TTS_VOICE_DOWNLOAD_ID,
             entries: [{
                 key: 'tts',
-                download: async () => { await settingsApi.downloadSherpaTtsModel(); },
+                download: async () => {
+                    const res = await settingsApi.downloadSherpaTtsModel();
+                    if (res && res.success === false) {
+                        throw new Error(res.message || 'Download failed');
+                    }
+                },
                 cancel: async () => { await settingsApi.cancelSherpaTtsModelDownload(); },
             }],
             onRefresh: refreshAll,
@@ -127,7 +138,7 @@ export default function TtsVoiceCard({ onVoiceChange }: TtsVoiceCardProps) {
                             width="260px"
                             value={selected}
                             onChange={(value) => { void handleChange(value); }}
-                            isDisabled={isLoading || downloading || options.length === 0}
+                            isDisabled={isLoading || downloadBusy || options.length === 0}
                             options={options}
                         />
                     </div>
@@ -143,6 +154,7 @@ export default function TtsVoiceCard({ onVoiceChange }: TtsVoiceCardProps) {
                                 <Button
                                     size="sm"
                                     variant={downloading ? 'secondary' : 'primary'}
+                                    isDisabled={!downloading && ttsBusyInCorePack}
                                     icon={<Icon icon={(downloading ? Square : Download) as unknown as IconType} size="sm" />}
                                     label={downloading
                                         ? t('resources.ttsVoice.cancelDownload')
@@ -188,7 +200,7 @@ export default function TtsVoiceCard({ onVoiceChange }: TtsVoiceCardProps) {
                                 size="sm"
                                 variant="secondary"
                                 icon={<Icon icon={Download as unknown as IconType} size="sm" />}
-                                isDisabled={downloading}
+                                isDisabled={downloadBusy}
                                 label={t('resources.ttsVoice.upgradeAction')}
                                 onClick={() => { void handleChange(RECOMMENDED_KOKORO_VOICE_ID, true); }}
                             />
@@ -248,16 +260,20 @@ function TtsVolumeRow({ canPreview }: { canPreview: boolean }) {
                 </Text>
                 <HStack gap={2} align="center">
                     <HStack gap={2} align="center" className="w-44">
-                        <input
-                            type="range"
-                            aria-label={t('resources.ttsVoice.volumeLabel', { defaultValue: 'TTS 朗读音量' })}
-                            min={10}
-                            max={100}
-                            step={5}
-                            value={pct}
-                            onChange={(e) => setTtsVolume(Number(e.target.value) / 100)}
-                            className="flex-1 accent-accent-bg cursor-pointer"
-                        />
+                        <div className="min-w-0 flex-1">
+                            <Slider
+                                label={t('resources.ttsVoice.volumeLabel', { defaultValue: 'TTS 朗读音量' })}
+                                isLabelHidden
+                                min={10}
+                                max={100}
+                                step={5}
+                                value={pct}
+                                valueDisplay="none"
+                                formatValue={(val: number) => `${val}%`}
+                                width="100%"
+                                onChange={(val: number) => setTtsVolume(val / 100)}
+                            />
+                        </div>
                         <Text type="supporting" color="secondary" hasTabularNumbers className="w-10 text-right">
                             {pct}%
                         </Text>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import useSWR from 'swr';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, BookOpen, Brain } from 'lucide-react';
@@ -12,6 +12,43 @@ interface StudyPulseState {
     latestReader: { videoId: string; title: string } | null;
 }
 
+async function fetchDailyStudyPulse(): Promise<StudyPulseState | null> {
+    const latestSaved = getLatestSavedReaderProgress();
+    const [reviewRes, docsRes] = await Promise.allSettled([
+        typeof videoLearningApi?.getReviewQueue === 'function'
+            ? videoLearningApi.getReviewQueue(1)
+            : Promise.resolve(null),
+        typeof contextStudioApi?.listReaderDocuments === 'function'
+            ? contextStudioApi.listReaderDocuments()
+            : Promise.resolve([]),
+    ]);
+
+    const dueCount =
+        reviewRes.status === 'fulfilled' && reviewRes.value
+            ? (reviewRes.value.dueCount ?? reviewRes.value.items?.length ?? 0)
+            : 0;
+
+    const docs =
+        docsRes.status === 'fulfilled' && Array.isArray(docsRes.value)
+            ? docsRes.value
+            : [];
+
+    let latestReader: { videoId: string; title: string } | null = null;
+    if (latestSaved) {
+        const matched = docs.find((doc) => doc.videoId === latestSaved.videoId);
+        if (matched) {
+            latestReader = { videoId: matched.videoId, title: matched.title };
+        }
+    } else if (docs.length > 0) {
+        latestReader = { videoId: docs[0].videoId, title: docs[0].title };
+    }
+
+    if (dueCount <= 0 && !latestReader) {
+        return null;
+    }
+    return { dueCount, latestReader };
+}
+
 /**
  * 首页轻量学习脉冲条：仅在存在待复习词汇或最近精读进度时展示，
  * 让用户无需进入二级菜单即可一键进入今日训练或续读上次文稿。
@@ -19,59 +56,16 @@ interface StudyPulseState {
 export function DailyStudyPulse() {
     const { t } = useTranslation('pages');
     const navigate = useNavigate();
-    const [pulse, setPulse] = useState<StudyPulseState | null>(null);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        async function loadPulse() {
-            const latestSaved = getLatestSavedReaderProgress();
-            const [reviewRes, docsRes] = await Promise.allSettled([
-                typeof videoLearningApi?.getReviewQueue === 'function'
-                    ? videoLearningApi.getReviewQueue(1)
-                    : Promise.resolve(null),
-                typeof contextStudioApi?.listReaderDocuments === 'function'
-                    ? contextStudioApi.listReaderDocuments()
-                    : Promise.resolve([]),
-            ]);
-
-            if (cancelled) return;
-
-            const dueCount =
-                reviewRes.status === 'fulfilled' && reviewRes.value
-                    ? (reviewRes.value.dueCount ?? reviewRes.value.items?.length ?? 0)
-                    : 0;
-
-            const docs =
-                docsRes.status === 'fulfilled' && Array.isArray(docsRes.value)
-                    ? docsRes.value
-                    : [];
-
-            let latestReader: { videoId: string; title: string } | null = null;
-            if (latestSaved) {
-                const matched = docs.find((doc) => doc.videoId === latestSaved.videoId);
-                if (matched) {
-                    latestReader = { videoId: matched.videoId, title: matched.title };
-                }
-            } else if (docs.length > 0) {
-                latestReader = { videoId: docs[0].videoId, title: docs[0].title };
-            }
-
-            if (dueCount <= 0 && !latestReader) {
-                setPulse(null);
-                return;
-            }
-            setPulse({ dueCount, latestReader });
-        }
-
-        void loadPulse().catch(() => {
-            if (!cancelled) setPulse(null);
-        });
-
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+    const { data: pulse } = useSWR<StudyPulseState | null>(
+        'daily-study-pulse',
+        fetchDailyStudyPulse,
+        {
+            dedupingInterval: 0,
+            revalidateOnMount: true,
+            revalidateOnFocus: false,
+            shouldRetryOnError: false,
+        },
+    );
 
     if (!pulse) {
         return null;
@@ -80,7 +74,7 @@ export function DailyStudyPulse() {
     return (
         <div
             data-testid="daily-study-pulse"
-            className="rounded-xl border border-border/50 bg-surface/60 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap"
+            className="rounded-lg border border-border/50 bg-surface/60 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap"
         >
             <div className="flex items-center gap-4 flex-wrap min-w-0">
                 {pulse.dueCount > 0 && (

@@ -25,6 +25,30 @@ import { useReviewDockStore } from '@/frontend/features/player/components/learni
 
 const logger = getRendererLogger('ContentCompassSection');
 const IMPRESSION_STORAGE_PREFIX = 'cuminlang:content-compass:shown';
+const DISMISSED_STORAGE_PREFIX = 'cuminlang:content-compass:dismissed';
+
+function readDismissedToday(): Set<string> {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `${DISMISSED_STORAGE_PREFIX}:${day}`;
+    try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? new Set(parsed.filter((id): id is string => typeof id === 'string')) : new Set();
+    } catch {
+        return new Set();
+    }
+}
+
+function persistDismissedToday(ids: Set<string>): void {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `${DISMISSED_STORAGE_PREFIX}:${day}`;
+    try {
+        window.localStorage.setItem(key, JSON.stringify([...ids]));
+    } catch {
+        // 忽略存储配额等异常
+    }
+}
 
 export interface ContentCompassSectionProps {
     excludeVideoIds?: string[];
@@ -45,7 +69,7 @@ export default function ContentCompassSection({
         () => [...excludeVideoIds].sort().join('|'),
         [excludeVideoIds],
     );
-    const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(() => new Set());
+    const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(() => readDismissedToday());
     const { data, error } = useSWR<ContentCompassVO>(
         ['content-compass/list', excludeKey],
         () => contentCompassApi.list({ excludeVideoIds, limit: 3 }),
@@ -112,6 +136,7 @@ export default function ContentCompassSection({
         setDismissedIds((current) => {
             const next = new Set(current);
             next.add(item.videoId);
+            persistDismissedToday(next);
             return next;
         });
         void contentCompassApi.recordEvent({
@@ -149,7 +174,10 @@ export default function ContentCompassSection({
                 error: reason instanceof Error ? reason.message : String(reason),
             });
         });
-        useReviewDockStore.getState().open();
+        useReviewDockStore.getState().open({
+            videoId: item.videoId,
+            words: item.reason.words,
+        });
         onSelected(item.videoId);
     };
 
@@ -270,7 +298,7 @@ function CompassCard({
                     <button
                         type="button"
                         onClick={onReviewDue}
-                        className="inline-flex h-6 items-center rounded-md bg-warning-muted/60 px-2 text-metadata font-medium text-warning-text transition-colors hover:bg-warning-muted"
+                        className="inline-flex h-6 min-w-0 max-w-full items-center truncate rounded-md bg-warning-muted px-2 text-metadata font-medium text-on-warning-muted transition-colors hover:bg-warning-muted/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-1 focus-visible:ring-offset-body"
                     >
                         {t('reviewDue', { count: item.reason.dueCount })}
                     </button>

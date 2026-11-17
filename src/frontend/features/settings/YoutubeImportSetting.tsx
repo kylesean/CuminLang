@@ -39,6 +39,7 @@ const YoutubeImportSetting: React.FC = () => {
         SETTINGS_DETAIL_SWR_OPTIONS,
     );
     const [saving, setSaving] = React.useState(false);
+    const savingRef = React.useRef(false);
     const [cookiesDraft, setCookiesDraft] = React.useState<string | null>(null);
 
     const cookiesText = cookiesDraft ?? detail?.cookiesFilePath ?? '';
@@ -49,6 +50,8 @@ const YoutubeImportSetting: React.FC = () => {
      * @param vo 需修改的导入配置字段。
      */
     const save = async (vo: { enabled?: boolean; cookiesFilePath?: string }): Promise<boolean> => {
+        if (savingRef.current) return false;
+        savingRef.current = true;
         setSaving(true);
         try {
             const saved = await youtubeImportApi.saveSetting({
@@ -62,6 +65,7 @@ const YoutubeImportSetting: React.FC = () => {
             toast.error(error instanceof Error ? error.message : String(error), { id: 'youtube-import-setting-save' });
             return false;
         } finally {
+            savingRef.current = false;
             setSaving(false);
         }
     };
@@ -70,7 +74,7 @@ const YoutubeImportSetting: React.FC = () => {
      * 失焦或按回车时提交 cookies 路径。
      */
     const commitCookiesPath = async () => {
-        if (cookiesDraft === null) return;
+        if (cookiesDraft === null || savingRef.current) return;
         const trimmed = cookiesDraft.trim();
         if (trimmed === (detail?.cookiesFilePath ?? '')) {
             setCookiesDraft(null);
@@ -87,6 +91,7 @@ const YoutubeImportSetting: React.FC = () => {
             <VStack gap={6} width="100%">
                 {loadError ? (
                     <Banner
+                        role="alert"
                         status="error"
                         title={t('settings.loadFailed')}
                         description={loadError instanceof Error ? loadError.message : String(loadError)}
@@ -152,8 +157,10 @@ const YoutubeImportSetting: React.FC = () => {
                                                     setCookiesDraft(null);
                                                 }
                                             }
-                                        } catch {
-                                            // 忽略取消
+                                        } catch (error) {
+                                            toast.error(error instanceof Error ? error.message : String(error), {
+                                                id: 'youtube-import-cookies-select',
+                                            });
                                         }
                                     }}
                                 />

@@ -50,7 +50,7 @@ const APPEARANCE_FONT_SIZES: AppearanceFormValues['fontSize'][] = ['fontSizeSmal
 const AppearanceSetting: React.FC = () => {
     const { t } = useI18nTranslation('settings');
 
-    const { data: settings } = useSWR<AppearanceSettingVO>(
+    const { data: settings, error: loadError } = useSWR<AppearanceSettingVO>(
         'settings/appearance/detail',
         () => settingsApi.getAppearance(),
         SETTINGS_DETAIL_SWR_OPTIONS,
@@ -81,17 +81,28 @@ const AppearanceSetting: React.FC = () => {
         initialize(settings);
     }, [initialize, settings]);
 
-    if (!ready) {
+    if (loadError && !settings) {
+        return (
+            <SettingsPageShell
+                title={t('appearance.title')}
+                description={t('appearance.description')}
+            >
+                <Banner
+                    role="alert"
+                    status="error"
+                    title={loadError instanceof Error ? loadError.message : String(loadError)}
+                />
+            </SettingsPageShell>
+        );
+    }
+
+    if (!ready || currentTheme === undefined || currentFontSize === undefined || currentLanguage === undefined) {
         return (
             <SettingsLoadingSkeleton
                 title={t('appearance.title')}
                 description={t('appearance.description')}
             />
         );
-    }
-
-    if (currentTheme === undefined || currentFontSize === undefined || currentLanguage === undefined) {
-        throw new Error('外观设置表单未初始化');
     }
 
     const fontSizeOptions: Record<AppearanceFormValues['fontSize'], string> = {

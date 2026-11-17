@@ -175,6 +175,11 @@ export default interface LearningRecapService {
     listRolePlayTurns(params: RolePlaySessionParams): Promise<RolePlaySessionVO>;
 
     /**
+     * 清空某个多轮场景对话已落库的轮次。
+     */
+    clearRolePlaySession(params: RolePlaySessionParams): Promise<void>;
+
+    /**
      * 读取某个视频下最近的复述 / 角色扮演结果，供复盘弹窗展示。
      */
     listProductionPractice(params: ProductionPracticeListParams): Promise<ProductionPracticeRecordVO[]>;
@@ -508,6 +513,14 @@ export class LearningRecapServiceImpl implements LearningRecapService {
             source: row.source === 'ai' ? 'ai' : 'local',
         }));
         return { sessionKey, turns };
+    }
+
+    public async clearRolePlaySession(params: RolePlaySessionParams): Promise<void> {
+        const sessionKey = params.sessionKey?.trim().slice(0, 200) ?? '';
+        if (!sessionKey) {
+            return;
+        }
+        await this.rolePlayTurnRepository.deleteBySession(sessionKey);
     }
 
     /**
