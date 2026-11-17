@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // usePlayer（当前句/句子表/暂停）、playbackSessionStore（videoId）、chatApi、视图同步与音频。
 const { playerState, playbackState } = vi.hoisted(() => ({
     playerState: {
-        currentSentence: null as { text: string; index: number; fileHash: string } | null,
-        sentences: [] as { text: string; index: number; fileHash: string }[],
+        currentSentence: null as { text: string; index: number; fileHash: string; start?: number; end?: number; textZH?: string } | null,
+        sentences: [] as { text: string; index: number; fileHash: string; start?: number; end?: number; textZH?: string }[],
     },
     playbackState: {
         videoId: 'video-a' as string | null,
@@ -34,6 +34,7 @@ vi.mock('@/frontend/features/chat/chatApi', () => ({
         completeSentence: vi.fn(),
         closeSession: vi.fn().mockResolvedValue(undefined),
         createSession: vi.fn(),
+        saveStudyNote: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -68,6 +69,7 @@ const seedSession = (fileHash: string): void => {
 describe('chatStore 同句判重的跨视频边界', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(chatApi.createSession).mockReset();
         playbackState.videoId = 'video-a';
         playerState.sentences = [];
         useChatPanel.setState({ chatSessionId: '', topicKey: null, anchorIndex: null, anchorFileHash: null });
@@ -124,5 +126,57 @@ describe('chatStore 同句判重的跨视频边界', () => {
         expect(chatApi.closeSession).toHaveBeenCalledWith('sess-first');
         expect(useChatPanel.getState().chatSessionId).toBe('sess-second');
         expect(useChatPanel.getState().anchorIndex).toBe(1);
+    });
+
+    it('openSentenceSession 将跨行碎片合并为完整意群，stepSentence 按合并块步进', async () => {
+        playerState.sentences = [
+            { text: 'What would that', textZH: '那会是', index: 0, fileHash: 'h1', start: 0, end: 1.2 },
+            { text: 'one thing be?', textZH: '哪一件事？', index: 1, fileHash: 'h1', start: 1.3, end: 2.5 },
+            { text: 'Probably patience.', textZH: '大概是耐心。', index: 2, fileHash: 'h1', start: 2.7, end: 4.0 },
+        ];
+        vi.mocked(chatApi.createSession)
+            .mockResolvedValueOnce({ sessionId: 'sess-block-1' })
+            .mockResolvedValueOnce({ sessionId: 'sess-block-2' });
+
+        await useChatPanel.getState().openSentenceSession(playerState.sentences[1] as never);
+        expect(useChatPanel.getState().anchorIndex).toBe(0);
+        expect(useChatPanel.getState().topicText).toBe('What would that one thing be?');
+        expect(useChatPanel.getState().topicTranslation).toBe('那会是 哪一件事？');
+
+        await useChatPanel.getState().stepSentence(1);
+        expect(useChatPanel.getState().anchorIndex).toBe(2);
+        expect(useChatPanel.getState().topicText).toBe('Probably patience.');
+        expect(useChatPanel.getState().chatSessionId).toBe('sess-block-2');
+    });
+
+    it('resetConversationView 会关闭旧会话、清空已持久化消息并重建干净会话', async () => {
+        playerState.sentences = [
+            { text: 'Hello world.', textZH: '你好。', index: 0, fileHash: 'h1', start: 0, end: 1.5 },
+        ];
+        vi.mocked(chatApi.createSession)
+            .mockResolvedValueOnce({ sessionId: 'sess-old' })
+            .mockResolvedValueOnce({ sessionId: 'sess-fresh' });
+
+        await useChatPanel.getState().openSentenceSession(playerState.sentences[0] as never);
+        const epochBeforeReset = useChatPanel.getState().conversationEpoch;
+
+        useChatPanel.getState().resetConversationView();
+
+        expect(useChatPanel.getState().chatSessionId).toBe('');
+        expect(useChatPanel.getState().restoredMessages).toEqual([]);
+        expect(useChatPanel.getState().conversationEpoch).toBe(epochBeforeReset + 1);
+        expect(chatApi.closeSession).toHaveBeenCalledWith('sess-old');
+        expect(chatApi.saveStudyNote).toHaveBeenCalledWith(expect.objectContaining({
+            sentenceKey: 'h1:0',
+            messages: [],
+        }));
+        expect(chatApi.createSession).toHaveBeenLastCalledWith(expect.objectContaining({
+            sentenceKey: 'h1:0',
+            restoredMessages: [],
+        }));
+
+        await vi.waitFor(() => {
+            expect(useChatPanel.getState().chatSessionId).toBe('sess-fresh');
+        });
     });
 });

@@ -172,7 +172,7 @@ export default function SentenceStudyCanvas({
             </div>
 
             {/* 可滚动主体：句内划词微卡 + 前后对话语境 + 本句收获 */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full px-4 pb-6">
                 <section className="sticky top-0 z-10 -mx-4 border-b border-border/45 bg-body/95 px-4 pt-3 pb-3 backdrop-blur-md">
                     <div className="mb-1 flex items-center justify-between gap-2">
                         <span className="text-metadata font-mono text-secondary">
@@ -180,7 +180,11 @@ export default function SentenceStudyCanvas({
                         </span>
                     </div>
 
-                    <p className="text-lg font-semibold leading-relaxed tracking-tight text-primary select-text">
+                    <p
+                        data-sentence-unit="study-main"
+                        data-sentence-unit-text={sentence.en}
+                        className="text-lg font-semibold leading-relaxed tracking-tight text-primary select-text"
+                    >
                         {segments.map((seg, idx) => {
                             if (!seg.clickable || !seg.lookupKey || !seg.expression) {
                                 return <span key={idx}>{seg.text}</span>;
@@ -191,16 +195,37 @@ export default function SentenceStudyCanvas({
                             const isTrackedWord = Boolean(detail?.memoryTag && detail.memoryTag !== 'new');
 
                             return (
-                                <button
+                                <span
                                     key={idx}
-                                    type="button"
-                                    onClick={() => setSelectedWordState(
-                                        isPicked
-                                            ? null
-                                            : { sentenceEn: sentence.en, word: seg.expression! },
-                                    )}
+                                    role="button"
+                                    tabIndex={0}
+                                    data-word="true"
+                                    data-word-text={seg.text}
+                                    data-lemma={seg.lookupKey}
+                                    data-sentence-text={sentence.en}
+                                    onClick={() => {
+                                        const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+                                        if (selection && !selection.isCollapsed && selection.toString().trim().length > 0) {
+                                            return;
+                                        }
+                                        setSelectedWordState(
+                                            isPicked
+                                                ? null
+                                                : { sentenceEn: sentence.en, word: seg.expression! },
+                                        );
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedWordState(
+                                                isPicked
+                                                    ? null
+                                                    : { sentenceEn: sentence.en, word: seg.expression! },
+                                            );
+                                        }
+                                    }}
                                     className={cn(
-                                        'inline cursor-pointer rounded px-0.5 transition-colors underline underline-offset-4',
+                                        'inline cursor-pointer rounded px-0.5 transition-colors underline underline-offset-4 select-text',
                                         isPicked
                                             ? 'bg-accent-bg/20 text-primary decoration-accent'
                                             : isTrackedWord
@@ -209,7 +234,7 @@ export default function SentenceStudyCanvas({
                                     )}
                                 >
                                     {seg.text}
-                                </button>
+                                </span>
                             );
                         })}
                     </p>

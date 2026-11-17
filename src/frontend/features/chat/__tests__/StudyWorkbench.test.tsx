@@ -403,4 +403,66 @@ describe('整句学习 AI-Native 工作台组件套件', () => {
         expect(container.textContent).not.toContain('[[tts:');
         expect(container.textContent).not.toContain('###');
     });
+
+    it('支持通过关闭按钮退出精读工作台，并为句中单词提供划词查词与单句选词标记', () => {
+        const onClose = vi.fn();
+        const { container } = renderWithAstryx(
+            <StudyWorkbenchShell
+                sentenceIndex={0}
+                totalSentences={5}
+                canStepPrev={false}
+                canStepNext
+                onStepSentence={noop}
+                onJumpToPractice={noop}
+                isSentenceSaved={false}
+                onToggleSaveSentence={noop}
+                onClose={onClose}
+                leftCanvas={(
+                    <SentenceStudyCanvas
+                        sentence={{ en: 'Do not sit on the fence.', zh: '不要骑墙观望。', position: '00:05 · 第 1 / 5 句' }}
+                        neighbors={[]}
+                        resolveWordDetail={(word) => (word.toLowerCase() === 'fence' ? {
+                            word: 'fence',
+                            phonetic: 'fens',
+                            meaning: 'n. 栅栏；围栏',
+                            tags: ['cet4'],
+                            surfaces: ['fence'],
+                            memoryTag: 'due',
+                        } : null)}
+                        isFavorite={() => false}
+                        onToggleFavorite={noop}
+                        onSpeak={noop}
+                        isLooping={false}
+                        onPlayOriginal={noop}
+                        onToggleLoop={noop}
+                        onDeepDiveExpression={noop}
+                        onPreviewSubtitleLine={noop}
+                        miniVideoCollapsed={false}
+                        onToggleMiniCollapsed={noop}
+                        previewingEvidenceIndex={null}
+                        onReturnToAnchorClip={noop}
+                        noteSummary=""
+                        noteSaving={false}
+                        onNoteChange={noop}
+                        onSaveNote={noop}
+                    />
+                )}
+                rightCopilot={<div />}
+            />,
+        );
+
+        expect(screen.queryByRole('button', { name: '返回' })).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+
+        const sentenceUnit = container.querySelector('[data-sentence-unit="study-main"]');
+        expect(sentenceUnit?.getAttribute('data-sentence-unit-text')).toBe('Do not sit on the fence.');
+        const fenceWord = screen.getByRole('button', { name: 'fence' });
+        expect(fenceWord.getAttribute('data-word')).toBe('true');
+        expect(fenceWord.getAttribute('data-word-text')).toBe('fence');
+
+        // 单击词汇仍展开精读内置微卡，不破坏原有点击链路
+        fireEvent.click(fenceWord);
+        expect(screen.getByTestId('inline-expression-popover')).toBeDefined();
+    });
 });

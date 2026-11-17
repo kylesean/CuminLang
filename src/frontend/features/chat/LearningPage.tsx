@@ -14,7 +14,9 @@ import StudyCopilotPane from '@/frontend/features/chat/components/StudyCopilotPa
 import PromptPresetDialog from '@/frontend/features/chat/components/PromptPresetDialog';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
-import { setPlayerViewMode } from '@/frontend/features/player/lib/player-view-controller';
+import { exitOverlayView, setPlayerViewMode } from '@/frontend/features/player/lib/player-view-controller';
+import { groupSentencesIntoBlocks } from '@/frontend/features/player/lib/sentence-grouping';
+import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 import usePracticePanel from '@/frontend/features/practice/practiceStore';
 import { useVocabularyState } from '@/frontend/features/player/vocabularyStore';
 import { useSavedSentences } from '@/frontend/features/context-studio/savedSentencesStore';
@@ -120,8 +122,23 @@ export default function LearningPage() {
         })),
     );
     const sentences = usePlayer((state) => state.sentences);
+    const srtTender = usePlayer((state) => state.srtTender);
     const videoId = usePlaybackSession((state) => state.videoId);
     const trimmedTopic = topicText.trim();
+
+    useEffect(() => {
+        if (!learningVisible) return undefined;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            if (presetDialogOpen || useWordPopoverStore.getState().open) {
+                return;
+            }
+            event.preventDefault();
+            exitOverlayView();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [learningVisible, presetDialogOpen]);
 
     useEffect(() => {
         if (learningVisible && videoId) {
@@ -145,6 +162,18 @@ export default function LearningPage() {
     }, [anchorFileHash, anchorIndex, sentences]);
 
     const topicLine = anchorPosition >= 0 ? sentences[anchorPosition] : undefined;
+    const studyBlocks = useMemo(
+        () => groupSentencesIntoBlocks([...sentences].sort((a, b) => a.index - b.index)),
+        [sentences],
+    );
+    const currentBlockPos = useMemo(() => {
+        if (anchorIndex === null) return -1;
+        return studyBlocks.findIndex((block) =>
+            block.sentences.some((s) => s.index === anchorIndex && (!anchorFileHash || s.fileHash === anchorFileHash)),
+        );
+    }, [anchorFileHash, anchorIndex, studyBlocks]);
+    const currentBlock = currentBlockPos >= 0 ? studyBlocks[currentBlockPos] : undefined;
+
     const sentenceKey = topicLine ? `${topicLine.fileHash}:${topicLine.index}` : '';
     const isSentenceSaved = useSavedSentences((state) => (sentenceKey ? state.savedKeys.has(sentenceKey) : false));
     const toggleSavedSentence = useSavedSentences((state) => state.toggleSentence);
@@ -160,20 +189,28 @@ export default function LearningPage() {
         return sentences.slice(start, end).map((s, idx) => ({
             index: s.index,
             text: s.text,
-            isCurrent: start + idx === anchorPosition,
+            isCurrent: currentBlock
+                ? currentBlock.sentences.some((bs) => bs.index === s.index && bs.fileHash === s.fileHash)
+                : start + idx === anchorPosition,
         }));
-    }, [anchorPosition, sentences]);
+    }, [anchorPosition, currentBlock, sentences]);
 
-    const sentence = useMemo(() => ({
-        en: topicText,
-        zh: topicTranslation || topicLine?.textZH || '',
-        position: anchorIndex === null
-            ? ''
-            : [
-                topicLine ? TimeUtil.secondToTimeStrCompact(topicLine.start) : '',
-                t('learning.position', { index: anchorIndex + 1, total: sentences.length }),
-            ].filter(Boolean).join(' · '),
-    }), [anchorIndex, sentences.length, t, topicLine, topicText, topicTranslation]);
+    const sentence = useMemo(() => {
+        const displayIndex = anchorPosition >= 0 ? anchorPosition : anchorIndex;
+        const mergedZh = currentBlock
+            ? currentBlock.sentences.map((s) => s.textZH?.trim() ?? '').filter(Boolean).join(' ')
+            : '';
+        return {
+            en: topicText,
+            zh: topicTranslation || mergedZh || topicLine?.textZH || '',
+            position: displayIndex === null
+                ? ''
+                : [
+                    topicLine ? TimeUtil.secondToTimeStrCompact(topicLine.start) : '',
+                    t('learning.position', { index: displayIndex + 1, total: sentences.length }),
+                ].filter(Boolean).join(' · '),
+        };
+    }, [anchorIndex, anchorPosition, currentBlock, sentences.length, t, topicLine, topicText, topicTranslation]);
 
     useEffect(() => {
         if (!trimmedTopic) return;
@@ -217,6 +254,32 @@ export default function LearningPage() {
             });
     }, [t]);
 
+    const resolveSentencePlaybackRange = useCallback((target: NonNullable<typeof topicLine>) => {
+        const blockSentences = currentBlock && currentBlock.sentences.some(
+            (s) => s.index === target.index && s.fileHash === target.fileHash,
+        )
+            ? currentBlock.sentences
+            : [target];
+        const range = srtTender
+            ? blockSentences.reduce(
+                (acc, s) => {
+                    const mapped = srtTender.mapSeekTime(s);
+                    return {
+                        start: Math.min(acc.start, mapped.start),
+                        end: Math.max(acc.end, mapped.end),
+                    };
+                },
+                { start: Number.POSITIVE_INFINITY, end: 0 },
+            )
+            : {
+                start: Math.min(...blockSentences.map((s) => s.adjustedStart ?? s.start)),
+                end: Math.max(...blockSentences.map((s) => s.adjustedEnd ?? s.end)),
+            };
+        const safeStart = Number.isFinite(range.start) ? Math.max(0, range.start) : 0;
+        const safeEnd = Math.max(safeStart + 0.4, range.end);
+        return { start: safeStart, end: safeEnd };
+    }, [currentBlock, srtTender]);
+
     const playClipForSentence = useCallback((target: typeof topicLine) => {
         if (loopTimerRef.current !== null) {
             clearTimeout(loopTimerRef.current);
@@ -226,10 +289,7 @@ export default function LearningPage() {
             speak(topicText);
             return;
         }
-        const range = {
-            start: Math.max(0, target.adjustedStart ?? target.start),
-            end: Math.max((target.adjustedStart ?? target.start) + 0.4, target.adjustedEnd ?? target.end),
-        };
+        const range = resolveSentencePlaybackRange(target);
         if (usePlayer.getState().playPracticeClip) {
             const token = playTokenRef.current + 1;
             playTokenRef.current = token;
@@ -255,7 +315,7 @@ export default function LearningPage() {
         }
         usePlayer.getState().gotoSentence(target);
         usePlayer.getState().play();
-    }, [speak, topicText]);
+    }, [resolveSentencePlaybackRange, speak, topicText]);
 
     useEffect(() => {
         playClipRef.current = playClipForSentence;
@@ -302,9 +362,15 @@ export default function LearningPage() {
             return;
         }
         useChatPanel.getState().setPreviewingEvidenceIndex(target.index);
+        const mapped = srtTender
+            ? srtTender.mapSeekTime(target)
+            : {
+                start: target.adjustedStart ?? target.start,
+                end: target.adjustedEnd ?? target.end,
+            };
         const range = {
-            start: Math.max(0, target.start - 0.2),
-            end: Math.max(target.start + 3, target.end),
+            start: Math.max(0, mapped.start - 0.2),
+            end: Math.max(mapped.start + 3, mapped.end),
         };
         if (usePlayer.getState().playPracticeClip) {
             usePlayer.getState().playPracticeClip(range, target);
@@ -312,7 +378,7 @@ export default function LearningPage() {
             usePlayer.getState().gotoSentence(target);
             usePlayer.getState().play();
         }
-    }, [sentences, t]);
+    }, [sentences, srtTender, t]);
 
     const handleReturnToAnchorClip = useCallback(() => {
         useChatPanel.getState().setPreviewingEvidenceIndex(null);
@@ -369,10 +435,14 @@ export default function LearningPage() {
         if (!clean) return;
         const store = useChatPanel.getState();
         store.setAttachedFocusExpr(clean);
-        if (!chat.isBusy && sessionReady && cloudAvailable) {
+        if (!cloudAvailable) {
+            toast.error(t('learning.aiOfflineCompact'));
+            return;
+        }
+        if (!chat.isBusy && sessionReady) {
             void chat.handleSubmit(`讲讲 "${clean}" 在这句里的画面和地道用法。`);
         }
-    }, [chat, cloudAvailable, sessionReady]);
+    }, [chat, cloudAvailable, sessionReady, t]);
 
     const handleJumpToPractice = useCallback(() => {
         stopLoopPlayback();
@@ -393,12 +463,13 @@ export default function LearningPage() {
             <StudyWorkbenchShell
                 sentenceIndex={anchorPosition >= 0 ? anchorPosition : anchorIndex}
                 totalSentences={sentences.length}
-                canStepPrev={anchorPosition > 0}
-                canStepNext={anchorPosition >= 0 && anchorPosition < sentences.length - 1}
+                canStepPrev={currentBlockPos > 0}
+                canStepNext={currentBlockPos >= 0 && currentBlockPos < studyBlocks.length - 1}
                 onStepSentence={handleStepSentence}
                 onJumpToPractice={handleJumpToPractice}
                 isSentenceSaved={isSentenceSaved}
                 onToggleSaveSentence={handleToggleSaveSentence}
+                onClose={exitOverlayView}
                 leftCanvas={(
                     <SentenceStudyCanvas
                         sentence={sentence}

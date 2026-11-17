@@ -10,6 +10,7 @@ import {
     BookmarkCheck,
     ChevronLeft,
     ChevronRight,
+    X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SplitHandle, SplitLayout, SplitPane } from '@/frontend/components/layout/SplitLayout';
@@ -24,6 +25,7 @@ export interface StudyWorkbenchShellProps {
     onJumpToPractice: () => void;
     isSentenceSaved: boolean;
     onToggleSaveSentence: () => void;
+    onClose?: () => void;
     leftCanvas: ReactNode;
     rightCopilot: ReactNode;
 }
@@ -40,6 +42,7 @@ export default function StudyWorkbenchShell({
     onJumpToPractice,
     isSentenceSaved,
     onToggleSaveSentence,
+    onClose,
     leftCanvas,
     rightCopilot,
 }: StudyWorkbenchShellProps) {
@@ -97,6 +100,16 @@ export default function StudyWorkbenchShell({
                                 icon={<AudioLines className="h-3.5 w-3.5 text-accent" />}
                                 onClick={onJumpToPractice}
                             />
+
+                            {onClose && (
+                                <IconButton
+                                    label={t('learning.close')}
+                                    tooltip={t('learning.close')}
+                                    icon={<X className="h-3.5 w-3.5" />}
+                                    variant="ghost"
+                                    onClick={onClose}
+                                />
+                            )}
                         </HStack>
                     )}
                 />

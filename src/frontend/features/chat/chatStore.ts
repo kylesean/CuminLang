@@ -19,6 +19,7 @@ import {
 import type { Sentence } from '@/common/types/SentenceC';
 import type { SentenceMemoryHints } from '@/common/types/vo/SentenceVocabularyVO';
 import { beginOverlayView } from '@/frontend/features/player/lib/player-view-sync';
+import { groupSentencesIntoBlocks } from '@/frontend/features/player/lib/sentence-grouping';
 import usePracticePanel from '@/frontend/features/practice/practiceStore';
 
 const DEFAULT_PRESET_ID = 'image-schema-tutor';
@@ -80,6 +81,32 @@ export type ChatPanelActions = {
     setMiniVideoCollapsed: (collapsed: boolean) => void;
     setInput: (input: string) => void;
     consumeQueuedMessage: (id: number) => void;
+};
+
+const resolveStudySentenceUnit = (
+    sentences: Sentence[],
+    target: Sentence,
+): { anchor: Sentence; text: string; textZH: string } => {
+    if (sentences.length > 0) {
+        const blocks = groupSentencesIntoBlocks([...sentences].sort((a, b) => a.index - b.index));
+        const matched = blocks.find((b) =>
+            b.sentences.some((s) => s.index === target.index && s.fileHash === target.fileHash),
+        );
+        if (matched && matched.sentences.length > 0) {
+            const text = matched.sentences.map((s) => s.text.trim()).filter(Boolean).join(' ');
+            const textZH = matched.sentences.map((s) => s.textZH?.trim() ?? '').filter(Boolean).join(' ');
+            return {
+                anchor: matched.repr,
+                text: text || matched.repr.text,
+                textZH: textZH || matched.repr.textZH || '',
+            };
+        }
+    }
+    return {
+        anchor: target,
+        text: target.text,
+        textZH: target.textZH ?? '',
+    };
 };
 
 const empty = (): ChatPanelState => ({
@@ -402,7 +429,9 @@ const useChatPanel = create(
             await get().openSentenceSession(currentSentence);
         },
         openSentenceSession: async (sentence: Sentence, options?: { draftPrompt?: string }) => {
-            if (isSameLiveTopic(sentence.text, sentence.index, sentence.fileHash)) {
+            const resolved = resolveStudySentenceUnit(usePlayer.getState().sentences, sentence);
+            const canonicalAnchor = resolved.anchor;
+            if (isSameLiveTopic(resolved.text, canonicalAnchor.index, canonicalAnchor.fileHash)) {
                 reopenLearning();
                 if (options?.draftPrompt) {
                     set({ input: options.draftPrompt });
@@ -413,15 +442,19 @@ const useChatPanel = create(
             learningEntryInFlight = true;
             learningCloseRequested = false;
             const requestEpoch = ++learningRequestEpoch;
-            enterLearningOptimistically(sentence);
+            enterLearningOptimistically({
+                ...canonicalAnchor,
+                text: resolved.text,
+                textZH: resolved.textZH,
+            });
             try {
                 const [cloudAvailable, studyRecord, pickedVocab] = await Promise.all([
                     isCloudLearningAvailable(),
                     Promise.resolve(chatApi.getStudyNote?.({
-                        fileHash: sentence.fileHash,
-                        sentenceIndex: sentence.index,
+                        fileHash: canonicalAnchor.fileHash,
+                        sentenceIndex: canonicalAnchor.index,
                     })).catch(() => null),
-                    Promise.resolve(chatApi.pickSentenceVocabulary?.(sentence.text)).catch(() => null),
+                    Promise.resolve(chatApi.pickSentenceVocabulary?.(resolved.text)).catch(() => null),
                 ]);
 
                 if (requestEpoch !== learningRequestEpoch) {
@@ -436,16 +469,16 @@ const useChatPanel = create(
                 useChatPanel.setState({ cloudAvailable });
 
                 const cachedCard = studyRecord?.studyCard ?? null;
-                const resolvedTopic = cachedCard?.sentence?.completeText?.trim() || sentence.text;
+                const resolvedTopic = cachedCard?.sentence?.completeText?.trim() || resolved.text;
                 const resolvedTranslation = cachedCard?.sentence?.contextualTranslation?.trim()
-                    || sentence.textZH
+                    || resolved.textZH
                     || '';
                 const presetId = studyRecord?.presetId || resolveDefaultPresetId();
 
                 await startSessionForTopic(
                     resolvedTopic,
-                    sentence,
-                    sentence.text,
+                    canonicalAnchor,
+                    resolved.text,
                     resolvedTranslation,
                     cloudAvailable,
                     {
@@ -491,12 +524,13 @@ const useChatPanel = create(
             const { anchorIndex, anchorFileHash } = get();
             const sentences = usePlayer.getState().sentences;
             if (sentences.length === 0) return;
-            const currentPos = sentences.findIndex(
-                (s) => s.index === anchorIndex && (!anchorFileHash || s.fileHash === anchorFileHash),
+            const blocks = groupSentencesIntoBlocks([...sentences].sort((a, b) => a.index - b.index));
+            const currentBlockPos = blocks.findIndex((b) =>
+                b.sentences.some((s) => s.index === anchorIndex && (!anchorFileHash || s.fileHash === anchorFileHash)),
             );
-            const nextPos = currentPos < 0 ? 0 : currentPos + delta;
-            if (nextPos < 0 || nextPos >= sentences.length) return;
-            const target = sentences[nextPos];
+            const nextBlockPos = currentBlockPos < 0 ? 0 : currentBlockPos + delta;
+            if (nextBlockPos < 0 || nextBlockPos >= blocks.length) return;
+            const target = blocks[nextBlockPos]?.repr;
             if (!target) return;
             // 同步跳转播放器锚点以便左上角 PiP 切到目标句的音画位置
             const gotoFn = usePlayer.getState().gotoSentence;
@@ -533,12 +567,85 @@ const useChatPanel = create(
             resetLearningState();
         },
         resetConversationView: () => {
+            const snapshot = get();
+            const oldSessionId = snapshot.chatSessionId;
+            const videoId = usePlaybackSession.getState().videoId;
+            const resetEpoch = learningRequestEpoch;
+
+            applyLearningTransition({ chatSessionId: '' });
             set({
                 input: '',
                 queuedMessage: null,
                 restoredMessages: [],
-                conversationEpoch: get().conversationEpoch + 1,
+                attachedFocusExpr: null,
+                conversationEpoch: snapshot.conversationEpoch + 1,
             });
+
+            if (oldSessionId) {
+                chatApi.closeSession?.(oldSessionId).catch((error) => {
+                    chatLogger.warn('failed to close session during reset', { error });
+                });
+            }
+
+            if (
+                videoId
+                && snapshot.anchorIndex !== null
+                && snapshot.anchorFileHash
+            ) {
+                const sentenceKey = buildSentenceStudyKey(snapshot.anchorFileHash, snapshot.anchorIndex);
+                Promise.resolve(
+                    chatApi.saveStudyNote?.({
+                        sentenceKey,
+                        videoId,
+                        fileHash: snapshot.anchorFileHash,
+                        sentenceIndex: snapshot.anchorIndex,
+                        originalText: snapshot.topicText,
+                        messages: [],
+                        presetId: snapshot.activePresetId,
+                    }),
+                ).catch((error) => {
+                    chatLogger.warn('failed to clear persisted chat messages', { error });
+                });
+
+                const anchorSentence = usePlayer.getState().sentences.find(
+                    (s) => s.index === snapshot.anchorIndex && s.fileHash === snapshot.anchorFileHash,
+                );
+                const anchorPosition = anchorSentence
+                    ? usePlayer.getState().sentences.indexOf(anchorSentence)
+                    : -1;
+                const paragraphLines = anchorPosition >= 0
+                    ? usePlayer.getState().sentences
+                        .slice(Math.max(0, anchorPosition - 5), Math.min(usePlayer.getState().sentences.length, anchorPosition + 6))
+                        .filter(TypeGuards.isNotNull)
+                        .map((s) => s.text ?? '')
+                    : [];
+                const creationToken = ++sessionCreationToken;
+                void chatApi.createSession({
+                    videoId,
+                    originalTopic: snapshot.topicText,
+                    paragraphLines,
+                    subtitleFileHash: snapshot.anchorFileHash,
+                    anchorSentenceIndex: snapshot.anchorIndex,
+                    sentenceKey,
+                    presetId: snapshot.activePresetId,
+                    memoryHints: snapshot.memoryHints ?? undefined,
+                    restoredMessages: [],
+                }).then(({ sessionId }) => {
+                    const latest = get();
+                    if (
+                        sessionCreationToken !== creationToken
+                        || learningRequestEpoch !== resetEpoch
+                        || latest.anchorIndex !== snapshot.anchorIndex
+                        || latest.anchorFileHash !== snapshot.anchorFileHash
+                    ) {
+                        chatApi.closeSession?.(sessionId).catch(() => undefined);
+                        return;
+                    }
+                    set({ chatSessionId: sessionId });
+                }).catch((error) => {
+                    chatLogger.warn('failed to recreate clean chat session', { error });
+                });
+            }
         },
         sent: async (msg: string) => {
             const sessionId = get().chatSessionId;

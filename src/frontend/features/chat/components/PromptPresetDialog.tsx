@@ -148,7 +148,7 @@ function PromptPresetDialogBody({
             content={(
                 <LayoutContent>
                     <div className="grid grid-cols-[210px_1fr] gap-4 min-h-[360px]">
-                        <div className="flex flex-col gap-1.5 border-r border-border/50 pr-3">
+                        <div className="flex flex-col gap-1.5 max-h-[420px] overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full border-r border-border/50 pr-3">
                             <button
                                 type="button"
                                 disabled={saving}
@@ -236,7 +236,7 @@ function PromptPresetDialogBody({
                                     value={draftPrompt}
                                     onChange={(e) => setDraftPrompt(e.target.value)}
                                     rows={10}
-                                    className="w-full flex-1 resize-none rounded-xl border border-border/70 bg-surface/80 p-3 text-sm leading-relaxed text-primary outline-none focus:border-accent-bg"
+                                    className="w-full flex-1 resize-none overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full rounded-xl border border-border/70 bg-surface/80 p-3 text-sm leading-relaxed text-primary outline-none focus:border-accent-bg"
                                 />
                             </label>
 
