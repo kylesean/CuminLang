@@ -21,7 +21,7 @@ const FullscreenToggleButton = ({ fullScreen, changeFullScreen }: {
                 onClick={() => {
                     changeFullScreen(!fullScreen);
                 }}
-                className="w-8 h-8 rounded-lg text-media-fg/90 hover:text-media-fg hover:bg-media-fg/15 transition-colors flex items-center justify-center cursor-pointer"
+                className="w-8 h-8 rounded-lg text-media-fg/90 hover:text-media-fg hover:bg-media-fg/15 transition-colors flex items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-current"
                 aria-label={t('fullscreenHint.toggle')}
             >
                 {fullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}

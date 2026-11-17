@@ -24,7 +24,7 @@ import SubtitleTrackSegmented from '@/frontend/features/player/components/learni
 import PlayerSettingsPopover from '@/frontend/features/player/components/learning-toolbar/PlayerSettingsPopover';
 import PracticeModeButton from '@/frontend/features/player/components/srt-layout/PracticeModeButton';
 import LearningModeButton from '@/frontend/features/player/components/srt-layout/LearningModeButton';
-import { CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR } from '@/frontend/features/player/components/ControlPopover';
+import { CONTROL_POPOVER_OFFSET_STACKED_BAR } from '@/frontend/features/player/components/ControlPopover';
 import {
     FULLSCREEN_CONTROL_BAR_PANEL_HEIGHT_PX,
     FULLSCREEN_CONTROL_BAR_ZONE_PX,
@@ -43,6 +43,8 @@ const logger = getRendererLogger('OverlayControlBar');
 export interface OverlayControlBarProps {
     className?: string;
     onTimeChange?: (time: number) => void;
+    /** 通知全屏字幕层需要预留的底部安全边距，避免字幕气泡与悬浮控制条叠压。 */
+    onReserveBottomChange?: (px: number, instant: boolean) => void;
 }
 
 /**
@@ -51,7 +53,8 @@ export interface OverlayControlBarProps {
  */
 export default function OverlayControlBar({
     className = '',
-    onTimeChange
+    onTimeChange,
+    onReserveBottomChange,
 }: OverlayControlBarProps) {
     const {
         volume,
@@ -88,6 +91,11 @@ export default function OverlayControlBar({
         gapPx: 0,
     });
     const barVisible = (activated || mouseOver || menuOpen || pinned) && !maskAdjust.hiddenByMask;
+    const reserveBottomPx = barVisible ? (maskAdjust.liftPx + 104) : 24;
+
+    useEffect(() => {
+        onReserveBottomChange?.(reserveBottomPx, maskAdjust.liftPx > 0);
+    }, [onReserveBottomChange, reserveBottomPx, maskAdjust.liftPx]);
 
     useEffect(() => {
         let hideTimer: number | undefined;
@@ -162,7 +170,7 @@ export default function OverlayControlBar({
                         <div className={MEDIA_BAR_GROUP}>
                             <TrainingMenuButton
                                 tone="overlay"
-                                popoverOffset={CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR}
+                                popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
                                 onMenuOpenChange={setTrainingMenuOpen}
                             />
                             <PracticeModeButton variant="toolbar" tone="overlay" />
@@ -170,7 +178,7 @@ export default function OverlayControlBar({
                             <SubtitleTrackSegmented tone="overlay" />
                             <PlayerSettingsPopover
                                 tone="overlay"
-                                popoverOffset={CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR}
+                                popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
                                 onMenuOpenChange={setSettingsMenuOpen}
                             />
                         </div>
@@ -185,7 +193,7 @@ export default function OverlayControlBar({
                         <div className={MEDIA_BAR_GROUP}>
                             <SpeedSlider
                                 speed={playbackRate}
-                                popoverOffset={CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR}
+                                popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
                                 onSpeedChange={(speed) => usePlayer.getState().setPlaybackRate(speed)}
                                 onMenuOpenChange={setSpeedMenuOpen}

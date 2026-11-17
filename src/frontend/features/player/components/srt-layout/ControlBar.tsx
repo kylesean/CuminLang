@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 import VolumeSlider from '../VolumeSlider';
@@ -19,7 +19,10 @@ import {
 import PlaybackBarShell from '@/frontend/features/player/components/PlaybackBarShell';
 import HardsubMaskButton from '@/frontend/features/player/components/HardsubMaskButton';
 import PodcastModeButton from '@/frontend/features/player/components/PodcastModeButton';
-import { CONTROL_POPOVER_OFFSET_STACKED_BAR } from '@/frontend/features/player/components/ControlPopover';
+import {
+    CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR,
+    CONTROL_POPOVER_OFFSET_STACKED_BAR,
+} from '@/frontend/features/player/components/ControlPopover';
 import {
     CONTROL_BAR_GAP_PX,
     CONTROL_BAR_PANEL_HEIGHT_PX,
@@ -66,6 +69,7 @@ export default function PlaybackControlBar({
 
     const [previewTime, setPreviewTime] = useState<number | null>(null);
     const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
+    const [isStackedLayout, setIsStackedLayout] = useState<boolean>(true);
     const fullScreen = useLayout((s) => s.fullScreen);
     const changeFullScreen = useLayout((s) => s.changeFullScreen);
     // 用户钉住后控制条常显，不再受鼠标超时隐藏影响
@@ -78,51 +82,14 @@ export default function PlaybackControlBar({
     });
 
     const [mouseOverOut, setMouseOverOut] = useState<boolean>(false);
-    const mouseOverTimeout = useRef<number[]>([]);
-    useEffect(() => () => {
-        while (mouseOverTimeout.current.length > 0) {
-            const timer = mouseOverTimeout.current.pop();
-            if (timer !== undefined) {
-                window.clearTimeout(timer);
-            }
-        }
-    }, []);
     // 本条是否该显形：鼠标在舞台活跃 / 停在条上 / 倍速弹层开启 / 用户钉住，且未压在贴片上
     const barVisible = (mouseOverOut || stageActive || speedMenuOpen || pinned) && !maskAdjust.hiddenByMask;
 
     const onMouseLeave = () => {
-        while (mouseOverTimeout.current.length > 0) {
-            const timer = mouseOverTimeout.current.pop();
-            if (timer !== undefined) {
-                window.clearTimeout(timer);
-            }
-        }
         setMouseOverOut(false);
     };
 
-    const handleMouseMove = () => {
-        while (mouseOverTimeout.current.length > 0) {
-            const timer = mouseOverTimeout.current.pop();
-            if (timer !== undefined) {
-                window.clearTimeout(timer);
-            }
-        }
-        if (!mouseOverOut) {
-            setMouseOverOut(true);
-        }
-        const timeout = window.setTimeout(() => {
-            setMouseOverOut(false);
-        }, 2000);
-        mouseOverTimeout.current.push(timeout);
-    };
-
     const handleMouseMoveIn = () => {
-        while (mouseOverTimeout.current.length > 0) {
-            const timer = mouseOverTimeout.current.pop();
-            if (timer !== undefined) {
-                window.clearTimeout(timer);
-            }
-        }
         if (!mouseOverOut) {
             setMouseOverOut(true);
         }
@@ -137,11 +104,9 @@ export default function PlaybackControlBar({
 
     return (
         <div
-            onMouseMove={handleMouseMove}
-            onMouseLeave={onMouseLeave}
             style={{ bottom: maskAdjust.liftPx + CONTROL_BAR_GAP_PX }}
             className={cn(
-                'w-full flex flex-col-reverse h-36 text-media-fg/90 px-4 pb-8 pt-2 pointer-events-auto',
+                'w-full flex flex-col-reverse text-media-fg/90 px-4 py-1 pointer-events-none',
                 'transition-[bottom] duration-200 ease-out',
                 className
             )}
@@ -150,6 +115,7 @@ export default function PlaybackControlBar({
                 tone="inline"
                 visible={barVisible}
                 ghost={maskAdjust.ghost}
+                onLayoutModeChange={setIsStackedLayout}
                 leading={(
                     <>
                         {/* 上一句 / 播放暂停 / 下一句：与全屏控制条共用同一份控件 */}
@@ -177,7 +143,9 @@ export default function PlaybackControlBar({
                         <div className={MEDIA_BAR_GROUP}>
                             <SpeedSlider
                                 speed={playbackRate}
-                                popoverOffset={CONTROL_POPOVER_OFFSET_STACKED_BAR}
+                                popoverOffset={isStackedLayout
+                                    ? CONTROL_POPOVER_OFFSET_STACKED_BAR
+                                    : CONTROL_POPOVER_OFFSET_SINGLE_ROW_BAR}
                                 triggerClassName={DARK_BAR_BUTTON_HOVER}
                                 onSpeedChange={(speed) => usePlayer.getState().setPlaybackRate(speed)}
                                 onMenuOpenChange={setSpeedMenuOpen}
@@ -200,6 +168,7 @@ export default function PlaybackControlBar({
                     e.stopPropagation();
                     handleMouseMoveIn();
                 }}
+                onMouseLeave={onMouseLeave}
             />
         </div>
     );

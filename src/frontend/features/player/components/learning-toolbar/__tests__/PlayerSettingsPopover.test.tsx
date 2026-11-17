@@ -137,4 +137,13 @@ describe('PlayerSettingsPopover', () => {
         expect(screen.getByRole('button', { name: /subtitleOrigin\.regenerate/i })).toBeInTheDocument();
         usePlaybackSession.getState().clear();
     });
+
+    it('全屏 overlay 控制条宿主下隐藏重复播客开关与不生效的场景路标开关', () => {
+        render(<PlayerSettingsPopover tone="overlay" popoverOffset={44} />);
+        fireEvent.click(screen.getByRole('button', { name: /controlBox\.title/i }));
+
+        expect(screen.queryByTestId('player-setting-podcast-mode')).toBeNull();
+        expect(screen.queryByTestId('player-setting-scene-cues')).toBeNull();
+        expect(screen.getByTestId('player-setting-adaptive-chinese')).toBeInTheDocument();
+    });
 });

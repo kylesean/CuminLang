@@ -5,6 +5,7 @@ import useSetting from '@/frontend/features/settings/settingsStore';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import type { ComprehensionBand } from '@/common/types/subtitleComprehension';
 import type { Sentence } from '@/common/types/SentenceC';
+import SubtitleLine from '@/frontend/features/player/components/subtitles/SubtitleLine';
 import NormalLine from './NormalLine';
 
 /**
@@ -36,15 +37,17 @@ export default function AdaptiveChineseLine({
     text,
     order,
     source,
+    variant = 'panel',
 }: {
     sentence: Sentence;
     text: string;
     order: 'second' | 'third';
     source?: 'ai' | 'source';
+    variant?: 'panel' | 'overlay';
 }) {
-    const adaptiveChinese = useSetting(
+    const adaptiveChinese = (useSetting(
         (state) => state.values.get('player.adaptiveChinese'),
-    ) === 'true';
+    ) ?? 'true') === 'true';
     const { data } = useSWR(
         adaptiveChinese ? ['subtitle/comprehension', sentence.text] : null,
         () => playerApi.subtitleComprehension({
@@ -65,11 +68,14 @@ export default function AdaptiveChineseLine({
             data-comprehension-band={data?.band ?? 'unknown'}
             className={cn(
                 'w-full min-h-0 transition-opacity duration-300',
+                variant === 'overlay' && 'flex justify-center',
                 'group-hover/subtitle:opacity-100 group-focus-within/subtitle:opacity-100',
                 adaptiveChineseOpacityClass(data?.band),
             )}
         >
-            <NormalLine text={text} order={order} source={source} />
+            {variant === 'overlay'
+                ? <SubtitleLine text={text} order={order} source={source} />
+                : <NormalLine text={text} order={order} source={source} />}
         </div>
     );
 }

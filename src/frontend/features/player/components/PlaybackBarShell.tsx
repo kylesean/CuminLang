@@ -1,28 +1,23 @@
-import type { MouseEventHandler, ReactNode } from 'react';
+import { useEffect, useRef, type MouseEventHandler, type ReactNode } from 'react';
 import { cn } from '@/frontend/lib/utils';
 
 export type PlaybackBarTone = 'inline' | 'overlay';
 
 /**
- * 两种宿主进入单行布局的容器宽度不同。
+ * 窗口内嵌控制条的响应式行布局。
  *
- * 全屏条多出训练、字幕轨道、设置三组学习工具；760px 时进度条会被挤成 0。
- * 普通条没有这组工具，过早折成双行反而浪费高度。
+ * - `inline`（普通视图）仅有看画面工具，宽于 760px 进入单行，窄于 760px 自动折为双行；
+ * - `overlay`（全屏浮层）收纳完整学习与播放控制，固定采用「上行通栏进度条 + 下行操控栏」双行结构，
+ *   确保进度条在全屏所有分辨率下都能拥有足够拖拽精度，且弹层不会与进度条碰撞。
  */
-const SINGLE_ROW_CLASSES = {
-    inline: {
-        gap: '@[760px]:gap-x-2.5',
-        leading: '@[760px]:row-start-1',
-        progress: '@[760px]:col-span-1 @[760px]:col-start-2',
-        trailing: '@[760px]:row-start-1 @[760px]:gap-2',
-    },
-    overlay: {
-        gap: '@[1000px]:gap-x-3',
-        leading: '@[1000px]:row-start-1',
-        progress: '@[1000px]:col-span-1 @[1000px]:col-start-2',
-        trailing: '@[1000px]:row-start-1 @[1000px]:gap-2',
-    },
+const INLINE_SINGLE_ROW_CLASSES = {
+    gap: '@[760px]:gap-x-2.5',
+    leading: '@[760px]:row-start-1',
+    progress: '@[760px]:col-span-1 @[760px]:col-start-2',
+    trailing: '@[760px]:row-start-1 @[760px]:gap-2',
 } as const;
+
+const INLINE_SINGLE_ROW_BREAKPOINT_PX = 760;
 
 export interface PlaybackBarShellProps {
     /** 窗口内控制条或全屏浮层控制条。 */
@@ -33,23 +28,19 @@ export interface PlaybackBarShellProps {
     ghost?: boolean;
     /** 左侧播放导航与时间。 */
     leading: ReactNode;
-    /** 进度条；宽面板居中，窄面板独占一行。 */
+    /** 进度条；宽面板居中，窄面板/全屏独占一行。 */
     progress: ReactNode;
     /** 右侧按钮组。 */
     trailing: ReactNode;
     className?: string;
     onMouseMove?: MouseEventHandler<HTMLDivElement>;
+    onMouseLeave?: MouseEventHandler<HTMLDivElement>;
+    /** 当前是否处于双行堆叠模式，供宿主选择匹配的二级弹层 offset。 */
+    onLayoutModeChange?: (isStacked: boolean) => void;
 }
 
 /**
  * 播放控制条的共享外壳。
- *
- * 窗口内与全屏控制条共用同一份 DOM 结构和控件顺序：
- * - 普通条宽于 760px、全屏条宽于 1000px：单行，进度条居中；
- * - 面板较窄：双行，进度条在上、播放导航与按钮在下。
- *
- * 用容器查询而不是视口断点：窗口内控制条的实际宽度取决于视频/文稿分栏比例，
- * 1440px 窗口在文稿拉宽后也可能只剩 700px。
  */
 export default function PlaybackBarShell({
     tone,
@@ -60,17 +51,43 @@ export default function PlaybackBarShell({
     trailing,
     className,
     onMouseMove,
+    onMouseLeave,
+    onLayoutModeChange,
 }: PlaybackBarShellProps) {
-    const singleRow = SINGLE_ROW_CLASSES[tone];
+    const shellRef = useRef<HTMLDivElement>(null);
+    const singleRow = tone === 'inline' ? INLINE_SINGLE_ROW_CLASSES : null;
+
+    useEffect(() => {
+        if (!onLayoutModeChange) return;
+        if (tone === 'overlay') {
+            onLayoutModeChange(true);
+            return;
+        }
+        const el = shellRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') {
+            onLayoutModeChange(false);
+            return;
+        }
+        const sync = () => {
+            const width = el.clientWidth;
+            onLayoutModeChange(width > 0 && width < INLINE_SINGLE_ROW_BREAKPOINT_PX);
+        };
+        sync();
+        const observer = new ResizeObserver(sync);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [tone, onLayoutModeChange]);
 
     return (
         <div
+            ref={shellRef}
             onMouseMove={onMouseMove}
+            onMouseLeave={onMouseLeave}
             className={cn(
                 '@container relative z-20 w-full border bg-media-bg/60 text-media-fg/90 shadow-2xl backdrop-blur-md transition-[opacity,transform] duration-200 ease-out',
                 tone === 'inline'
-                    ? 'rounded-2xl border-media-fg/15 px-2 py-3 @[760px]:px-4'
-                    : 'max-w-7xl rounded-2xl border-media-fg/15 px-3.5 py-1.5',
+                    ? 'rounded-2xl border-media-fg/15 px-2 py-2.5 @[760px]:px-4'
+                    : 'max-w-7xl rounded-2xl border-media-fg/15 px-4 py-2',
                 ghost
                     ? 'pointer-events-none opacity-40'
                     : visible
@@ -81,14 +98,14 @@ export default function PlaybackBarShell({
         >
             <div
                 className={cn(
-                    'grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-2',
-                    singleRow.gap,
+                    'grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1.5',
+                    singleRow?.gap,
                 )}
             >
                 <div
                     className={cn(
                         'col-start-1 row-start-2 flex min-w-0 items-center gap-2',
-                        singleRow.leading,
+                        singleRow?.leading,
                     )}
                 >
                     {leading}
@@ -96,7 +113,7 @@ export default function PlaybackBarShell({
                 <div
                     className={cn(
                         'col-span-3 col-start-1 row-start-1 min-w-0',
-                        singleRow.progress,
+                        singleRow?.progress,
                     )}
                 >
                     {progress}
@@ -104,7 +121,7 @@ export default function PlaybackBarShell({
                 <div
                     className={cn(
                         'col-start-3 row-start-2 flex min-w-0 items-center justify-end gap-1',
-                        singleRow.trailing,
+                        singleRow?.trailing,
                     )}
                 >
                     {trailing}

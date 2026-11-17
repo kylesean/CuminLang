@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { Slider } from '@astryxdesign/core/Slider';
 import { cn } from '@/frontend/lib/utils';
@@ -38,19 +37,20 @@ const VolumeSlider = ({
     tone = 'theme',
 }: VolumeSliderProps) => {
     const { t } = useI18nTranslation('player');
-    const [localVolume, setLocalVolume] = useState<number>(volume);
+    // 直接受控于外部 volume prop，确保快捷键/跨控制条调节音量后立即同步 UI
+    const clampedVolume = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
 
     const getVolumeIcon = () => {
-        if (muted || localVolume === 0) {
+        if (muted || clampedVolume === 0) {
             return <VolumeX className="h-4 w-4" />;
         }
-        if (localVolume <= 0.5) {
+        if (clampedVolume <= 0.5) {
             return <Volume1 className="h-4 w-4" />;
         }
         return <Volume2 className="h-4 w-4" />;
     };
 
-    const volumePercent = muted ? 0 : Math.round(localVolume * 100);
+    const volumePercent = muted ? 0 : Math.round(clampedVolume * 100);
 
     return (
         <div className={cn("flex items-center gap-1.5 font-mono text-inherit", className)}>
@@ -58,7 +58,7 @@ const VolumeSlider = ({
                 type="button"
                 onClick={() => onMutedChange(!muted)}
                 className={cn(
-                    'h-8 px-2 rounded-lg text-inherit hover:bg-primary/10 transition-colors gap-1.5 flex items-center cursor-pointer',
+                    'h-8 px-2 rounded-lg text-inherit hover:bg-primary/10 transition-colors gap-1.5 flex items-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-current',
                     triggerClassName
                 )}
                 title={muted ? t('volumeSlider.unmute') : t('volumeSlider.mute')}
@@ -88,7 +88,6 @@ const VolumeSlider = ({
                             onMutedChange(false);
                         }
                         onVolumeChange(next);
-                        setLocalVolume(next);
                     }}
                     width={80}
                 />

@@ -12,7 +12,6 @@ import { selectVisibleSentences } from '@/frontend/features/player/lib/sentence-
 import SubtitleLearningHints from './SubtitleLearningHints';
 import AdaptiveChineseLine from './AdaptiveChineseLine';
 import SceneCue from './SceneCue';
-import SubtitleLine from '@/frontend/features/player/components/subtitles/SubtitleLine';
 
 /** 全屏覆盖层的原文字幕气泡：半透明深色底 + 背景模糊，与面板内纯文本样式区分。 */
 const OVERLAY_LINE_CLASS = 'my-0 mx-10 py-1.5 px-4 bg-media-bg/60 backdrop-blur-xs text-media-fg rounded-lg shadow-lg';
@@ -32,10 +31,16 @@ function BlockTranslationLinesBase({
     isOverlay,
 }: BlockTranslationLinesProps) {
     const translation = useTranslation((state) => state.translations.get(item.translationKey)) || '';
-    const renderLine = (key: string, text: string, order: 'second' | 'third', source?: 'ai' | 'source') =>
-        isOverlay
-            ? <SubtitleLine key={key} text={text} order={order} source={source} />
-            : <AdaptiveChineseLine key={key} sentence={item} text={text} order={order} source={source} />;
+    const renderLine = (key: string, text: string, order: 'second' | 'third', source?: 'ai' | 'source') => (
+        <AdaptiveChineseLine
+            key={key}
+            sentence={item}
+            text={text}
+            order={order}
+            source={source}
+            variant={isOverlay ? 'overlay' : 'panel'}
+        />
+    );
 
     const lines: ReactElement[] = [];
     if (showCn && StrUtil.isNotBlank(translation)) {
@@ -158,16 +163,23 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
 
     // 字幕轨道显隐：只在这里订阅展示值，切换入口在视频底部控制条
 
-    /** 中文行渲染器：面板内走理解度自适应中文行，全屏覆盖层走带气泡与来源徽章的字幕行。 */
+    /** 中文行渲染器：统一走 AdaptiveChineseLine，确保全屏与主面板均可即时响应自适应中文权重。 */
     const renderZhLine = (
         key: string,
         item: Sentence,
         text: string,
         order: 'second' | 'third',
         source?: 'ai' | 'source',
-    ): ReactElement => isOverlay
-        ? <SubtitleLine key={key} text={text} order={order} source={source} />
-        : <AdaptiveChineseLine key={key} sentence={item} text={text} order={order} source={source} />;
+    ): ReactElement => (
+        <AdaptiveChineseLine
+            key={key}
+            sentence={item}
+            text={text}
+            order={order}
+            source={source}
+            variant={isOverlay ? 'overlay' : 'panel'}
+        />
+    );
 
     /** 渲染当前句（及可选的上下文句子）。 */
     const renderBlockLines = (): ReactElement[] => {

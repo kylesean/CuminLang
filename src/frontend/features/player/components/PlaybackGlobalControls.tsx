@@ -17,7 +17,7 @@ import { formatShortcut } from '@/frontend/features/player/components/formatShor
 export const DARK_BAR_BUTTON_HOVER = 'hover:bg-media-fg/15 hover:text-media-fg';
 
 /** 控制条上带文字的模式按钮：与纯图标按钮同高、同圆角。 */
-export const MEDIA_BAR_TEXT_BUTTON = 'flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium leading-none transition-colors shrink-0';
+export const MEDIA_BAR_TEXT_BUTTON = 'flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium leading-none transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-current';
 
 /** 控制条上的开启态：统一中性白，不引入第二种语义色。 */
 export const MEDIA_BAR_ACTIVE = 'bg-media-fg/20 text-media-fg ring-1 ring-media-fg/25';
@@ -33,14 +33,14 @@ export const MEDIA_BAR_DIVIDER = 'mx-0.5 h-5 w-px shrink-0 bg-media-fg/15';
  */
 const NAV_ICON_TONE = {
     media: cn(
-        'w-7 h-7 flex items-center justify-center rounded-lg text-media-fg/80 transition-colors shrink-0 cursor-pointer',
+        'w-7 h-7 flex items-center justify-center rounded-lg text-media-fg/80 transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-current',
         DARK_BAR_BUTTON_HOVER
     ),
     theme: 'w-7 h-7 flex items-center justify-center rounded-lg text-secondary hover:bg-muted hover:text-primary transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
 } as const;
 
 const PLAY_BUTTON_TONE = {
-    media: 'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-media-fg/10 hover:bg-media-fg/20 text-media-fg/95 active:scale-95 transition-all cursor-pointer',
+    media: 'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-media-fg/10 hover:bg-media-fg/20 text-media-fg/95 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-current',
     theme: 'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/10 hover:bg-primary/15 text-primary active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
 } as const;
 

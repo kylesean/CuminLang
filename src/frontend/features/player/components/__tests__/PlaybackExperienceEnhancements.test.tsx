@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import PlaybackControlBar from '@/frontend/features/player/components/srt-layout/ControlBar';
 import OverlayControlBar from '@/frontend/features/player/components/subtitles/OverlayControlBar';
 import LearningToolbar from '@/frontend/features/player/components/learning-toolbar/LearningToolbar';
@@ -106,5 +106,32 @@ describe('Playback experience enhancements', () => {
 
         fireEvent.click(scrollRightButton);
         expect(scrollBySpy).toHaveBeenCalledWith({ left: 160, behavior: 'smooth' });
+    });
+
+    it('VolumeSlider in OverlayControlBar stays synced when store volume updates externally', () => {
+        useLayout.setState({ fullScreen: true, podcastMode: false });
+        usePlayer.setState({ volume: 0.8, muted: false });
+
+        render(<OverlayControlBar />);
+        expect(screen.getByRole('button', { name: 'volumeSlider.mute' }).textContent).toContain('80');
+
+        // 模拟快捷键（PlayerShortcut）直接修改 playerStore.volume
+        act(() => {
+            usePlayer.setState({ volume: 0.4 });
+        });
+        expect(screen.getByRole('button', { name: 'volumeSlider.mute' }).textContent).toContain('40');
+    });
+
+    it('OverlayControlBar reports larger bottom reserve when pinned/visible to keep subtitles above the bar', () => {
+        useLayout.setState({ fullScreen: true, podcastMode: false });
+        const onReserve = vi.fn();
+
+        render(<OverlayControlBar onReserveBottomChange={onReserve} />);
+        expect(onReserve).toHaveBeenCalledWith(104, false);
+
+        act(() => {
+            usePlayerUi.setState({ controlBarPinned: true });
+        });
+        expect(onReserve).toHaveBeenLastCalledWith(104, false);
     });
 });

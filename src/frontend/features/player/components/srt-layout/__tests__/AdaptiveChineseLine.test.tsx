@@ -102,4 +102,20 @@ describe('AdaptiveChineseLine', () => {
         expect(adaptiveChineseOpacityClass('medium')).toContain('0.72');
         expect(adaptiveChineseOpacityClass(undefined)).toBe('opacity-100');
     });
+
+    it('全屏 overlay 模式下同样应用理解度权重', () => {
+        mockSWR('high');
+        render(
+            <AdaptiveChineseLine
+                sentence={sentence}
+                text="全屏下也渐隐。"
+                order="second"
+                variant="overlay"
+            />,
+        );
+
+        const line = screen.getByTestId('adaptive-chinese-line');
+        expect(line.className).toContain('opacity-[0.5]');
+        expect(screen.getByText('全屏下也渐隐。')).toBeDefined();
+    });
 });

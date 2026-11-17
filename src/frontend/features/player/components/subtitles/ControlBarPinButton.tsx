@@ -70,7 +70,7 @@ export default function ControlBarPinButton() {
                 aria-pressed={pinned}
                 aria-label={pinned ? t('controlBar.pinAriaPinned') : t('controlBar.pinAriaIdle')}
                 className={cn(
-                    'relative w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors',
+                    'relative w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-current',
                     pinned
                         ? cn(MEDIA_BAR_ACTIVE, 'hover:bg-media-fg/25')
                         : nudging

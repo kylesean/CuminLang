@@ -68,7 +68,7 @@ export default function PlayerSettingsPopover({
     }, [onMenuOpenChange]);
     const popover = usePopover({
         // 与 TrainingMenuButton 统一为 340px，并预留窄屏余量，避免英文与不同主题字体撑破弹层。
-        className: cn('w-[340px] max-w-[calc(100vw-2rem)] p-2.5', CONTROL_POPOVER_PANEL),
+        className: cn('w-[340px] max-w-[calc(100vw-2rem)] max-h-[min(70vh,480px)] overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full p-2.5', CONTROL_POPOVER_PANEL),
         hasSurface: false,
         isModal: false,
         dialogLabel: t('controlBox.title'),
@@ -97,6 +97,13 @@ export default function PlayerSettingsPopover({
     const adjustDiff = currentSentence && srtTender && srtTender.adjusted(currentSentence)
         ? srtTender.timeDiff(currentSentence)
         : null;
+    const timingBadgeSeconds = adjustDiff
+        ? (Math.abs(adjustDiff.start) >= 0.05
+            ? adjustDiff.start
+            : (Math.abs(adjustDiff.end) >= 0.05 ? adjustDiff.end : null))
+        : null;
+    const isOverlayHost = tone === 'overlay';
+    const hasVisibleChinese = showCn || (showSourceZh && sourceZhAvailable);
     const trackActions = useSubtitleTrackActions();
     const trackOptions = useMemo(
         () => trackActions.subtitleTracks.map((track) => ({
@@ -167,8 +174,8 @@ export default function PlayerSettingsPopover({
                         <SegmentedControlItem
                             value="timing"
                             label={
-                                adjustDiff
-                                    ? `${t('controlBox.tabTiming', { defaultValue: '字幕时间' })} (${adjustDiff.start >= 0 ? '+' : ''}${adjustDiff.start.toFixed(1)}s)`
+                                timingBadgeSeconds !== null
+                                    ? `${t('controlBox.tabTiming', { defaultValue: '字幕时间' })} (${timingBadgeSeconds >= 0 ? '+' : ''}${timingBadgeSeconds.toFixed(1)}s)`
                                     : t('controlBox.tabTiming', { defaultValue: '字幕时间' })
                             }
                         />
@@ -177,7 +184,7 @@ export default function PlayerSettingsPopover({
 
                 {activeTab === 'settings' ? (
                     <div className="space-y-1.5">
-                        {/* 极简 3~4 行高频即时开关 */}
+                        {/* 高频即时开关：全屏条旁已有独立播客按钮且不渲染场景路标，不透出重复或无效开关 */}
                         <VStack gap={0.5}>
                             <PopoverSwitchRow
                                 label={t('controlBox.pauseOnWordHover')}
@@ -193,13 +200,15 @@ export default function PlayerSettingsPopover({
                                 onChange={(next) => { void changeAutoPlayNext(next); }}
                                 testId="player-setting-auto-play-next"
                             />
-                            <PopoverSwitchRow
-                                label={t('controlBox.podcastMode')}
-                                labelTooltip={t('controlBox.podcastModeHint')}
-                                checked={podcastMode}
-                                onChange={(checked) => setPodcastModeForCurrentVideo(checked)}
-                                testId="player-setting-podcast-mode"
-                            />
+                            {!isOverlayHost && (
+                                <PopoverSwitchRow
+                                    label={t('controlBox.podcastMode')}
+                                    labelTooltip={t('controlBox.podcastModeHint')}
+                                    checked={podcastMode}
+                                    onChange={(checked) => setPodcastModeForCurrentVideo(checked)}
+                                    testId="player-setting-podcast-mode"
+                                />
+                            )}
                             {sourceZhAvailable && (
                                 <PopoverSwitchRow
                                     label={t('controlBox.showSourceZh')}
@@ -209,7 +218,7 @@ export default function PlayerSettingsPopover({
                                     testId="player-setting-show-source-zh"
                                 />
                             )}
-                            {(showCn || showSourceZh) && (
+                            {hasVisibleChinese && (
                                 <PopoverSwitchRow
                                     label={t('controlBox.adaptiveChinese')}
                                     labelTooltip={t('controlBox.adaptiveChineseHint')}
@@ -218,13 +227,15 @@ export default function PlayerSettingsPopover({
                                     testId="player-setting-adaptive-chinese"
                                 />
                             )}
-                            <PopoverSwitchRow
-                                label={t('controlBox.sceneCues')}
-                                labelTooltip={t('controlBox.sceneCuesHint')}
-                                checked={sceneCues}
-                                onChange={(next) => { void changeSceneCues(next); }}
-                                testId="player-setting-scene-cues"
-                            />
+                            {!isOverlayHost && (
+                                <PopoverSwitchRow
+                                    label={t('controlBox.sceneCues')}
+                                    labelTooltip={t('controlBox.sceneCuesHint')}
+                                    checked={sceneCues}
+                                    onChange={(next) => { void changeSceneCues(next); }}
+                                    testId="player-setting-scene-cues"
+                                />
+                            )}
                         </VStack>
 
                         {/* 显示范围：只影响主字幕区渲染哪几句，不影响复读/暂停的单位。
