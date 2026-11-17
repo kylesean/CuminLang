@@ -112,4 +112,84 @@ describe('playerStore 逐句循环在末句的 completed 逃逸', () => {
         // 单遍计划：第一遍结束即清计划并恢复倍速（无 sentenceLoop 时不滞留）
         expect(usePlayer.getState().internal.transientPlan).toBeNull();
     });
+
+    it('中间句开启每句重复 ×3 且不跳过空隙时，3 遍完成后在句间空隙不原地重开，进入下一句后才切到下一句', () => {
+        const s0 = usePlayer.getState().sentences[0]; // [1, 3]
+        const s1 = usePlayer.getState().sentences[1]; // [3.9, 6]
+
+        usePlayer.getState().seekToTarget({ time: 1.0, target: s0 });
+        usePlayer.getState().setSentenceLoop({ times: 3 });
+        usePlayer.getState().resolveSeek(1.0);
+
+        // 第 1 遍 & 第 2 遍在句末回跳
+        usePlayer.getState().updateExactPlayTime(2.96);
+        vi.runAllTimers();
+        expect(usePlayer.getState().internal.transientPlan?.loopDone).toBe(1);
+
+        usePlayer.getState().resolveSeek(1.0);
+        usePlayer.getState().updateExactPlayTime(2.96);
+        vi.runAllTimers();
+        expect(usePlayer.getState().internal.transientPlan?.loopDone).toBe(2);
+
+        // 第 3 遍播完：标记 completed，等待 3.0 -> 3.9s 句间空隙自然播过
+        usePlayer.getState().resolveSeek(1.0);
+        usePlayer.getState().updateExactPlayTime(2.96);
+        vi.runAllTimers();
+        expect(usePlayer.getState().internal.transientPlan?.completed).toBe(true);
+
+        // 在空隙中（3.3s，已过 3.0+0.2s 但尚未到 3.9s 下一句）：绝对不能重开 s0
+        usePlayer.getState().updateExactPlayTime(3.3);
+        vi.runAllTimers();
+        expect(usePlayer.getState().internal.transientPlan?.completed).toBe(true);
+        expect(usePlayer.getState().internal.transientPlan?.anchorKey).toBe(s0.key);
+        expect(usePlayer.getState().internal.seekInFlight).toBe(false);
+
+        // 自然进入下一句 s1（3.92s）：切到 s1 并开启新一轮 1/3
+        usePlayer.getState().updateExactPlayTime(3.92);
+        vi.runAllTimers();
+        expect(usePlayer.getState().currentSentence?.key).toBe(s1.key);
+        expect(usePlayer.getState().internal.transientPlan?.anchorKey).toBe(s1.key);
+        expect(usePlayer.getState().internal.transientPlan?.completed).toBeFalsy();
+        expect(usePlayer.getState().internal.transientPlan?.loopDone).toBe(0);
+    });
+
+    it('多行合并意群块开启每句重复 ×3 后，不因末尾落在块内末行而无限重复同一块', () => {
+        const blockSentences = [
+            makeSentence(0, 1.0, 2.5),
+            makeSentence(1, 2.7, 4.5), // 与句 0 间隔 0.2s (<0.8s)，合并为同一意群块
+            makeSentence(2, 5.5, 8.0), // 下一独立句
+        ];
+        usePlayer.getState().loadSubtitles(blockSentences);
+
+        const b0Head = usePlayer.getState().sentences[0];
+        const b1 = usePlayer.getState().sentences[2];
+
+        usePlayer.getState().seekToTarget({ time: 1.0, target: b0Head });
+        usePlayer.getState().setSentenceLoop({ times: 3 });
+        usePlayer.getState().resolveSeek(1.0);
+
+        usePlayer.getState().updateExactPlayTime(4.46);
+        vi.runAllTimers();
+        usePlayer.getState().resolveSeek(1.0);
+        usePlayer.getState().updateExactPlayTime(4.46);
+        vi.runAllTimers();
+        usePlayer.getState().resolveSeek(1.0);
+        usePlayer.getState().updateExactPlayTime(4.46);
+        vi.runAllTimers();
+        expect(usePlayer.getState().internal.transientPlan?.completed).toBe(true);
+
+        // 4.47s 仍落在意群块第二行但尚未到句 2（5.5s）：不能原地重开同一块
+        usePlayer.getState().updateExactPlayTime(4.47);
+        vi.runAllTimers();
+        expect(usePlayer.getState().internal.transientPlan?.completed).toBe(true);
+        expect(usePlayer.getState().internal.transientPlan?.anchorKey).toBe(b0Head.key);
+
+        // 5.52s 进入下一句：正常推进到 b1
+        usePlayer.getState().updateExactPlayTime(5.52);
+        vi.runAllTimers();
+        expect(usePlayer.getState().currentSentence?.key).toBe(b1.key);
+        expect(usePlayer.getState().internal.transientPlan?.anchorKey).toBe(b1.key);
+        expect(usePlayer.getState().internal.transientPlan?.completed).toBeFalsy();
+        expect(usePlayer.getState().internal.transientPlan?.loopDone).toBe(0);
+    });
 });

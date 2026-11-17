@@ -1,11 +1,9 @@
 import React, { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Center } from '@astryxdesign/core/Center';
-import { Spinner } from '@astryxdesign/core/Spinner';
 import { Layout, LayoutContent, LayoutHeader } from '@astryxdesign/core/Layout';
 import TitleBar from '@/frontend/components/layout/TitleBar/TitleBar';
 import { TITLE_BAR_HEIGHT } from '@/frontend/components/layout/TitleBar/titleBarMetrics';
-import { useTranslation } from 'react-i18next';
+import { StartupLoading } from '@/frontend/components/shared/LoadingStates';
 import useLayout from '@/frontend/app/stores/layoutStore';
 
 /**
@@ -21,7 +19,6 @@ import useLayout from '@/frontend/app/stores/layoutStore';
  * @returns 包含顶栏与路由子页面的布局 JSX 元素。
  */
 const TitleBarLayout: React.FC = () => {
-    const { t } = useTranslation('common');
     const fullScreen = useLayout((s) => s.fullScreen);
 
     return (
@@ -40,7 +37,7 @@ const TitleBarLayout: React.FC = () => {
             }
             content={
                 <LayoutContent padding={0} isScrollable={false}>
-                    <Suspense fallback={<Center height="fill"><Spinner label={t('loading')} /></Center>}>
+                    <Suspense fallback={<StartupLoading />}>
                         <div className="w-full h-full relative">
                             <Outlet />
                         </div>

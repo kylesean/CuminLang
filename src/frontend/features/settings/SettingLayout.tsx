@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import React, { useMemo } from 'react';
+import React, { Suspense, useMemo } from 'react';
+import { SettingsLoadingSkeleton } from '@/frontend/features/settings/components/form';
 import {
     Boxes,
     Command,
@@ -109,6 +110,11 @@ const SettingLayout: React.FC = () => {
         return matched ? matched.key : 'appearance';
     }, [location.pathname]);
 
+    const currentItem = useMemo(
+        () => SETTING_ITEMS.find((item) => item.key === currentKey) ?? SETTING_ITEMS[0],
+        [currentKey],
+    );
+
     return (
         <Layout
             height="fill"
@@ -159,7 +165,9 @@ const SettingLayout: React.FC = () => {
             content={
                 <LayoutContent padding={6} isScrollable>
                     <VStack width="100%" maxWidth={780} gap={6} paddingBlockEnd={8} className="mx-auto">
-                        <Outlet />
+                        <Suspense fallback={<SettingsLoadingSkeleton title={t(currentItem.labelKey)} />}>
+                            <Outlet />
+                        </Suspense>
                     </VStack>
                 </LayoutContent>
             }

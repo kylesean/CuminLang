@@ -16,8 +16,8 @@ import { getOnboardingCompletedVersion } from '@/frontend/features/onboarding/on
 import { backendClient } from '@/frontend/infrastructure/electron/backendClient';
 import { getMigrationFailureDetail } from '@/frontend/features/migration-failure/migrationFailureApi';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
-import { Loader2 } from 'lucide-react';
 import { applyLanguageSetting } from '@/frontend/i18n';
+import { PlayerLoadingSkeleton, StartupLoading } from '@/frontend/components/shared/LoadingStates';
 import { Theme } from '@astryxdesign/core/theme';
 import { themes, type ThemeSlug } from '../../astryx-themes';
 import type { AppearanceThemeFamily } from '@/common/contracts/appearance-setting-vo';
@@ -52,26 +52,6 @@ const MigrationFailureGate = lazy(() => import('@/frontend/features/migration-fa
 
 const UPDATE_CHECK_DELAY_MS = 6000;
 const UPDATE_TOAST_ID = 'update-available';
-
-/**
- * 启动门槛判定期间的过渡态。
- *
- * 判定只等一轮 IPC 往返，但主界面挂载很重（首页会立即拉列表、改窗口尺寸），
- * 所以这里只给一个轻量加载指示：既不先渲染主界面再切走，也不留一片空白。
- */
-const StartupLoading: React.FC = () => {
-    const { t } = useI18nTranslation('common');
-    return (
-        <div
-            role="status"
-            aria-label={t('loading')}
-            className="flex h-full w-full items-center justify-center gap-2 text-secondary"
-        >
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">{t('loading')}</span>
-        </div>
-    );
-};
 
 /**
  * 将 Astryx LinkProvider 期望的 href/className/children 等属性桥接到 React Router 的 Link。
@@ -269,11 +249,19 @@ export const App = () => {
                                 {/* 用 splat 承接 /learn 子路径：同一 Route 命中，切到学习视图时页面组件不重挂载 */}
                                 <Route
                                     path="player/:videoId/*"
-                                    element={<Eb key="player-video"><PlayerPage /></Eb>}
+                                    element={(
+                                        <Suspense fallback={<PlayerLoadingSkeleton />}>
+                                            <Eb key="player-video"><PlayerPage /></Eb>
+                                        </Suspense>
+                                    )}
                                 />
                                 <Route
                                     path="player/*"
-                                    element={<Eb key="player"><PlayerPage /></Eb>}
+                                    element={(
+                                        <Suspense fallback={<PlayerLoadingSkeleton />}>
+                                            <Eb key="player"><PlayerPage /></Eb>
+                                        </Suspense>
+                                    )}
                                 />
                                 <Route path="*" element={<AppShellLayout />}>
                                     <Route

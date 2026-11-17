@@ -52,6 +52,8 @@ type TransientPlan = {
     anchorKey: string;
     /** 锚定句：循环 seek 时作为高亮目标（虚拟组时为组内第一句）。 */
     anchor: Sentence;
+    /** 当前循环单元包含的全部句子 key（单句 1 个；意群块/虚拟组含整组全部句子）。 */
+    unitKeys: Set<string>;
     /** 循环区间：单句为该句区间，虚拟组为组整体区间。 */
     range: Range;
     /** 总播放遍数。 */
@@ -379,12 +381,12 @@ export const usePlayer = create<PlayerState>((set, get) => {
     // 循环计划进行中调整锚点句边界：同步更新计划区间，
     // 否则本遍循环仍按旧边界回跳（新句尾被提前截停或旧句尾多播一段）。
     const plan = get().internal.transientPlan;
-    if (plan?.anchorKey === keyU) {
-      const { range } = resolvePlanRange(get().currentSentence ?? updated);
+    if (plan && (plan.anchorKey === keyU || plan.unitKeys.has(keyU))) {
+      const { range, unitKeys } = resolvePlanRange(get().currentSentence ?? updated);
       set((prev) => ({
         internal: {
           ...prev.internal,
-          transientPlan: prev.internal.transientPlan ? { ...prev.internal.transientPlan, range } : null,
+          transientPlan: prev.internal.transientPlan ? { ...prev.internal.transientPlan, range, unitKeys } : null,
         }
       }));
     }
@@ -883,16 +885,28 @@ export const usePlayer = create<PlayerState>((set, get) => {
 
     // 2) 瞬态播放计划：覆盖一切全局模式
     if (transientPlan) {
-      // 遍数已完成且不跳过空隙：等待自然播放进入下一句再续开新一轮
-      // （等待期间计划分支会拦截常规回写，这里按时间回写高亮）
+      // 遍数已完成且不跳过空隙：等待自然播放进入下一单元再续开新一轮
+      // （等待期间计划分支会拦截常规回写，这里按单元边界决定推进或末句回环）
       if (transientPlan.completed) {
         const at = srtTender.getByTime(effectiveTime);
-        // 末句逃逸：getByTime 首尾钳制会让锚点之后的采样永远返回锚点句，
-        // 「进入下一句」的判定在最后一句永不成立，completed 计划会永久滞留并
-        // 拦截全部句末模式。播放头越过锚点句末（留出句尾缓冲）即视为空隙已过。
-        const gapPassed = (at && sentenceKey(at) !== transientPlan.anchorKey)
-          || effectiveTime >= transientPlan.range.end + 0.2;
-        if (gapPassed) {
+        const atDifferentUnit = Boolean(at) && !transientPlan.unitKeys.has(sentenceKey(at));
+        const nextUnit = getNavUnitAtOffset(1);
+        const reachedNextUnit = nextUnit !== null && effectiveTime >= nextUnit.range.start;
+        // 末句逃逸：仅当后方已无下一单元时，越过锚点句末 +0.2s 缓冲即视为空隙已过；
+        // 有下一单元时严格等待播头真正跨越当前循环单元并进入下一单元，避免在句间空隙原地重开本句。
+        const escapedAtTail = nextUnit === null && effectiveTime >= transientPlan.range.end + 0.2;
+
+        if (atDifferentUnit || reachedNextUnit) {
+          const nextTarget = atDifferentUnit ? at : navUnitTarget(nextUnit!.unit);
+          const nextRange = srtTender.mapSeekTime(nextTarget);
+          set({ currentSentence: nextTarget });
+          if (sentenceLoop) {
+            const needSeek = effectiveTime > nextRange.start + 0.2 || effectiveTime < nextRange.start - 0.1;
+            beginSentencePlan(sentenceLoop, needSeek);
+          } else {
+            clearTransientPlan();
+          }
+        } else if (escapedAtTail) {
           set({ currentSentence: at });
           if (sentenceLoop) {
             beginSentencePlan(sentenceLoop, true);
@@ -910,7 +924,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
         }
         return;
       }
-      if (currentSentence && sentenceKey(currentSentence) !== transientPlan.anchorKey) {
+      if (currentSentence && !transientPlan.unitKeys.has(sentenceKey(currentSentence))) {
         // 锚点句已变化（用户手动跳转）：常开模式为新高亮句续开一轮，否则放弃计划
         if (sentenceLoop) {
           beginSentencePlan(sentenceLoop, true);
@@ -1090,16 +1104,19 @@ export const usePlayer = create<PlayerState>((set, get) => {
    * 解析瞬态计划的循环单元与区间：虚拟组优先，其次意群块，最后单句。
    * beginSentencePlan 与 patchSentenceInStore（锚点句边界被调整时）共用，保证两处口径一致。
    */
-  const resolvePlanRange = (focus: Sentence): { anchor: Sentence; range: Range } => {
+  const resolvePlanRange = (focus: Sentence): { anchor: Sentence; range: Range; unitKeys: Set<string> } => {
     const { srtTender, virtualGroup } = get();
-    if (!srtTender) return { anchor: focus, range: { start: 0, end: 0 } };
+    if (!srtTender) return { anchor: focus, range: { start: 0, end: 0 }, unitKeys: new Set([sentenceKey(focus)]) };
     let anchor = focus;
     let range = srtTender.mapSeekTime(focus);
+    let unitKeys = new Set([sentenceKey(focus)]);
     if (virtualGroup.active && virtualGroup.sentences.length > 0 && isFocusInVirtualGroup()) {
-      const first = virtualGroup.sentences.slice().sort((a, b) => a.index - b.index)[0];
+      const sorted = virtualGroup.sentences.slice().sort((a, b) => a.index - b.index);
+      const first = sorted[0];
       if (first) {
         anchor = first;
         range = get().getVirtualGroupRange() ?? range;
+        unitKeys = new Set(sorted.map(sentenceKey));
       }
     } else {
       // 导航以意群块为单位，循环单元必须与导航一致：
@@ -1108,9 +1125,10 @@ export const usePlayer = create<PlayerState>((set, get) => {
       if (block) {
         anchor = block.repr;
         range = calcRangeForSentences(srtTender, block.sentences);
+        unitKeys = new Set(block.sentences.map(sentenceKey));
       }
     }
-    return { anchor, range };
+    return { anchor, range, unitKeys };
   };
 
   const beginSentencePlan = (mode: { times: number; rates?: number[]; prevRate: number }, seekToStart: boolean) => {
@@ -1120,7 +1138,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     const focus = state.currentSentence ?? getFocusedSentence();
     if (!focus || mode.times < 1) return;
 
-    const { anchor, range } = resolvePlanRange(focus);
+    const { anchor, range, unitKeys } = resolvePlanRange(focus);
 
     set((prev) => ({
       activePlan: {
@@ -1131,6 +1149,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
       internal: { ...prev.internal, transientPlan: {
         anchorKey: sentenceKey(anchor),
         anchor,
+        unitKeys,
         range,
         loopTotal: mode.times,
         loopDone: 0,

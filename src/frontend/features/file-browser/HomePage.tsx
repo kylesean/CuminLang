@@ -21,10 +21,10 @@ import { apiPath } from '@/frontend/lib/swr-util';
 import {
     ChevronsDown,
     Clock,
-    Loader2,
     Play,
     RotateCcw,
 } from 'lucide-react';
+import { HomeLoadingSkeleton } from '@/frontend/components/shared/LoadingStates';
 import { toast } from 'react-hot-toast';
 import FolderSelector, { FolderSelectAction } from '@/frontend/features/file-browser/components/FolderSelector';
 import FileSelector, { FileAction } from '@/frontend/features/file-browser/components/FileSelector';
@@ -175,12 +175,7 @@ const HomePage = () => {
             content={
                 <LayoutContent isScrollable padding={6}>
                     {isInitialLoading ? (
-                        <Center height="100%" minHeight={420}>
-                            <HStack gap={2} vAlign="center" className="text-secondary text-sm">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>{tc('loading')}</span>
-                            </HStack>
-                        </Center>
+                        <HomeLoadingSkeleton />
                     ) : isInitialError ? (
                         <Center height="100%" minHeight={420}>
                             <VStack gap={3} hAlign="center">

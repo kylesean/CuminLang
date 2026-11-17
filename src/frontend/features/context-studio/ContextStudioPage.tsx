@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import PageHeader from '@/frontend/components/shared/common/PageHeader';
+import { ContextStudioListSkeleton } from '@/frontend/components/shared/LoadingStates';
 import MemoryMapSection from '@/frontend/features/learning-data/MemoryMapSection';
 import WordEditDialog from '@/frontend/features/video-learning/components/WordEditDialog';
 import type { WordItem } from '@/frontend/features/video-learning/components/WordSidebar';
@@ -1058,9 +1059,7 @@ export default function ContextStudioPage() {
 
                         <div className="flex-1 min-h-0 flex flex-col">
                             {loading ? (
-                                <div className="p-6 text-center text-sm text-secondary">
-                                    {t('contextStudio.loading', { defaultValue: '正在加载语境资产...' })}
-                                </div>
+                                <ContextStudioListSkeleton ariaLabel={t('contextStudio.loading', { defaultValue: '正在加载语境资产...' })} />
                             ) : filteredItems.length === 0 ? (
                                 <div className="p-6 text-center text-sm text-secondary">
                                     {t('contextStudio.emptyList', { defaultValue: '暂无符合条件的语境资产' })}

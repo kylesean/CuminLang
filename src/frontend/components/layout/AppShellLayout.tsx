@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AppShell } from '@astryxdesign/core/AppShell';
 import useLayout, { cpW } from '@/frontend/app/stores/layoutStore';
 import SideBar from '@/frontend/components/layout/SideBar';
+import { WorkspaceContentSkeleton } from '@/frontend/components/shared/LoadingStates';
 
 /**
  * 主应用工作区外壳：按 Astryx `shell-side-nav` 模板组织页面骨架。
@@ -58,7 +59,9 @@ const AppShellLayout: React.FC = () => {
                 />
             )}
         >
-            <Outlet />
+            <Suspense fallback={<WorkspaceContentSkeleton />}>
+                <Outlet />
+            </Suspense>
         </AppShell>
     );
 };
