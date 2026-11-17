@@ -316,3 +316,50 @@ describe('英文字幕分段（多块合并）', () => {
         expect(lines.slice(1).map((item) => item.contentEn).join(' ')).toBe('AI is not likely to replace you.');
     });
 });
+
+describe('多片时间轴平滑拼接', () => {
+    it('重叠窗内存在时间抖动时按词级锚点切换，不劈碎跨边界子词也不重词', () => {
+        // 模拟切分点 24s 前后两片子词时间戳偏移 ~0.2s：
+        // 若硬按 t < 24 / t >= 24 切割，left 会留下 " comput"、right 会接上 "uter"，拼出错词。
+        const chunk0: SpeechRecognitionToken[] = [
+            word('Build', 22.8, 23.1),
+            word('a', 23.2, 23.3),
+            word('new', 23.4, 23.7),
+            word('comp', 23.85, 23.98),
+            { text: 'uter', start: 24.02, end: 24.2 },
+            word('now', 24.3, 24.6),
+            punct('.', 24.6, 24.65),
+        ];
+        const chunk1: SpeechRecognitionToken[] = [
+            word('new', 23.55, 23.8),
+            word('comp', 23.95, 24.1),
+            { text: 'uter', start: 24.15, end: 24.35 },
+            word('now', 24.45, 24.75),
+            punct('.', 24.75, 24.8),
+            word('Thanks', 25.0, 25.4),
+            punct('.', 25.4, 25.45),
+        ];
+
+        const merged = segmenter.mergeTimelines([chunk0, chunk1], [0, 24]);
+        const lines = segmenter.segmentTimeline(merged);
+
+        expect(lines.map((line) => line.contentEn).join(' ')).toBe('Build a new computer now. Thanks.');
+    });
+
+    it('切分点附近静音无重叠词时回退词级边界裁切且仍保持词间空格', () => {
+        const chunk0: SpeechRecognitionToken[] = [
+            { text: 'Hello', start: 21.0, end: 21.5 },
+            punct('.', 21.5, 21.55),
+        ];
+        const chunk1: SpeechRecognitionToken[] = [
+            // 无前导空格的词首 token：拼接后二次 createWords 不能与前一片尾词粘连
+            { text: 'World', start: 25.2, end: 25.7 },
+            punct('.', 25.7, 25.75),
+        ];
+
+        const merged = segmenter.mergeTimelines([chunk0, chunk1], [0, 24]);
+        const lines = segmenter.segmentTimeline(merged);
+
+        expect(lines.map((line) => line.contentEn).join(' ')).toBe('Hello. World.');
+    });
+});

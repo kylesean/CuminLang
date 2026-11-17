@@ -3,6 +3,7 @@ import { toast } from 'react-hot-toast';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import type { SubtitleTrackOrigin } from '@/common/contracts/subtitle-resolution';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
+import { syncSubtitleTrackMutation } from '@/frontend/features/player/lib/syncSubtitleTrackMutation';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import { useSubtitleGenerationStore } from '@/frontend/features/player/subtitleGenerationStore';
@@ -16,12 +17,13 @@ const ORIGIN_KEY_MAP: Record<SubtitleTrackOrigin, string> = {
 };
 
 /**
- * 封装当前播放视频的字幕轨道诊断、切换与本地重新识别动作，
+ * 封装当前播放视频的字幕轨道诊断、切换、本地重新识别与放弃修订还原基线动作，
  * 供文稿顶部提示条与播放设置弹层共用，避免多处重复状态协调。
  */
 export function useSubtitleTrackActions() {
     const { t } = useI18nTranslation('player');
     const [switchingTrack, setSwitchingTrack] = useState(false);
+    const [discardingEdited, setDiscardingEdited] = useState(false);
 
     const videoId = usePlaybackSession((s) => s.videoId);
     const videoPath = usePlaybackSession((s) => s.videoPath);
@@ -29,6 +31,7 @@ export function useSubtitleTrackActions() {
     const subtitleOrigin = usePlaybackSession((s) => s.subtitleOrigin);
     const subtitleQualityIssue = usePlaybackSession((s) => s.subtitleQualityIssue);
     const subtitleTracks = usePlaybackSession((s) => s.subtitleTracks);
+    const srtHash = usePlaybackSession((s) => s.srtHash);
     const originHintDismissed = usePlaybackSession((s) =>
         Boolean(s.videoId && s.dismissedOriginHintVideos[s.videoId]),
     );
@@ -50,6 +53,18 @@ export function useSubtitleTrackActions() {
 
     const localAsrTrack = useMemo(
         () => subtitleTracks.find((track) => track.origin === 'local_asr' && !track.active) ?? null,
+        [subtitleTracks],
+    );
+
+    const editedTrack = useMemo(
+        () => subtitleTracks.find((track) => track.origin === 'user_edited') ?? null,
+        [subtitleTracks],
+    );
+
+    // buildSubtitleTrackOptions 已按 local_asr > author > external > auto_asr 排好序，
+    // 这里直接取第一条非人工编辑轨作为还原基线。
+    const baselineTrack = useMemo(
+        () => subtitleTracks.find((track) => track.origin !== 'user_edited') ?? null,
         [subtitleTracks],
     );
 
@@ -108,6 +123,38 @@ export function useSubtitleTrackActions() {
         usePlaybackSession.getState().dismissSubtitleOriginHint(videoId);
     }, [videoId]);
 
+    const discardEditedTrack = useCallback(async () => {
+        if (!videoId || !editedTrack || !baselineTrack || discardingEdited || isGenerating) {
+            return false;
+        }
+        setDiscardingEdited(true);
+        try {
+            const response = await playerApi.discardEditedSubtitle({
+                videoId,
+                ...(videoPath ? { videoPath } : {}),
+                editedSubtitlePath: editedTrack.path,
+                targetSubtitlePath: baselineTrack.path,
+                ...(srtHash && subtitleOrigin === 'user_edited' ? { currentFileHash: srtHash } : {}),
+            });
+            if (usePlaybackSession.getState().videoId !== videoId) {
+                return false;
+            }
+            syncSubtitleTrackMutation(videoId, response);
+            toast.success(
+                baselineTrack.origin === 'local_asr'
+                    ? t('subtitleOrigin.restoredToLocal')
+                    : t('subtitleOrigin.restoredToBaseline'),
+            );
+            return true;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            toast.error(t('subtitleOrigin.restoreFailed', { message }));
+            return false;
+        } finally {
+            setDiscardingEdited(false);
+        }
+    }, [baselineTrack, discardingEdited, editedTrack, isGenerating, srtHash, subtitleOrigin, t, videoId, videoPath]);
+
     return {
         videoId,
         subtitlePath,
@@ -116,16 +163,20 @@ export function useSubtitleTrackActions() {
         subtitleTracks,
         originHintDismissed,
         localAsrTrack,
+        editedTrack,
+        baselineTrack,
         isGenerating,
         generationPhase,
         generationProgress,
         cancelling,
         taskId,
         switchingTrack,
+        discardingEdited,
         originLabel,
         switchTrack,
         regenerateLocalSubtitle,
         cancelGeneration,
         dismissOriginHint,
+        discardEditedTrack,
     };
 }

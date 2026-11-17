@@ -54,6 +54,9 @@ function createHarness(initialFiles: Record<string, string>) {
         writeTextFile: vi.fn(async (target: string, content: string) => {
             files.set(path.normalize(target), content);
         }),
+        removeFileIfExists: vi.fn(async (target: string) => {
+            files.delete(path.normalize(target));
+        }),
     } as unknown as FileSystemGateway;
 
     const mediaPathRegistry = {
@@ -148,5 +151,69 @@ describe('SubtitleService.saveEditedTrack', () => {
             oldSentences: [expect.objectContaining({ contentEn: 'First edited sentence.' })],
             newSentences: [expect.objectContaining({ contentEn: 'Second edited sentence.' })],
         }));
+    });
+});
+
+describe('SubtitleService.discardEditedTrack', () => {
+    const localL2 = [
+        '1',
+        '00:00:01,000 --> 00:00:03,000',
+        'Local recognized line.',
+        '',
+    ].join('\n');
+    const editedL3 = [
+        '1',
+        '00:00:01,000 --> 00:00:03,000',
+        'Mistaken edited line.',
+        '',
+    ].join('\n');
+
+    it('restores baseline .local.srt, migrates learning assets back, and deletes .edited.srt', async () => {
+        const videoPath = '/media/talk.mp4';
+        const localPath = '/media/talk.local.srt';
+        const editedPath = '/media/talk.edited.srt';
+        const harness = createHarness({
+            [localPath]: localL2,
+            [editedPath]: editedL3,
+        });
+
+        const restored = await harness.service.discardEditedTrack({
+            videoPath,
+            editedSubtitlePath: editedPath,
+            targetSubtitlePath: localPath,
+            currentFileHash: ObjUtil.hash(editedL3),
+        });
+
+        expect(restored.filePath).toBe(path.normalize(localPath));
+        expect(restored.fileHash).toBe(ObjUtil.hash(localL2));
+        expect(restored.sentences.map((s) => s.text)).toEqual(['Local recognized line.']);
+        expect(harness.files.has(path.normalize(editedPath))).toBe(false);
+        expect(harness.files.has(path.normalize(localPath))).toBe(true);
+        expect(harness.migrateTrackAssets).toHaveBeenCalledWith(expect.objectContaining({
+            oldFileHash: ObjUtil.hash(editedL3),
+            newFileHash: ObjUtil.hash(localL2),
+            oldSentences: [expect.objectContaining({ contentEn: 'Mistaken edited line.' })],
+            newSentences: [expect.objectContaining({ contentEn: 'Local recognized line.' })],
+        }));
+    });
+
+    it('does not delete .edited.srt when target baseline track is missing or points to .edited.srt', async () => {
+        const editedPath = '/media/talk.edited.srt';
+        const harness = createHarness({ [editedPath]: editedL3 });
+
+        await expect(harness.service.discardEditedTrack({
+            videoPath: '/media/talk.mp4',
+            editedSubtitlePath: editedPath,
+            targetSubtitlePath: '/media/talk.local.srt',
+        })).rejects.toThrow();
+
+        await expect(harness.service.discardEditedTrack({
+            videoPath: '/media/talk.mp4',
+            editedSubtitlePath: editedPath,
+            targetSubtitlePath: editedPath,
+        })).rejects.toThrow();
+
+        expect(harness.files.has(path.normalize(editedPath))).toBe(true);
+        expect(harness.migrateTrackAssets).not.toHaveBeenCalled();
     });
 });

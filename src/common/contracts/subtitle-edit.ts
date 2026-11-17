@@ -23,3 +23,15 @@ export interface SaveEditedSubtitleResponse {
     srt: SrtSentence;
     resolution: SubtitleResolution | null;
 }
+
+/** 放弃 L3 `.edited.srt` 修订、迁移学习资产并恢复到基线轨道（优先 L2 `.local.srt`）的请求载荷。 */
+export interface DiscardEditedSubtitleRequest {
+    videoId: string;
+    videoPath?: string;
+    editedSubtitlePath?: string;
+    targetSubtitlePath: string;
+    currentFileHash?: string;
+}
+
+/** 放弃 L3 修订并恢复基线轨道后返回的最新分词字幕与轨道解析信息。 */
+export type DiscardEditedSubtitleResponse = SaveEditedSubtitleResponse;

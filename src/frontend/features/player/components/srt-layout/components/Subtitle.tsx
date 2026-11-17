@@ -889,6 +889,11 @@ export default function Subtitle() {
                         setTranscriptVisible(false);
                     }
                 }}
+                canUndoEdit={transcriptEditing.canUndo}
+                isUndoingEdit={transcriptEditing.saving}
+                onUndoEdit={() => {
+                    void transcriptEditing.undoLastEdit();
+                }}
             />
 
             {isSearchOpen && (

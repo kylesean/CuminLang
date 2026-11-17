@@ -282,15 +282,5 @@
     "wordDetailsToggle": "Learning history",
     "dictionarySourceImported": "Local dictionary",
     "dictionarySourceBuiltin": "Built-in dictionary",
-    "dictionarySourceAi": "AI definition · may vary",
-    "authorSupport": {
-        "suitableTitle": "Great news — your hardware is well-suited for running a local AI model",
-        "suitableDescription": "If you are not sure how to deploy one, feel free to contact the author for setup assistance. CuminLang is free and open-source.",
-        "title": "Need help setting up local AI? Contact the author",
-        "description": "CuminLang is free and open-source. If you need help choosing or configuring a local AI service, feel free to reach out to the author.",
-        "douyinLabel": "DouYin: {{douyin}}",
-        "emailLabel": "Email: {{email}}",
-        "copied": "Copied {{label}}: {{value}}",
-        "copyFailed": "Copy failed"
-    }
+    "dictionarySourceAi": "AI definition · may vary"
 }

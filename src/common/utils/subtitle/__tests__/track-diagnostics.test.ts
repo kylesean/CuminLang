@@ -78,4 +78,16 @@ describe('字幕轨道质量诊断', () => {
             origin: 'author',
         });
     });
+
+    it('检测两条正常短句之间出现大段空白缺口（如 38 秒无字幕），标记为 timing_anomaly', () => {
+        const gappedSrt = [
+            '1\n00:04:00,000 --> 00:04:01,500\nAn older woman.',
+            '2\n00:04:39,500 --> 00:04:42,000\nWe wanted to build a new kind of computer,',
+        ].join('\n\n');
+
+        expect(inspectSubtitleTrackDiagnostics(gappedSrt, 'talk.en.srt')).toEqual({
+            origin: 'author',
+            qualityIssue: 'timing_anomaly',
+        });
+    });
 });

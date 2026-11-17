@@ -24,6 +24,11 @@ const SPARSE_CUE_MIN_SECONDS = 20;
 const SPARSE_CUE_MAX_WPS = 0.8;
 /** 出现达到该数量的严重拉跨 cue，判定整轨存在缺段/时间轴异常。 */
 const SPARSE_CUE_COUNT_THRESHOLD = 3;
+/** 单次句间无字幕空白超过该时长（秒），高度疑似漏句异常。 */
+const LARGE_INTER_CUE_GAP_SECONDS = 25;
+/** 中等句间无字幕空白阈值（秒）及触发次数阈值。 */
+const MEDIUM_INTER_CUE_GAP_SECONDS = 15;
+const MEDIUM_INTER_CUE_GAP_COUNT_THRESHOLD = 2;
 
 const SPEAKER_OR_STAGE_RE = new RegExp(
     `${BRACKET_STAGE_CUE_RE.source}|${MUSIC_SYMBOL_RE.source}|>>`,
@@ -81,7 +86,18 @@ export const inspectSubtitleTrackDiagnostics = (
             }
 
             let sparseCount = 0;
-            for (const cue of cues) {
+            let largeGap = false;
+            let mediumGapCount = 0;
+            for (let index = 0; index < cues.length; index++) {
+                const cue = cues[index];
+                if (index > 0) {
+                    const gap = cue.start - cues[index - 1].end;
+                    if (gap >= LARGE_INTER_CUE_GAP_SECONDS) {
+                        largeGap = true;
+                    } else if (gap >= MEDIUM_INTER_CUE_GAP_SECONDS) {
+                        mediumGapCount += 1;
+                    }
+                }
                 const duration = cue.end - cue.start;
                 if (duration < SPARSE_CUE_MIN_SECONDS) continue;
                 const spoken = stripStageSoundCues(cue.contentEn).text.trim();
@@ -91,7 +107,9 @@ export const inspectSubtitleTrackDiagnostics = (
                     sparseCount += 1;
                 }
             }
-            hasTimingAnomaly = sparseCount >= SPARSE_CUE_COUNT_THRESHOLD;
+            hasTimingAnomaly = sparseCount >= SPARSE_CUE_COUNT_THRESHOLD
+                || largeGap
+                || mediumGapCount >= MEDIUM_INTER_CUE_GAP_COUNT_THRESHOLD;
         }
     }
     const origin: SubtitleTrackOrigin = /\.en(?:g|lish)?\.srt$/i.test(lower) ? 'author' : 'external';

@@ -28,7 +28,6 @@ import { VStack } from '@astryxdesign/core/VStack';
 
 import SettingsPageShell from '@/frontend/features/settings/components/form/SettingsPageShell';
 import { SettingField, SettingSection, SettingsLoadingSkeleton } from '@/frontend/features/settings/components/form';
-import { AuthorSupportBanner } from '@/frontend/components/shared/AuthorSupportBanner';
 import { ResourcePackCard } from '@/frontend/features/settings/components/ResourcePackCard';
 import EmbeddingModelCard from '@/frontend/features/settings/components/EmbeddingModelCard';
 import ImportedDictionaryCard from '@/frontend/features/settings/components/ImportedDictionaryCard';
@@ -40,7 +39,6 @@ import { useServiceResourceActions } from '@/frontend/features/settings/hooks/us
 import { SETTING_ROW_TESTIDS } from '@/common/constants/qa-testids';
 import type { EngineSelectionSettingVO } from '@/common/types/vo/engine-selection-setting-vo';
 import type { ServiceCredentialSettingFormValues } from '@/common/types/vo/service-credentials-setting-vo';
-import { isHardwareSuitableForLocalAi } from '@/common/utils/hardware-profile';
 
 /** GPU 后端在提示文案里的显示名（专有名词，不翻译）。 */
 const GPU_ACCELERATION_LABELS: Record<'metal' | 'vulkan', string> = {
@@ -97,7 +95,6 @@ const ServiceResourceSetting: React.FC = () => {
         SETTINGS_DETAIL_SWR_OPTIONS,
     );
     const hardware = resourceStatus?.hardware;
-    const suitableForLocalAi = React.useMemo(() => isHardwareSuitableForLocalAi(hardware), [hardware]);
 
     const credentialForm = useForm<ServiceCredentialSettingFormValues>();
     const preferenceForm = useForm<EngineSelectionSettingVO>();
@@ -379,26 +376,18 @@ const ServiceResourceSetting: React.FC = () => {
                     <VStack id={TAB_PANEL_IDS.local} role="tabpanel" gap={6} width="100%">
                         {hardware && (
                             <Card variant="muted" padding={3}>
-                                <VStack gap={3} width="100%">
-                                    <HStack gap={2} vAlign="center">
-                                        <Icon icon={Cpu as unknown as IconType} size="sm" color="secondary" />
-                                        <Text size="sm" weight="medium">
-                                            {t('resources.overview.hardwareTitle', {
-                                                memory: hardware.totalMemoryGb,
-                                                cores: hardware.cpuCount,
-                                                gpu: hardware.gpuAcceleration === 'none'
-                                                    ? t('resources.overview.gpuNone')
-                                                    : GPU_ACCELERATION_LABELS[hardware.gpuAcceleration],
-                                            })}
-                                        </Text>
-                                    </HStack>
-                                    {suitableForLocalAi && (
-                                        <>
-                                            <Divider variant="subtle" />
-                                            <AuthorSupportBanner embedded suitableForLocalAi />
-                                        </>
-                                    )}
-                                </VStack>
+                                <HStack gap={2} vAlign="center">
+                                    <Icon icon={Cpu as unknown as IconType} size="sm" color="secondary" />
+                                    <Text size="sm" weight="medium">
+                                        {t('resources.overview.hardwareTitle', {
+                                            memory: hardware.totalMemoryGb,
+                                            cores: hardware.cpuCount,
+                                            gpu: hardware.gpuAcceleration === 'none'
+                                                ? t('resources.overview.gpuNone')
+                                                : GPU_ACCELERATION_LABELS[hardware.gpuAcceleration],
+                                        })}
+                                    </Text>
+                                </HStack>
                             </Card>
                         )}
 

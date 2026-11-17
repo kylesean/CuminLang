@@ -11,7 +11,12 @@ import type { ResourceStatusSnapshot } from '@/common/contracts/resource-status'
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
 import type { GpuAcceleration } from '@/common/contracts/system-info';
 import type { SubtitleResolution } from '@/common/contracts/subtitle-resolution';
-import type { SaveEditedSubtitleRequest, SaveEditedSubtitleResponse } from '@/common/contracts/subtitle-edit';
+import type {
+    DiscardEditedSubtitleRequest,
+    DiscardEditedSubtitleResponse,
+    SaveEditedSubtitleRequest,
+    SaveEditedSubtitleResponse,
+} from '@/common/contracts/subtitle-edit';
 import type { ImportedDictionaryVO } from '@/common/contracts/imported-dictionary';
 import type { BuiltinDictionaryMetaVO } from '@/common/contracts/builtin-dictionary';
 import type { EnglishDictionaryStatusVO } from '@/common/contracts/english-dictionary';
@@ -377,6 +382,11 @@ interface SubtitleControllerDef {
     'subtitle/srt/save-edited': {
         params: SaveEditedSubtitleRequest;
         return: SaveEditedSubtitleResponse;
+    };
+    /** 放弃 L3 `.edited.srt` 修订，将学习资产迁回基线轨并删掉人工修订轨。 */
+    'subtitle/srt/discard-edited': {
+        params: DiscardEditedSubtitleRequest;
+        return: DiscardEditedSubtitleResponse;
     };
 }
 
@@ -945,6 +955,7 @@ export const API_ROUTE_KEYS = [
     'subtitle/comprehension',
     'subtitle/document-difficult-words',
     'subtitle/scene-boundaries',
+    'subtitle/srt/discard-edited',
     'subtitle/srt/match-vocabulary',
     'subtitle/srt/parse-to-sentences',
     'subtitle/srt/save-edited',

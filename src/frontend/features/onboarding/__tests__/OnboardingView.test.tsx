@@ -193,7 +193,7 @@ describe('OnboardingView Component', () => {
         });
     });
 
-    it('标准配置设备点击下载后依次安装核心与语义资源（不强行下载本地大模型），并展示作者支持卡片', async () => {
+    it('标准配置设备点击下载后依次安装核心与语义资源（不强行下载本地大模型）', async () => {
         let whisperReady = false;
         vi.mocked(settingsApi.getWhisperCppModelStatus).mockImplementation(async () => (whisperReady ? READY : NOT_READY));
         vi.mocked(settingsApi.downloadWhisperCppModel).mockImplementation(async () => {
@@ -205,7 +205,7 @@ describe('OnboardingView Component', () => {
         expect(await screen.findByTestId('onboarding-hardware-summary')).toBeDefined();
 
         fireEvent.click(screen.getByText('nextStep'));
-        expect(screen.getByTestId('author-support-banner')).toBeDefined();
+        expect(screen.queryByTestId('author-support-banner')).toBeNull();
 
         fireEvent.click(screen.getByText('steps.download.action'));
 
@@ -383,7 +383,7 @@ describe('OnboardingView Component', () => {
         expect(await screen.findByTestId('onboarding-hardware-summary')).toBeDefined();
 
         fireEvent.click(screen.getByText('nextStep'));
-        expect(screen.getByTestId('author-support-banner')).toBeDefined();
+        expect(screen.queryByTestId('author-support-banner')).toBeNull();
         fireEvent.click(screen.getByText('steps.download.cloud.toggle'));
         fireEvent.click(screen.getByRole('button', { name: 'DeepSeek' }));
         fireEvent.change(screen.getByLabelText('steps.download.cloud.apiKeyLabel'), {

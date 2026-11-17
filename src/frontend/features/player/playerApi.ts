@@ -2,7 +2,7 @@ import { backendClient } from '@/frontend/infrastructure/electron/backendClient'
 import { requestVideoThumbnail } from '@/frontend/lib/video-thumbnail';
 import type { SubtitleTimestampAdjustmentInput } from '@/common/contracts/subtitle-timestamp-adjustment';
 import type { SubtitleComprehensionParams } from '@/common/types/subtitleComprehension';
-import type { SaveEditedSubtitleRequest } from '@/common/contracts/subtitle-edit';
+import type { DiscardEditedSubtitleRequest, SaveEditedSubtitleRequest } from '@/common/contracts/subtitle-edit';
 import type { WordContextInsightParams } from '@/common/types/wordInsight';
 import type { SceneSentence } from '@/common/learning/sceneSegmentation';
 
@@ -199,6 +199,12 @@ export const playerApi = {
      */
     saveEditedSubtitle: (params: SaveEditedSubtitleRequest) =>
         backendClient.call('subtitle/srt/save-edited', params),
+
+    /**
+     * 放弃 L3 `.edited.srt` 修订，将学习资产迁回基线轨并清理人工修订轨。
+     */
+    discardEditedSubtitle: (params: DiscardEditedSubtitleRequest) =>
+        backendClient.call('subtitle/srt/discard-edited', params),
 
     /**
      * 将任意英文文本解析为单词级展示结构（分词、lemma、词性）。

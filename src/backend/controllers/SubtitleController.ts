@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import registerRoute from '@/backend/controllers/ipc/registerRoute';
 import { finiteNonNegativeNumberSchema, nonEmptyStringSchema } from '@/backend/controllers/ipc/routeSchemas';
-import type { SaveEditedSubtitleRequest, SaveEditedSubtitleResponse } from '@/common/contracts/subtitle-edit';
+import type {
+    DiscardEditedSubtitleRequest,
+    DiscardEditedSubtitleResponse,
+    SaveEditedSubtitleRequest,
+    SaveEditedSubtitleResponse,
+} from '@/common/contracts/subtitle-edit';
 import type { SrtSentence } from '@/common/types/SentenceC';
 import type { SentenceStruct } from '@/common/types/SentenceStruct';
 import { inject, injectable, optional } from 'inversify';
@@ -123,21 +128,46 @@ export default class SubtitleController implements Controller {
      * 将右侧文稿原地编辑结果落盘到 L3 `.edited.srt`，绑定播放记录并返回最新结构化字幕。
      */
     public async saveEdited(params: SaveEditedSubtitleRequest): Promise<SaveEditedSubtitleResponse> {
-        let videoPath = params.videoPath;
-        if (!videoPath && this.watchHistoryService) {
-            videoPath = await this.watchHistoryService.videoPath(params.videoId).catch(() => undefined);
-        }
+        const videoPath = await this.resolveVideoPath(params.videoId, params.videoPath);
         const srt = await this.subtitleService.saveEditedTrack({
             videoPath,
             sourceSubtitlePath: params.sourceSubtitlePath,
             oldFileHash: params.oldFileHash,
             lines: params.lines,
         });
+        return this.attachAndResolveTrack(params.videoId, videoPath, srt);
+    }
+
+    /**
+     * 放弃 L3 `.edited.srt` 修订，将学习资产迁回基线轨、绑定播放记录并返回最新结构化字幕。
+     */
+    public async discardEdited(params: DiscardEditedSubtitleRequest): Promise<DiscardEditedSubtitleResponse> {
+        const videoPath = await this.resolveVideoPath(params.videoId, params.videoPath);
+        const srt = await this.subtitleService.discardEditedTrack({
+            videoPath,
+            editedSubtitlePath: params.editedSubtitlePath,
+            targetSubtitlePath: params.targetSubtitlePath,
+            currentFileHash: params.currentFileHash,
+        });
+        return this.attachAndResolveTrack(params.videoId, videoPath, srt);
+    }
+
+    private async resolveVideoPath(videoId: string, provided?: string): Promise<string | undefined> {
+        if (provided) return provided;
+        if (!this.watchHistoryService) return undefined;
+        return this.watchHistoryService.videoPath(videoId).catch(() => undefined);
+    }
+
+    private async attachAndResolveTrack(
+        videoId: string,
+        videoPath: string | undefined,
+        srt: SrtSentence,
+    ): Promise<SaveEditedSubtitleResponse> {
         if (videoPath && this.watchHistoryService) {
             await this.watchHistoryService.attachSrt(videoPath, srt.filePath);
         }
         const resolution = this.watchHistoryService
-            ? await this.watchHistoryService.playerSubtitle(params.videoId).catch(() => null)
+            ? await this.watchHistoryService.playerSubtitle(videoId).catch(() => null)
             : null;
         return { srt, resolution };
     }
@@ -200,6 +230,15 @@ export default class SubtitleController implements Controller {
                     contentEn: z.string().trim().min(1),
                     contentZh: z.string().optional(),
                 })).min(1).max(20000),
+            }),
+        });
+        registerRoute('subtitle/srt/discard-edited', (p) => this.discardEdited(p), {
+            schema: z.object({
+                videoId: nonEmptyStringSchema,
+                videoPath: z.string().min(1).optional(),
+                editedSubtitlePath: z.string().min(1).optional(),
+                targetSubtitlePath: nonEmptyStringSchema,
+                currentFileHash: z.string().min(1).optional(),
             }),
         });
     }

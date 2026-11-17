@@ -68,11 +68,3 @@ export function evaluateHardwareProfile(hardware: SystemInfo | null | undefined)
         preferCloudLlm,
     };
 }
-
-/**
- * 判断本机硬件是否能够流畅稳定运行本地部署的外部 AI 模型而不牺牲体验。
- */
-export function isHardwareSuitableForLocalAi(hardware: SystemInfo | null | undefined): boolean {
-    if (!hardware) return false;
-    return hardware.totalMemoryGb >= 8 && (hardware.gpuAcceleration !== 'none' || hardware.totalMemoryGb >= 12);
-}

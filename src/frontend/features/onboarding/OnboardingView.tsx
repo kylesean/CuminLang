@@ -35,8 +35,6 @@ import {
     CLOUD_AI_PROVIDER_PRESETS,
     isLocalLlmEndpoint,
 } from '@/common/constants/cloud-ai-provider-presets';
-import { isHardwareSuitableForLocalAi } from '@/common/utils/hardware-profile';
-import { AuthorSupportBanner } from '@/frontend/components/shared/AuthorSupportBanner';
 
 // 版本号与 QA fixture 共用同一常量：两边各写一份字面量时，bump 后 QA 会静默失效。
 export { CURRENT_ONBOARDING_VERSION } from '@/common/constants/onboarding';
@@ -236,10 +234,6 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
     const quickPresetNeedsKey = selectedQuickPreset
         ? !isLocalLlmEndpoint(selectedQuickPreset.endpoint)
         : true;
-    const suitableForLocalAi = React.useMemo(
-        () => isHardwareSuitableForLocalAi(hardware),
-        [hardware],
-    );
 
     const manualEntries = React.useMemo(
         () => bundleEntries.filter((entry) => entry.urls && entry.urls.length > 0),
@@ -601,8 +595,6 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
                                     </div>
                                 )}
                             </div>
-
-                            {suitableForLocalAi && <AuthorSupportBanner compact suitableForLocalAi />}
 
                             {manualEntries.length > 0 && (
                                 <Button

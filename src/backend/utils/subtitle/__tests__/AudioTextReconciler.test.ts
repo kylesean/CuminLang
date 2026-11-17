@@ -107,4 +107,59 @@ describe('音文对账与融合（reconcileAudioAndTextSubtitles）', () => {
             'NVIDIA.',
         ]);
     });
+
+    it('外部作者轨仅在句间漏掉少数几句（覆盖率仍高于 80%）时，在 author_aligned 模式下原位缝合补回缺失 ASR 语音', () => {
+        const externalLines = [
+            srtLine(1, 225.0, 238.5, 'Every year we gather in this hall to celebrate engineering craft and curiosity.'),
+            srtLine(2, 239.0, 241.0, 'An older woman.'),
+            srtLine(3, 278.0, 283.0, 'We wanted to build a new kind of computer, something gentle for everyone.'),
+        ];
+        const prefixText = 'Every year we gather in this hall to celebrate engineering craft and curiosity.';
+        const prefixWords: TimedWord[] = prefixText.split(/\s+/).map((w, idx) =>
+            asrWord(w, 225.1 + idx * 0.4, 225.4 + idx * 0.4),
+        );
+        const asrWords: TimedWord[] = [
+            ...prefixWords,
+            asrWord('An', 239.1, 239.4),
+            asrWord('older', 239.45, 239.8),
+            asrWord('woman.', 239.85, 240.3),
+            // 外部字幕在 241~278s 间漏了一句 6 词短句（< 8 词阈值，覆盖率 > 80%）
+            asrWord('She', 250.0, 250.3),
+            asrWord('looked', 250.35, 250.7),
+            asrWord('right', 250.75, 251.0),
+            asrWord('at', 251.05, 251.2),
+            asrWord('our', 251.25, 251.5),
+            asrWord('team.', 251.55, 252.0),
+            asrWord('We', 278.0, 278.2),
+            asrWord('wanted', 278.25, 278.6),
+            asrWord('to', 278.65, 278.8),
+            asrWord('build', 278.85, 279.1),
+            asrWord('a', 279.15, 279.25),
+            asrWord('new', 279.3, 279.5),
+            asrWord('kind', 279.55, 279.8),
+            asrWord('of', 279.85, 280.0),
+            asrWord('computer,', 280.05, 280.6),
+            asrWord('something', 280.7, 281.2),
+            asrWord('gentle', 281.25, 281.7),
+            asrWord('for', 281.75, 282.0),
+            asrWord('everyone.', 282.05, 282.7),
+        ];
+
+        const result = reconcileAudioAndTextSubtitles({
+            asrWords,
+            externalLines,
+            externalOrigin: 'author',
+        });
+
+        expect(result.mode).toBe('author_aligned');
+        const texts = result.words.map((w) => w.text);
+        expect(texts.slice(prefixWords.length)).toEqual([
+            'An', 'older', 'woman.',
+            'She', 'looked', 'right', 'at', 'our', 'team.',
+            'We', 'wanted', 'to', 'build', 'a', 'new', 'kind', 'of', 'computer,',
+            'something', 'gentle', 'for', 'everyone.',
+        ]);
+        const sheWord = result.words.find((w) => w.text === 'She');
+        expect(sheWord?.start).toBeCloseTo(250.0, 2);
+    });
 });

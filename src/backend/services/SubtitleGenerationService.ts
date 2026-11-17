@@ -37,10 +37,44 @@ import {
     USER_EDITED_TRACK_SUFFIX,
 } from '@/common/utils/subtitle/track-diagnostics';
 
-/** 单个识别分片的目标时长（秒）。 */
-const CHUNK_SECONDS = 300;
-/** 相邻分片的重叠时长（秒）：保证切分边界处的单词完整出现在某一侧。 */
-const CHUNK_OVERLAP_SECONDS = 1;
+/** 单个识别分片的核心时长（秒）：严格控制在 24s 内（含前后重叠总长 ≤ 30s），避免 parakeet-tdt 长窗口出现 TDT 静音崩塌或 Vulkan 显存暴涨。 */
+const CHUNK_SECONDS = 24;
+/** 相邻分片在切分点两侧各延展的重叠时长（秒）：确保双侧均具备 1.5s 声学上下文以供词级锚点平滑衔接。 */
+const CHUNK_OVERLAP_SECONDS = 1.5;
+/** 尾片小于该阈值时直接并入上一分片（仍满足 ≤ 30s），避免为极短残片额外起一次识别进程。 */
+const MIN_TAIL_CHUNK_SECONDS = 4.5;
+
+/**
+ * 为指定媒体时长规划本地 ASR 分片抽取区间与词级合并切分点。
+ *
+ * 每个分片严格控制总长 ≤ 30s，且除尾片外切分点均落于前后相邻分片的 ±1.5s 重叠窗中心。
+ */
+export function buildRecognitionChunkPlan(duration: number): {
+    ranges: Array<{ start: number; end: number }>;
+    cutPoints: number[];
+} {
+    const ranges: Array<{ start: number; end: number }> = [];
+    const cutPoints: number[] = [];
+    let cursor = 0;
+
+    while (cursor < duration) {
+        const nextBoundary = cursor + CHUNK_SECONDS;
+        const remainingAfterNext = duration - nextBoundary;
+        const isLastChunk = remainingAfterNext <= MIN_TAIL_CHUNK_SECONDS;
+        const rangeEnd = isLastChunk ? duration : Math.min(duration, nextBoundary + CHUNK_OVERLAP_SECONDS);
+        const rangeStart = Math.max(0, cursor - CHUNK_OVERLAP_SECONDS);
+
+        ranges.push({ start: rangeStart, end: rangeEnd });
+        cutPoints.push(cursor);
+
+        if (isLastChunk) {
+            break;
+        }
+        cursor = nextBoundary;
+    }
+
+    return { ranges, cutPoints };
+}
 
 export interface SubtitleGenerationOptions {
     /**
@@ -394,13 +428,7 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
                 throw new Error(`无法读取媒体时长：${duration}`);
             }
 
-            const ranges: Array<{ start: number; end: number }> = [];
-            for (let start = 0; start < duration; start += CHUNK_SECONDS) {
-                ranges.push({
-                    start: Math.max(0, start - CHUNK_OVERLAP_SECONDS),
-                    end: Math.min(duration, start + CHUNK_SECONDS),
-                });
-            }
+            const { ranges, cutPoints } = buildRecognitionChunkPlan(duration);
 
             this.dpTaskService.checkCancel(taskId);
             const tempRoot = await this.storageDirectoryProvider.provideDirectory(StorageDirectoryTarget.TEMP);
@@ -438,7 +466,7 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
             this.dpTaskService.checkCancel(taskId);
             this.dpTaskService.process(taskId, { progress: '音文对账与断句整理…' });
 
-            const mergedTokens = this.segmenter.mergeTimelines(timelines, ranges.map((range) => range.start));
+            const mergedTokens = this.segmenter.mergeTimelines(timelines, cutPoints);
             const asrWords = this.segmenter.createWords(mergedTokens);
             const reconciled = reconcileAudioAndTextSubtitles({
                 asrWords,
@@ -500,6 +528,10 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
             if (error instanceof CancelByUserError) {
                 this.dpTaskService.update({ id: taskId, status: DpTaskState.CANCELLED, progress: '任务取消' });
                 return;
+            }
+            if (options?.silent) {
+                // 静默后台精修失败时不锁死本会话，允许后续重试或再次进入时重检
+                this.attemptedAutoRefine.delete(videoPath);
             }
             const message = error instanceof Error ? error.message : String(error);
             this.logger.error('subtitle generation failed', { job, error: message });

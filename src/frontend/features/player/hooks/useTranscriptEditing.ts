@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import type { EditedSubtitleLineInput } from '@/common/contracts/subtitle-edit';
 import type { Sentence } from '@/common/types/SentenceC';
-import { useSavedSentences } from '@/frontend/features/context-studio/savedSentencesStore';
+import { syncSubtitleTrackMutation } from '@/frontend/features/player/lib/syncSubtitleTrackMutation';
 import {
     mergeSentenceWithNext,
     replaceSentenceText,
@@ -13,7 +13,6 @@ import {
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import { usePlayer } from '@/frontend/features/player/playerStore';
-import useTranslation from '@/frontend/features/player/translationStore';
 
 const MAX_UNDO_HISTORY = 30;
 
@@ -27,6 +26,7 @@ export const sentenceEditKey = (sentence: Pick<Sentence, 'fileHash' | 'index'>):
 export function useTranscriptEditing() {
     const { t } = useI18nTranslation('player');
     const videoId = usePlaybackSession((s) => s.videoId);
+    const subtitleOrigin = usePlaybackSession((s) => s.subtitleOrigin);
     const [editingState, setEditingState] = useState<{ videoId: string | null; key: string | null }>({
         videoId: null,
         key: null,
@@ -42,7 +42,9 @@ export function useTranscriptEditing() {
     });
 
     const editingSentenceKey = editingState.videoId === videoId ? editingState.key : null;
-    const canUndo = undoState.videoId === videoId && undoState.count > 0;
+    const canUndo = undoState.videoId === videoId
+        && undoState.count > 0
+        && (subtitleOrigin === null || subtitleOrigin === 'user_edited');
 
     const startEditing = useCallback((sentence: Sentence) => {
         if (saving) return;
@@ -91,24 +93,12 @@ export function useTranscriptEditing() {
                 setUndoState({ videoId: currentVideoId, count: stack.length });
             }
 
-            usePlayer.getState().loadSubtitles(response.srt.sentences);
-            usePlaybackSession.getState().applySavedEditedSubtitle(
-                response.srt.filePath,
-                response.srt.fileHash,
-                response.resolution,
-            );
-            useTranslation.getState().setActiveFileHash(response.srt.fileHash);
-            const focusIdx = Math.min(
-                Math.max(0, options?.focusSentenceIndex ?? 0),
-                Math.max(0, response.srt.sentences.length - 1),
-            );
-            if (response.srt.sentences.length > 0) {
-                useTranslation.getState().requestTranslation(response.srt.fileHash, focusIdx);
-            }
-            void useSavedSentences.getState().loadForVideo(currentVideoId).catch(() => undefined);
+            syncSubtitleTrackMutation(currentVideoId, response, options?.focusSentenceIndex ?? 0);
             setEditingState({ videoId: currentVideoId, key: null });
             if (options?.notifyUndo) {
                 toast.success(t('sideSentence.editUndone'));
+            } else if (options?.recordUndo !== false) {
+                toast.success(t('sideSentence.editSaved'));
             }
             return true;
         } catch (error) {

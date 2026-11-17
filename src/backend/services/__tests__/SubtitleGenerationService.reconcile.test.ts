@@ -8,7 +8,7 @@ import path from 'node:path';
 import type DpTaskService from '@/backend/services/DpTaskService';
 import type FfmpegService from '@/backend/services/FfmpegService';
 import type SubtitleAssetMigrationService from '@/backend/services/SubtitleAssetMigrationService';
-import { SubtitleGenerationServiceImpl } from '@/backend/services/SubtitleGenerationService';
+import { buildRecognitionChunkPlan, SubtitleGenerationServiceImpl } from '@/backend/services/SubtitleGenerationService';
 import type TranscriptionEngineSelector from '@/backend/services/TranscriptionEngineSelector';
 import type WatchHistoryService from '@/backend/services/WatchHistoryService';
 import type { SettingsStore } from '@/backend/services/gateways/SettingsStore';
@@ -273,5 +273,66 @@ describe('SubtitleGenerationService reconciliation & auto-refine', () => {
             videoId: 'video-1',
             subtitlePath: LOCAL_SRT_PATH,
         });
+    });
+
+    it('后台静默精修异常失败后不锁死同一视频，下次调度允许重新尝试', async () => {
+        const harness = createHarness({
+            autoRefineSetting: 'true',
+            modelReady: true,
+            files: { [AUTHOR_SRT_PATH]: AUTHOR_SRT_CONTENT },
+            activeSubtitlePath: AUTHOR_SRT_PATH,
+        });
+        vi.mocked(harness.speechGateway.transcribe)
+            .mockRejectedValueOnce(new Error('transient asr failure'))
+            .mockResolvedValueOnce({
+                text: 'Thank you President Johanyan.',
+                tokens: [
+                    { text: ' Thank', start: 0.4 },
+                    { text: ' you', start: 0.7 },
+                    { text: ' President', start: 1.0 },
+                    { text: ' Johanyan.', start: 1.6 },
+                ],
+            });
+
+        await harness.service.scheduleAutoRefine('video-1', {
+            subtitlePath: AUTHOR_SRT_PATH,
+            mismatchSuspected: false,
+            origin: 'auto_asr',
+        });
+        await vi.waitFor(() => {
+            expect(harness.dpTaskService.fail).toHaveBeenCalledTimes(1);
+        });
+
+        await harness.service.scheduleAutoRefine('video-1', {
+            subtitlePath: AUTHOR_SRT_PATH,
+            mismatchSuspected: false,
+            origin: 'auto_asr',
+        });
+        await vi.waitFor(() => {
+            expect(harness.files.has(LOCAL_SRT_PATH)).toBe(true);
+        });
+        expect(harness.dpTaskService.create).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+        { label: '短片单分片', duration: 10, expectedChunks: 1 },
+        { label: '临界短尾并入单片', duration: 28, expectedChunks: 1 },
+        { label: '两分片带对称重叠', duration: 50, expectedChunks: 2 },
+        { label: '18 分钟长视频全覆盖', duration: 1102.3, expectedChunks: 46 },
+    ])('buildRecognitionChunkPlan 规划分片：$label ($duration 秒)', ({ duration, expectedChunks }) => {
+        const plan = buildRecognitionChunkPlan(duration);
+
+        expect(plan.ranges).toHaveLength(expectedChunks);
+        expect(plan.cutPoints).toEqual(Array.from({ length: expectedChunks }, (_, idx) => idx * 24));
+        expect(plan.ranges[0].start).toBe(0);
+        expect(plan.ranges[plan.ranges.length - 1].end).toBe(duration);
+        expect(plan.ranges.every((range) => range.end - range.start <= 30.0001)).toBe(true);
+        // 验证每个内部分片交接点在左右分片均有至少 1.5s 上下文重叠
+        const overlapsValid = plan.cutPoints.slice(1).every((cut, idx) => {
+            const left = plan.ranges[idx];
+            const right = plan.ranges[idx + 1];
+            return left.end >= cut + 1.5 - 1e-9 && right.start <= cut - 1.5 + 1e-9;
+        });
+        expect(overlapsValid).toBe(true);
     });
 });

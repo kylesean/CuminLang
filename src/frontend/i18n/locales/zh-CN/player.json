@@ -237,7 +237,9 @@
         "splitSentence": "光标处拆句",
         "mergeNextSentence": "并入下句",
         "editSaveFailed": "保存字幕修改失败：{{message}}",
-        "editUndone": "已撤销上一步字幕修改"
+        "editSaved": "已保存为人工编辑版，可在文稿工具栏撤销",
+        "editUndone": "已撤销上一步字幕修改",
+        "undoEditTooltip": "撤销上一步字幕修改 (Cmd/Ctrl+Z)"
     },
     "sourceLine": {
         "aiTranslation": "AI 翻译",
@@ -296,7 +298,14 @@
         "dismissHint": "暂不提示",
         "autoRefinedDone": "已自动切换至本地声学精修字幕",
         "autoRefineToggle": "后台自动精修字幕",
-        "autoRefineToggleHint": "播放仅含外部字幕的视频时，若本地模型已就绪则在后台静默生成对齐字幕"
+        "autoRefineToggleHint": "播放仅含外部字幕的视频时，若本地模型已就绪则在后台静默生成对齐字幕",
+        "restoreToLocal": "放弃修订，恢复本地识别",
+        "restoreToBaseline": "放弃修订，恢复原始字幕",
+        "restoreConfirmHint": "将移除人工修订版字幕，已学的生词与笔记会保留",
+        "restoreConfirmAction": "确认恢复",
+        "restoredToLocal": "已放弃修订并恢复至本地识别字幕",
+        "restoredToBaseline": "已放弃修订并恢复至原始字幕",
+        "restoreFailed": "恢复字幕失败：{{message}}"
     },
     "mediaError": {
         "hint": "视频无法播放（错误码 {{code}}）。本地视频建议转成 H.264 + AAC 的 MP4 后重试；YouTube 导入的视频不受影响。"

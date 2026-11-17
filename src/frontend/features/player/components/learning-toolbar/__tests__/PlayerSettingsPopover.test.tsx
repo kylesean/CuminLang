@@ -17,9 +17,11 @@ vi.mock('react-i18next', async (importOriginal) => {
     };
 });
 
+const mockDiscardEditedSubtitle = vi.fn();
 vi.mock('@/frontend/features/player/playerApi', () => ({
     playerApi: {
         deleteTimestampAdjustment: vi.fn().mockResolvedValue(undefined),
+        discardEditedSubtitle: (...args: unknown[]) => mockDiscardEditedSubtitle(...args),
     },
 }));
 
@@ -145,5 +147,114 @@ describe('PlayerSettingsPopover', () => {
         expect(screen.queryByTestId('player-setting-podcast-mode')).toBeNull();
         expect(screen.queryByTestId('player-setting-scene-cues')).toBeNull();
         expect(screen.getByTestId('player-setting-adaptive-chinese')).toBeInTheDocument();
+    });
+
+    it('字幕轨道下拉使用纯语义名称，不暴露 .local.srt/.en.srt 裸后缀也不拼入超长标题', async () => {
+        const { usePlaybackSession } = await import('@/frontend/features/player/playbackSessionStore');
+        const longStem = '2026 CMU Commencement Keynote Speaker： Jensen Huang [FZh_0uRgrg4]';
+        usePlaybackSession.setState({
+            videoId: 'video-long',
+            videoPath: `/tmp/${longStem}.mp4`,
+            subtitlePath: `/tmp/${longStem}.local.srt`,
+            subtitleOrigin: 'local_asr',
+            subtitleTracks: [
+                { path: `/tmp/${longStem}.edited.srt`, fileName: `${longStem}.edited.srt`, origin: 'user_edited', active: false },
+                { path: `/tmp/${longStem}.local.srt`, fileName: `${longStem}.local.srt`, origin: 'local_asr', active: true },
+                { path: `/tmp/${longStem}.en.srt`, fileName: `${longStem}.en.srt`, origin: 'auto_asr', active: false },
+            ],
+        });
+
+        render(<PlayerSettingsPopover tone="panel" popoverOffset={8} />);
+        fireEvent.click(screen.getByRole('button', { name: /controlBox\.title/i }));
+        fireEvent.click(screen.getByRole('radio', { name: /字幕时间/i }));
+
+        const combobox = screen.getByRole('combobox', { name: /subtitleOrigin\.trackLabel/i });
+        expect(combobox.textContent).toContain('subtitleOrigin.localAsr');
+        expect(combobox.textContent).not.toContain('.local.srt');
+        expect(combobox.textContent).not.toContain('.edited.srt');
+        expect(combobox.textContent).not.toContain('.en.srt');
+        expect(combobox.textContent).not.toContain('Commencement Keynote');
+
+        // 展开选项确认同类无重名时不带扩展名
+        fireEvent.click(combobox);
+        expect(screen.getByRole('option', { name: 'subtitleOrigin.userEdited' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'subtitleOrigin.autoAsr' })).toBeInTheDocument();
+        usePlaybackSession.getState().clear();
+    });
+
+    it('同源存在多条轨道时用干净的语言变体标签消歧（不露出 .en.srt 裸后缀）', async () => {
+        const { usePlaybackSession } = await import('@/frontend/features/player/playbackSessionStore');
+        usePlaybackSession.setState({
+            videoId: 'video-dup',
+            videoPath: '/tmp/talk.mp4',
+            subtitlePath: '/tmp/talk.en.srt',
+            subtitleOrigin: 'auto_asr',
+            subtitleTracks: [
+                { path: '/tmp/talk.en.srt', fileName: 'talk.en.srt', origin: 'auto_asr', active: true },
+                { path: '/tmp/talk.en-orig.srt', fileName: 'talk.en-orig.srt', origin: 'auto_asr', active: false },
+            ],
+        });
+
+        render(<PlayerSettingsPopover tone="panel" popoverOffset={8} />);
+        fireEvent.click(screen.getByRole('button', { name: /controlBox\.title/i }));
+        fireEvent.click(screen.getByRole('radio', { name: /字幕时间/i }));
+
+        const combobox = screen.getByRole('combobox', { name: /subtitleOrigin\.trackLabel/i });
+        fireEvent.click(combobox);
+        expect(screen.getByRole('option', { name: 'subtitleOrigin.autoAsr (en)' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'subtitleOrigin.autoAsr (en-orig)' })).toBeInTheDocument();
+        usePlaybackSession.getState().clear();
+    });
+
+    it('存在人工编辑轨与本地识别基线时，提供两步确认「放弃修订并恢复本地识别」闭环', async () => {
+        const { usePlaybackSession } = await import('@/frontend/features/player/playbackSessionStore');
+        const localResolution = {
+            subtitlePath: '/tmp/talk.local.srt',
+            mismatchSuspected: false,
+            origin: 'local_asr' as const,
+            tracks: [
+                { path: '/tmp/talk.local.srt', fileName: 'talk.local.srt', origin: 'local_asr' as const, active: true },
+            ],
+        };
+        mockDiscardEditedSubtitle.mockResolvedValueOnce({
+            srt: { fileHash: 'hash-l2', filePath: '/tmp/talk.local.srt', sentences: [] },
+            resolution: localResolution,
+        });
+
+        usePlaybackSession.setState({
+            videoId: 'video-restore',
+            videoPath: '/tmp/talk.mp4',
+            subtitlePath: '/tmp/talk.edited.srt',
+            subtitleOrigin: 'user_edited',
+            srtHash: 'hash-l3',
+            subtitleTracks: [
+                { path: '/tmp/talk.edited.srt', fileName: 'talk.edited.srt', origin: 'user_edited', active: true },
+                { path: '/tmp/talk.local.srt', fileName: 'talk.local.srt', origin: 'local_asr', active: false },
+            ],
+        });
+
+        render(<PlayerSettingsPopover tone="panel" popoverOffset={8} />);
+        fireEvent.click(screen.getByRole('button', { name: /controlBox\.title/i }));
+        fireEvent.click(screen.getByRole('radio', { name: /字幕时间/i }));
+
+        fireEvent.click(screen.getByTestId('player-restore-baseline-subtitle'));
+        expect(screen.getByTestId('player-restore-baseline-confirm-box')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('player-restore-baseline-confirm'));
+        await vi.waitFor(() => {
+            expect(mockDiscardEditedSubtitle).toHaveBeenCalledWith({
+                videoId: 'video-restore',
+                videoPath: '/tmp/talk.mp4',
+                editedSubtitlePath: '/tmp/talk.edited.srt',
+                targetSubtitlePath: '/tmp/talk.local.srt',
+                currentFileHash: 'hash-l3',
+            });
+        });
+
+        await vi.waitFor(() => {
+            expect(usePlaybackSession.getState().subtitlePath).toBe('/tmp/talk.local.srt');
+            expect(usePlaybackSession.getState().subtitleOrigin).toBe('local_asr');
+        });
+        usePlaybackSession.getState().clear();
     });
 });

@@ -237,7 +237,9 @@
         "splitSentence": "Split here",
         "mergeNextSentence": "Merge next",
         "editSaveFailed": "Failed to save subtitle edit: {{message}}",
-        "editUndone": "Reverted last subtitle edit"
+        "editSaved": "Saved to edited subtitles (undo in toolbar)",
+        "editUndone": "Reverted last subtitle edit",
+        "undoEditTooltip": "Undo last subtitle edit (Cmd/Ctrl+Z)"
     },
     "sourceLine": {
         "aiTranslation": "AI translation",
@@ -296,7 +298,14 @@
         "dismissHint": "Dismiss",
         "autoRefinedDone": "Switched to locally refined subtitle track",
         "autoRefineToggle": "Auto-refine in background",
-        "autoRefineToggleHint": "Quietly align and refine external subtitles in the background when a local ASR model is ready"
+        "autoRefineToggleHint": "Quietly align and refine external subtitles in the background when a local ASR model is ready",
+        "restoreToLocal": "Discard edits & restore Local ASR",
+        "restoreToBaseline": "Discard edits & restore original",
+        "restoreConfirmHint": "Removes the edited subtitle track while keeping your learning notes and vocabulary",
+        "restoreConfirmAction": "Confirm restore",
+        "restoredToLocal": "Discarded edits and restored local ASR subtitles",
+        "restoredToBaseline": "Discarded edits and restored original subtitles",
+        "restoreFailed": "Failed to restore subtitles: {{message}}"
     },
     "mediaError": {
         "hint": "This video cannot be played (error code {{code}}). For local videos, convert to H.264 + AAC MP4 and retry; YouTube imports are unaffected."

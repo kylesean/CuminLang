@@ -17,7 +17,7 @@ import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
 import { isAuthoritativeSubtitlePath, parseSrt, parseAss, srtLineToSentence, type SrtLine } from '@/common/utils/subtitle';
 import { toSrtContent } from '@/common/utils/subtitle/parser';
 import { resegmentIntoMeaningGroups } from '@/common/utils/subtitle/meaning-group-segmenter';
-import { USER_EDITED_TRACK_SUFFIX } from '@/common/utils/subtitle/track-diagnostics';
+import { isUserEditedSubtitleFile, USER_EDITED_TRACK_SUFFIX } from '@/common/utils/subtitle/track-diagnostics';
 import MediaUtil from '@/common/utils/MediaUtil';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
@@ -120,6 +120,16 @@ export default interface SubtitleService {
         sourceSubtitlePath?: string;
         oldFileHash?: string;
         lines: EditedSubtitleLineInput[];
+    }): Promise<SrtSentence>;
+
+    /**
+     * 放弃 L3 `.edited.srt` 修订，将学习资产迁移回指定基线字幕轨（优先 `.local.srt`）并清理人工修订文件。
+     */
+    discardEditedTrack(params: {
+        videoPath?: string;
+        editedSubtitlePath?: string;
+        targetSubtitlePath: string;
+        currentFileHash?: string;
     }): Promise<SrtSentence>;
 }
 
@@ -262,29 +272,77 @@ export class SubtitleServiceImpl implements SubtitleService {
         const newFileHash = ObjUtil.hash(srtContent);
         await this.fileSystemGateway.writeTextFile(targetPath, srtContent);
 
-        if (
-            this.assetMigrationService
-            && oldSnapshot
-            && oldSnapshot.fileHash
-            && oldSnapshot.fileHash !== newFileHash
-            && oldSnapshot.sentences.length > 0
-        ) {
-            try {
-                await this.assetMigrationService.migrateTrackAssets({
-                    oldFileHash: oldSnapshot.fileHash,
-                    oldSentences: oldSnapshot.sentences,
-                    newFileHash,
-                    newSentences: normalizedLines,
-                });
-            } catch (error) {
-                logger.warn('failed to migrate learning assets on edited subtitle save', {
-                    targetPath,
-                    error: error instanceof Error ? error.message : String(error),
-                });
-            }
-        }
+        await this.tryMigrateTrackAssets(oldSnapshot, newFileHash, normalizedLines, targetPath);
 
         return this.buildSentenceList(normalizedLines, newFileHash, targetPath);
+    }
+
+    /** {@inheritDoc SubtitleService.discardEditedTrack} */
+    public async discardEditedTrack(params: {
+        videoPath?: string;
+        editedSubtitlePath?: string;
+        targetSubtitlePath: string;
+        currentFileHash?: string;
+    }): Promise<SrtSentence> {
+        const targetPath = path.resolve(params.targetSubtitlePath);
+        assertSubtitlePath(targetPath);
+        if (isUserEditedSubtitleFile(targetPath)) {
+            throw new Error('目标恢复轨不能是人工编辑轨本身');
+        }
+        await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(targetPath);
+        // 先确保目标基线轨存在且可解析，再迁资产与删盘，防止基线失效时误删用户的修订版。
+        const srt = await this.parseSrt(targetPath);
+
+        const editedPath = params.editedSubtitlePath?.trim()
+            ? path.resolve(params.editedSubtitlePath)
+            : this.resolveEditedTargetPath(params.videoPath, targetPath);
+        assertSubtitlePath(editedPath);
+        if (!isUserEditedSubtitleFile(editedPath)) {
+            throw new Error(`非法的人工编辑轨路径：${editedPath}`);
+        }
+        await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(editedPath);
+
+        const oldSnapshot = await this.readMigrationSourceBeforeWrite(editedPath, params.currentFileHash);
+        const newLines: SrtLine[] = srt.sentences.map((item, idx) => ({
+            index: idx + 1,
+            start: item.start,
+            end: item.end,
+            contentEn: item.text,
+            contentZh: item.textZH ?? '',
+        }));
+        await this.tryMigrateTrackAssets(oldSnapshot, srt.fileHash, newLines, editedPath);
+        await this.fileSystemGateway.removeFileIfExists(editedPath);
+        return srt;
+    }
+
+    private async tryMigrateTrackAssets(
+        oldSnapshot: { fileHash: string; sentences: SrtLine[] } | null,
+        newFileHash: string,
+        newSentences: SrtLine[],
+        logTargetPath: string,
+    ): Promise<void> {
+        if (
+            !this.assetMigrationService
+            || !oldSnapshot
+            || !oldSnapshot.fileHash
+            || oldSnapshot.fileHash === newFileHash
+            || oldSnapshot.sentences.length === 0
+        ) {
+            return;
+        }
+        try {
+            await this.assetMigrationService.migrateTrackAssets({
+                oldFileHash: oldSnapshot.fileHash,
+                oldSentences: oldSnapshot.sentences,
+                newFileHash,
+                newSentences,
+            });
+        } catch (error) {
+            logger.warn('failed to migrate learning assets across subtitle track transition', {
+                targetPath: logTargetPath,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     }
 
     private resolveEditedTargetPath(videoPath?: string, sourceSubtitlePath?: string): string {

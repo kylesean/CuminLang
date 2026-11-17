@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/refs -- Astryx usePopover 把 triggerRef/triggerProps/render 作为渲染期 API 返回，会被 refs 规则误判 */
 import { useCallback, useMemo, useState } from 'react';
-import { AudioLines, ChevronRight, Eraser, Settings2, SlidersHorizontal } from 'lucide-react';
+import { AudioLines, ChevronRight, Eraser, RotateCcw, Settings2, SlidersHorizontal } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -23,6 +23,7 @@ import { usePlayerUi } from '@/frontend/features/player/playerUiStore';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import useLayout from '@/frontend/app/stores/layoutStore';
 import { setPodcastModeForCurrentVideo } from '@/frontend/features/player/podcastMode';
+import { formatSubtitleTrackOptions } from '@/frontend/features/player/lib/subtitleTrackLabels';
 import { useSourceChineseAvailability } from '@/frontend/features/player/hooks/useSourceChineseAvailability';
 import { useSubtitleTrackActions } from '@/frontend/features/player/hooks/useSubtitleTrackActions';
 import useSetting from '@/frontend/features/settings/settingsStore';
@@ -58,12 +59,14 @@ export default function PlayerSettingsPopover({
     const { t } = useI18nTranslation('player');
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'settings' | 'timing'>('settings');
+    const [confirmingRestore, setConfirmingRestore] = useState(false);
 
     const handlePopoverShow = useCallback(() => {
         onMenuOpenChange?.(true);
     }, [onMenuOpenChange]);
     const handlePopoverHide = useCallback(() => {
         setActiveTab('settings');
+        setConfirmingRestore(false);
         onMenuOpenChange?.(false);
     }, [onMenuOpenChange]);
     const popover = usePopover({
@@ -106,11 +109,8 @@ export default function PlayerSettingsPopover({
     const hasVisibleChinese = showCn || (showSourceZh && sourceZhAvailable);
     const trackActions = useSubtitleTrackActions();
     const trackOptions = useMemo(
-        () => trackActions.subtitleTracks.map((track) => ({
-            value: track.path,
-            label: `${trackActions.originLabel(track.origin)} · ${track.fileName}`,
-        })),
-        [trackActions],
+        () => formatSubtitleTrackOptions(trackActions.subtitleTracks, trackActions.originLabel),
+        [trackActions.originLabel, trackActions.subtitleTracks],
     );
 
     const style = TOOLBAR_TONE[tone];
@@ -336,17 +336,24 @@ export default function PlayerSettingsPopover({
                                             </span>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="space-y-1.5">
                                         {trackOptions.length > 1 && (
-                                            <div className="min-w-0 flex-1 [--text-body-size:var(--text-supporting-size)]">
+                                            <div className="w-full min-w-0 [--text-body-size:var(--text-supporting-size)]">
                                                 <Selector
                                                     label={t('subtitleOrigin.trackLabel')}
                                                     isLabelHidden
                                                     size="sm"
                                                     width="100%"
                                                     value={trackActions.subtitlePath}
-                                                    onChange={(val) => { void trackActions.switchTrack(val); }}
-                                                    isDisabled={trackActions.switchingTrack || trackActions.isGenerating}
+                                                    onChange={(val) => {
+                                                        setConfirmingRestore(false);
+                                                        void trackActions.switchTrack(val);
+                                                    }}
+                                                    isDisabled={
+                                                        trackActions.switchingTrack
+                                                        || trackActions.discardingEdited
+                                                        || trackActions.isGenerating
+                                                    }
                                                     options={trackOptions}
                                                 />
                                             </div>
@@ -354,10 +361,11 @@ export default function PlayerSettingsPopover({
                                         <Button
                                             size="sm"
                                             variant="secondary"
-                                            width={trackOptions.length > 1 ? undefined : '100%'}
+                                            width="100%"
                                             icon={trackActions.isGenerating ? undefined : <AudioLines className="h-3.5 w-3.5" />}
                                             isDisabled={
-                                                trackActions.cancelling
+                                                trackActions.discardingEdited
+                                                || trackActions.cancelling
                                                 || (trackActions.isGenerating && trackActions.taskId === undefined)
                                             }
                                             label={trackActions.isGenerating
@@ -371,6 +379,60 @@ export default function PlayerSettingsPopover({
                                                 }
                                             }}
                                         />
+                                        {trackActions.editedTrack && trackActions.baselineTrack && (
+                                            confirmingRestore ? (
+                                                <div
+                                                    className="flex flex-col gap-2 rounded-lg border border-border/50 bg-muted/30 p-2"
+                                                    data-testid="player-restore-baseline-confirm-box"
+                                                >
+                                                    <span className="text-metadata text-secondary">
+                                                        {t('subtitleOrigin.restoreConfirmHint')}
+                                                    </span>
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            data-testid="player-restore-baseline-cancel"
+                                                            isDisabled={trackActions.discardingEdited}
+                                                            label={t('sideSentence.cancelEdit')}
+                                                            onClick={() => setConfirmingRestore(false)}
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            variant="secondary"
+                                                            data-testid="player-restore-baseline-confirm"
+                                                            isLoading={trackActions.discardingEdited}
+                                                            isDisabled={trackActions.discardingEdited || trackActions.isGenerating}
+                                                            label={t('subtitleOrigin.restoreConfirmAction')}
+                                                            onClick={() => {
+                                                                void trackActions.discardEditedTrack().then((ok) => {
+                                                                    if (ok) {
+                                                                        setConfirmingRestore(false);
+                                                                    }
+                                                                });
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    width="100%"
+                                                    data-testid="player-restore-baseline-subtitle"
+                                                    icon={<RotateCcw className="h-3.5 w-3.5" />}
+                                                    isDisabled={
+                                                        trackActions.discardingEdited
+                                                        || trackActions.switchingTrack
+                                                        || trackActions.isGenerating
+                                                    }
+                                                    label={trackActions.baselineTrack.origin === 'local_asr'
+                                                        ? t('subtitleOrigin.restoreToLocal')
+                                                        : t('subtitleOrigin.restoreToBaseline')}
+                                                    onClick={() => setConfirmingRestore(true)}
+                                                />
+                                            )
+                                        )}
                                     </div>
                                     {trackActions.isGenerating && (
                                         <p className="text-metadata text-secondary truncate" role="status" aria-live="polite">

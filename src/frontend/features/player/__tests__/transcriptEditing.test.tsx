@@ -171,6 +171,7 @@ vi.mock('@/frontend/features/player/playerStore', () => ({
 
 import PlayerShortcut from '@/frontend/features/player/components/PlayerShortcut';
 import SideSentence from '@/frontend/features/player/components/srt-layout/SideSentence';
+import { TranscriptToolbar } from '@/frontend/features/player/components/srt-layout/components/TranscriptToolbar';
 import { useTranscriptEditing } from '@/frontend/features/player/hooks/useTranscriptEditing';
 import {
     mergeSentenceWithNext,
@@ -355,5 +356,34 @@ describe('SideSentence inline edit & shortcut isolation', () => {
         expect(mockSaveEditedSubtitle).toHaveBeenCalledTimes(2);
         expect(mockLoadSubtitles).toHaveBeenLastCalledWith([reverted]);
         expect(result.current.canUndo).toBe(false);
+    });
+
+    it('surfaces visible Undo button in TranscriptToolbar only when canUndoEdit is true', () => {
+        const onUndoEdit = vi.fn();
+        const baseProps = {
+            transcriptViewMode: 'sentence' as const,
+            onChangeViewMode: vi.fn(),
+            loopSentenceCount: 0,
+            onCancelLoop: vi.fn(),
+            isSearchOpen: false,
+            onToggleSearch: vi.fn(),
+            vocabularyFilter: 'all' as const,
+            onChangeVocabularyFilter: vi.fn(),
+            filterCounts: { all: 5, learning: 2, familiar: 3 },
+            showSideTranslation: false,
+            onToggleSideTranslation: vi.fn(),
+            transcriptPosition: 'right' as const,
+            onToggleTranscriptPosition: vi.fn(),
+            onCloseTranscript: vi.fn(),
+            onUndoEdit,
+        };
+
+        const { rerender } = render(<TranscriptToolbar {...baseProps} canUndoEdit={false} />);
+        expect(screen.queryByTestId('transcript-undo-edit')).toBeNull();
+
+        rerender(<TranscriptToolbar {...baseProps} canUndoEdit={true} />);
+        const undoButton = screen.getByTestId('transcript-undo-edit');
+        fireEvent.click(undoButton);
+        expect(onUndoEdit).toHaveBeenCalledTimes(1);
     });
 });

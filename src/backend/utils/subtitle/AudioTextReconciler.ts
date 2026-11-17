@@ -35,10 +35,12 @@ interface ExternalWord {
     approxEnd: number;
 }
 
-const ANCHOR_SEARCH_WINDOW_SECONDS = 60;
+const ANCHOR_SEARCH_WINDOW_SECONDS = 35;
 const AUTHOR_HIGH_COVERAGE_THRESHOLD = 0.80;
-const MISSING_GAP_MIN_SECONDS = 8.0;
-const MISSING_GAP_MIN_WORDS = 12;
+const MISSING_GAP_MIN_SECONDS = 5.0;
+const MISSING_GAP_MIN_WORDS = 8;
+const AUTHOR_GAP_SPLICE_MIN_WORDS = 3;
+const AUTHOR_GAP_SPLICE_MIN_SECONDS = 0.8;
 const MAX_GAP_DP_CELLS = 40_000;
 const PROPER_NOUN_MIN_SIMILARITY = 0.45;
 /** TitleCase 专有名词特征（至少 3 个字符，首字母大写且含小写字母，排除全大写喊叫与常见小写虚词）。 */
@@ -382,11 +384,76 @@ const buildAuthorAlignedWords = (
         cursor = rightAnchor;
     }
 
-    return extWords.map((word, index) => ({
-        text: word.text,
-        start: starts[index],
-        end: Math.max(ends[index], starts[index] + 0.02),
-    }));
+    // 原位补洞：外部人工轨在相邻锚点（或首尾）之间完全缺少某几句时，把该时间窗内
+    // 本地 ASR 识别出的有效人声词缝合插回，兼顾人工字幕准确度与零漏句。
+    const splicedForGap = (aFrom: number, aTo: number): TimedWord[] => {
+        const gapLen = aTo - aFrom;
+        if (gapLen < AUTHOR_GAP_SPLICE_MIN_WORDS) {
+            return [];
+        }
+        const span = asrWords[aTo - 1].end - asrWords[aFrom].start;
+        if (span < AUTHOR_GAP_SPLICE_MIN_SECONDS) {
+            return [];
+        }
+        return asrWords.slice(aFrom, aTo).map((w) => ({
+            text: w.text,
+            start: w.start,
+            end: Math.max(w.end, w.start + 0.02),
+        }));
+    };
+
+    const output: TimedWord[] = [];
+    const mappedExtIndices: number[] = [];
+    for (let j = 0; j < total; j++) {
+        if (extToAsr[j] >= 0) {
+            mappedExtIndices.push(j);
+        }
+    }
+
+    if (mappedExtIndices.length === 0) {
+        return extWords.map((word, index) => ({
+            text: word.text,
+            start: starts[index],
+            end: Math.max(ends[index], starts[index] + 0.02),
+        }));
+    }
+
+    const firstMappedExt = mappedExtIndices[0];
+    if (firstMappedExt === 0) {
+        output.push(...splicedForGap(0, extToAsr[0]));
+    }
+
+    for (let m = 0; m < mappedExtIndices.length; m++) {
+        const jCurr = mappedExtIndices[m];
+        const extStartIdx = m === 0 ? 0 : mappedExtIndices[m - 1] + 1;
+        for (let j = extStartIdx; j <= jCurr; j++) {
+            output.push({
+                text: extWords[j].text,
+                start: starts[j],
+                end: Math.max(ends[j], starts[j] + 0.02),
+            });
+        }
+        if (m + 1 < mappedExtIndices.length) {
+            const jNext = mappedExtIndices[m + 1];
+            if (jNext === jCurr + 1) {
+                output.push(...splicedForGap(extToAsr[jCurr] + 1, extToAsr[jNext]));
+            }
+        }
+    }
+
+    const lastMappedExt = mappedExtIndices[mappedExtIndices.length - 1];
+    for (let j = lastMappedExt + 1; j < total; j++) {
+        output.push({
+            text: extWords[j].text,
+            start: starts[j],
+            end: Math.max(ends[j], starts[j] + 0.02),
+        });
+    }
+    if (lastMappedExt === total - 1) {
+        output.push(...splicedForGap(extToAsr[lastMappedExt] + 1, asrWords.length));
+    }
+
+    return output;
 };
 
 const buildAsrWithProperNounRescue = (

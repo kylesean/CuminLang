@@ -7,6 +7,7 @@ import {
     PanelRightClose,
     Repeat,
     Search,
+    Undo2,
     X,
 } from 'lucide-react';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
@@ -41,6 +42,9 @@ export interface TranscriptToolbarProps {
     transcriptPosition: 'left' | 'right';
     onToggleTranscriptPosition: () => void;
     onCloseTranscript: () => void;
+    canUndoEdit?: boolean;
+    isUndoingEdit?: boolean;
+    onUndoEdit?: () => void;
 }
 
 /**
@@ -61,6 +65,9 @@ export function TranscriptToolbar({
     transcriptPosition,
     onToggleTranscriptPosition,
     onCloseTranscript,
+    canUndoEdit = false,
+    isUndoingEdit = false,
+    onUndoEdit,
 }: TranscriptToolbarProps) {
     const { t } = useI18nTranslation('player');
 
@@ -107,6 +114,20 @@ export function TranscriptToolbar({
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
+                {canUndoEdit && onUndoEdit && (
+                    <Tooltip content={t('sideSentence.undoEditTooltip')} placement="below">
+                        <button
+                            type="button"
+                            data-testid="transcript-undo-edit"
+                            disabled={isUndoingEdit}
+                            onClick={onUndoEdit}
+                            className="p-1 rounded-md text-accent hover:bg-accent-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring transition-colors cursor-pointer disabled:opacity-50"
+                            aria-label={t('sideSentence.undoEditTooltip')}
+                        >
+                            <Undo2 className="w-3.5 h-3.5" />
+                        </button>
+                    </Tooltip>
+                )}
                 <Tooltip content={t('searchTranscript', { defaultValue: '搜索文稿 (Cmd/Ctrl+F)' })} placement="below">
                     <button
                         type="button"

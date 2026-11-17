@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
     evaluateHardwareProfile,
-    isHardwareSuitableForLocalAi,
     isWhisperCppSupportedPlatform,
 } from '@/common/utils/hardware-profile';
 import { isLocalLlmEndpoint } from '@/common/constants/cloud-ai-provider-presets';
@@ -83,16 +82,6 @@ describe('hardware-profile', () => {
             expect(advice.whisperCppSupported).toBe(false);
             expect(advice.recommendedTranscriptionEngine).toBe('sherpa-onnx');
             expect(advice.recommendedOnboardingTier).toBe('standard');
-        });
-    });
-
-    describe('isHardwareSuitableForLocalAi', () => {
-        it('returns true for >=8GB GPU or >=12GB CPU and false for low-spec CPU', () => {
-            expect(isHardwareSuitableForLocalAi(macM3)).toBe(true);
-            expect(isHardwareSuitableForLocalAi(midWinGpu)).toBe(true);
-            expect(isHardwareSuitableForLocalAi({ ...lowRamNoGpu, totalMemoryGb: 12 })).toBe(true);
-            expect(isHardwareSuitableForLocalAi(lowRamNoGpu)).toBe(false);
-            expect(isHardwareSuitableForLocalAi(null)).toBe(false);
         });
     });
 
