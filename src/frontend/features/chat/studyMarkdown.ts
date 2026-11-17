@@ -127,13 +127,18 @@ const normalizeCjkBoldAndHeadings = (segment: string): string => {
     // 标题 `#` 与正文之间缺空格（本地小模型常见：`###物理画面`）
     let out = segment.replace(/^( {0,3}#{1,6})([^\s#\n])/gm, '$1 $2');
 
-    // 先保护行内反引号代码，避免改动代码片段内部的 `**`
+    // 先保护行内反引号代码，避免改动代码片段内部的 `**` 或 LaTeX 定界符
     const inlineCodes: string[] = [];
     out = out.replace(/`[^`\n]+`/g, (code) => {
         const token = `\uE000CODE${inlineCodes.length}\uE000`;
         inlineCodes.push(code);
         return token;
     });
+
+    // 把标准 LaTeX `\[...\]` / `\(...\)` 定界符统一为 Astryx math 解析器原生支持的 `$$...$$` / `$...$`
+    out = out
+        .replace(/\\\[([\s\S]+?)\\\]/g, (_m, expr: string) => `\n$$\n${expr.trim()}\n$$\n`)
+        .replace(/\\\(([^\n]+?)\\\)/g, (_m, expr: string) => `$${expr.trim()}$`);
 
     out = out.replace(/(?<!\*)\*\*(?!\*)([^\n]+?)(?<!\*)\*\*(?!\*)/g, (full, inner: string) => {
         const trimmed = inner.trim();

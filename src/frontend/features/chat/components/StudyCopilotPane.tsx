@@ -39,6 +39,7 @@ import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import Playable from '@/frontend/components/shared/common/Playable';
 import SwitchTopic from '@/frontend/components/shared/common/SwitchTopic';
+import { MarkdownMath } from '@/frontend/components/shared/markdown/MarkdownMath';
 import { extractCleanTakeaway } from '@/frontend/features/chat/sentenceStudyHelpers';
 import {
     extractMarkdownNodeText,
@@ -196,6 +197,7 @@ export default function StudyCopilotPane({
                 </a>
             );
         },
+        math: MarkdownMath,
     }), [t]);
 
     const triggers = useMemo<ChatComposerTrigger[]>(() => {

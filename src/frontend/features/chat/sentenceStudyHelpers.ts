@@ -125,6 +125,27 @@ export const tokenizeSentenceWithHighlights = (
     return segments;
 };
 
+const INLINE_LATEX_SYMBOL_MAP: Record<string, string> = {
+    '\\rightarrow': '→',
+    '\\to': '→',
+    '\\leftarrow': '←',
+    '\\leftrightarrow': '↔',
+    '\\Rightarrow': '⇒',
+    '\\implies': '⇒',
+    '\\Leftrightarrow': '⇔',
+    '\\approx': '≈',
+    '\\neq': '≠',
+    '\\times': '×',
+};
+
+const stripInlineLatexForPlainText = (expr: string): string => {
+    let out = expr.trim();
+    for (const [cmd, glyph] of Object.entries(INLINE_LATEX_SYMBOL_MAP)) {
+        out = out.replaceAll(cmd, glyph);
+    }
+    return out.replace(/\\text\{([^{}]*)\}/g, '$1').trim();
+};
+
 /**
  * Strips interactive TTS/switch protocols and Markdown syntax from an AI reply
  * so saving a reply as a sentence takeaway stays concise and scannable.
@@ -133,6 +154,9 @@ export const extractCleanTakeaway = (rawMarkdown: string, maxLength = 220): stri
     const cleaned = rawMarkdown
         .replace(TTS_PROTOCOL_RE, (_m, phrase: string, display?: string) => (display ?? phrase).trim())
         .replace(SWITCH_PROTOCOL_RE, '')
+        .replace(/\$\$([\s\S]+?)\$\$/g, (_m, expr: string) => stripInlineLatexForPlainText(expr))
+        .replace(/\$(?!\s)([^\n$]*?(?:\\[a-zA-Z]+|[_^{}=])[^\n$]*?)(?<!\s)\$(?!\d)/g, (_m, expr: string) => stripInlineLatexForPlainText(expr))
+        .replace(/\\\(([^\n]+?)\\\)/g, (_m, expr: string) => stripInlineLatexForPlainText(expr))
         .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[^\n]*\n?|```/g, '').trim())
         .replace(/`([^`]+)`/g, '$1')
         .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')

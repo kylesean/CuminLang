@@ -465,4 +465,60 @@ describe('整句学习 AI-Native 工作台组件套件', () => {
         fireEvent.click(fenceWord);
         expect(screen.getByTestId('inline-expression-popover')).toBeDefined();
     });
+
+    it('通过 Astryx math 渲染器正确渲染 $\\rightarrow$ 与 \\(...\\) 行内数学表达式，同时不误伤美元价格，收获摘要也转为可读符号', () => {
+        expect(extractCleanTakeaway('核心逻辑：技能 $\\rightarrow$ 影响力；价格是 $5 和 $10。')).toBe('核心逻辑：技能 → 影响力；价格是 $5 和 $10。');
+        expect(preprocessStudyMarkdown('价格是 $5 与 `\\(\\rightarrow\\)` 以及 \\(\\Rightarrow\\)', false))
+            .toBe('价格是 $5 与 `\\(\\rightarrow\\)` 以及 $\\Rightarrow$');
+
+        const { container } = renderWithAstryx(
+            <StudyCopilotPane
+                sentenceText="How does this active listening translate to influence?"
+                messages={[
+                    {
+                        id: 'msg-math',
+                        role: 'assistant',
+                        blocks: [
+                            {
+                                kind: 'text',
+                                text: '核心逻辑：技能 $\\rightarrow$ 影响力；价格是 $5 和 $10；等价于 \\(\\Rightarrow\\)。',
+                            },
+                        ],
+                    },
+                ]}
+                isBusy={false}
+                sessionReady
+                cloudAvailable
+                chatErrorText={null}
+                input=""
+                onInputChange={noop}
+                onSubmit={noop}
+                onStop={noop}
+                onClearConversation={noop}
+                onPreviewSubtitleLine={noop}
+                onAppendToNote={noop}
+                attachedFocusExpr={null}
+                onClearFocusExpr={noop}
+                dictation={{
+                    isSupported: false,
+                    isListening: false,
+                    isSpeaking: false,
+                    volume: 0,
+                    bands: [0, 0, 0, 0, 0],
+                    rawBands: [0, 0, 0, 0, 0],
+                    interimTranscript: '',
+                    start: noop,
+                    stop: noop,
+                    abort: noop,
+                    toggle: noop,
+                }}
+            />,
+        );
+
+        const mathNodes = screen.getAllByTestId('markdown-math-inline');
+        expect(mathNodes).toHaveLength(2);
+        expect(container.querySelectorAll('.katex')).toHaveLength(2);
+        expect(container.textContent).toContain('$5 和 $10');
+        expect(container.textContent).not.toContain('$\\rightarrow$');
+    });
 });
