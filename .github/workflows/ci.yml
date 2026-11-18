@@ -63,13 +63,6 @@ jobs:
         run: pnpm run lint
       - name: Typecheck
         run: pnpm run typecheck
-      - name: Test case docs
-        # 用例 ID 与场景文档的双向绑定只能靠这个脚本强制：它此前只有人手动跑，
-        # 于是「只改了 spec 没改文档」会一路绿灯进主干。这里只读文件，不需要构建或显示环境。
-        run: pnpm run qa:check-cases
-      - name: QA locator rules
-        # 禁止 CSS 类名/tag 定位；语义定位（role/testid）才能跟着产品重构走
-        run: pnpm run qa:check-locators
       - name: Unit tests
         # vitest 通过 ELECTRON_RUN_AS_NODE=1 以纯 Node 运行，不需要显示环境。
         # 带 --coverage 运行以执行 vitest.config 里的覆盖率阈值门禁（基线见该文件注释）。

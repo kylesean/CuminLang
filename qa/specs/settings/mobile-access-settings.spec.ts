@@ -83,9 +83,9 @@ async function enableMobileAccess(page: Page, userDataDir: string): Promise<void
  * @returns 完整访问地址（含令牌）。
  */
 async function readAccessUrl(page: Page): Promise<string> {
-    const text = await page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl).first().textContent();
-    expect(text).toBeTruthy();
-    return (text ?? '').trim();
+    const urlLocator = page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl).first();
+    await expect(urlLocator).toHaveText(/\S+/);
+    return (await urlLocator.innerText()).trim();
 }
 
 /** 若宿主网络限制本机访问局域网接口 IP，回退到回环地址探测同一端口服务。 */

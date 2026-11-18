@@ -1,6 +1,8 @@
 import { test as base, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { PlayerPage } from '../pages/PlayerPage';
+import { SettingsPage } from '../pages/SettingsPage';
 import {
     parseStoredProviderKeys,
     parseStoredProviderProfiles,
@@ -192,6 +194,10 @@ type Fixtures = {
     openSession: (options?: LaunchAppOptions) => Promise<AppSession>;
     /** 已启动并处于主界面的应用会话。 */
     session: AppSession;
+    /** 基于当前会话主窗口的设置中心 Page Object。 */
+    settingsPage: SettingsPage;
+    /** 基于当前会话主窗口的播放器 Page Object。 */
+    playerPage: PlayerPage;
 };
 
 export const test = base.extend<Fixtures>({
@@ -228,5 +234,11 @@ export const test = base.extend<Fixtures>({
     session: async ({ openSession }, use) => {
         const session = await openSession();
         await use(session);
+    },
+    settingsPage: async ({ session }, use) => {
+        await use(new SettingsPage(session.page));
+    },
+    playerPage: async ({ session }, use) => {
+        await use(new PlayerPage(session.page));
     },
 });

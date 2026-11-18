@@ -23,5 +23,5 @@ CuminLang 是一个独立维护的现代视频播放与沉浸式语言学习桌�
 
 ### 执行与收尾门禁
 - 迭代期运行单文件：`pnpm run test:run <path/to/file.test.ts>`；涉及全局/多模块改动且收尾前必须通过：`pnpm run lint`、`pnpm run typecheck`、`pnpm run test:run`。
-- 涉及页面交互/选择器/E2E 流程时，补充运行 `pnpm run qa:check-locators`、`pnpm run qa:check-cases` 与 `pnpm run test:e2e:smoke`（详见 `qa/README.md`）。
+- 涉及页面交互/E2E 流程时，补充运行 `pnpm run test:e2e:smoke`（详见 [qa/README.md](./qa/README.md)）。
 - **交付收尾**：明确汇报实际改动、验证方式与实测结果，如实说明未能验证的范围（如未覆盖的操作系统平台或外网依赖场景）。

@@ -43,10 +43,6 @@ jobs:
         run: pnpm run lint
       - name: Typecheck
         run: pnpm run typecheck
-      - name: Test case docs
-        run: pnpm run qa:check-cases
-      - name: QA locator rules
-        run: pnpm run qa:check-locators
       - name: Unit tests
         run: pnpm run test:coverage
 

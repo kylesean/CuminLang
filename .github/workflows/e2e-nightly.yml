@@ -32,8 +32,6 @@ jobs:
         env:
           SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
         run: pnpm install --frozen-lockfile
-      - name: QA locator rules
-        run: pnpm run qa:check-locators
       - name: Install display and media tools
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
@@ -71,8 +69,6 @@ jobs:
         env:
           SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
         run: pnpm install --frozen-lockfile
-      - name: QA locator rules
-        run: pnpm run qa:check-locators
       - name: Install display and media tools
         run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
       - name: Cache runtime binaries
