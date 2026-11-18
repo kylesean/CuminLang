@@ -40,7 +40,7 @@ export interface DocShortcutItem {
 }
 
 export interface DocCallout {
-    status: 'info' | 'positive' | 'warning';
+    status: 'info' | 'success' | 'warning';
     title: string;
     description: string;
 }

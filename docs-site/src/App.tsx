@@ -140,7 +140,7 @@ export default function App() {
     };
 
     return (
-        <Theme theme={themes[themeSlug]} colorScheme={effectiveMode}>
+        <Theme theme={themes[themeSlug]} mode={effectiveMode}>
             <div className="min-h-screen bg-body text-primary flex flex-col">
                 {/* Sticky Top Header */}
                 <header className="sticky top-0 z-30 border-b border-border bg-surface/90 backdrop-blur-md">
@@ -176,11 +176,13 @@ export default function App() {
                             <div className="hidden sm:block w-48">
                                 <TextInput
                                     size="sm"
+                                    type="search"
+                                    label={lang === 'zh-CN' ? '搜索文档章节' : 'Filter docs'}
+                                    isLabelHidden
                                     value={searchQuery}
                                     onChange={(val) => setSearchQuery(val)}
                                     placeholder={lang === 'zh-CN' ? '搜索文档章节...' : 'Filter docs...'}
-                                    startContent={<Search className="h-3.5 w-3.5 text-secondary" />}
-                                    isClearable
+                                    startIcon={<Search className="h-3.5 w-3.5 text-secondary" />}
                                 />
                             </div>
 
@@ -236,11 +238,13 @@ export default function App() {
                         <div className="mb-3">
                             <TextInput
                                 size="sm"
+                                type="search"
+                                label={lang === 'zh-CN' ? '搜索文档章节' : 'Filter docs'}
+                                isLabelHidden
                                 value={searchQuery}
                                 onChange={(val) => setSearchQuery(val)}
                                 placeholder={lang === 'zh-CN' ? '搜索文档章节...' : 'Filter docs...'}
-                                startContent={<Search className="h-3.5 w-3.5 text-secondary" />}
-                                isClearable
+                                startIcon={<Search className="h-3.5 w-3.5 text-secondary" />}
                             />
                         </div>
                         <nav className="grid grid-cols-1 gap-1 sm:grid-cols-2">
@@ -349,7 +353,7 @@ export default function App() {
                         {activeSection.highlights && activeSection.highlights.length > 0 && (
                             <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 {activeSection.highlights.map((item) => (
-                                    <Card key={item.title} padding={16} radius="lg">
+                                    <Card key={item.title} padding={4}>
                                         <div className="flex items-start gap-3">
                                             <div className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
                                                 {renderIcon(item.icon, 'h-4 w-4')}
@@ -374,8 +378,8 @@ export default function App() {
                                     return (
                                         <ClickableCard
                                             key={item.slug}
-                                            padding={16}
-                                            radius="lg"
+                                            label={item.name}
+                                            padding={4}
                                             onClick={() => setThemeSlug(item.slug)}
                                             className={isSelected ? 'ring-2 ring-focus-ring' : ''}
                                         >
@@ -397,7 +401,7 @@ export default function App() {
                                                 </div>
                                                 {isSelected && (
                                                     <Badge
-                                                        variant="positive"
+                                                        variant="success"
                                                         label={lang === 'zh-CN' ? '当前预览' : 'Active'}
                                                     />
                                                 )}
@@ -537,8 +541,8 @@ export default function App() {
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             {prevSection ? (
                                 <ClickableCard
-                                    padding={16}
-                                    radius="lg"
+                                    label={prevSection.title}
+                                    padding={4}
                                     onClick={() => selectSection(prevSection.id)}
                                 >
                                     <div className="flex items-center gap-2 text-xs text-secondary">
@@ -555,8 +559,8 @@ export default function App() {
 
                             {nextSection && (
                                 <ClickableCard
-                                    padding={16}
-                                    radius="lg"
+                                    label={nextSection.title}
+                                    padding={4}
                                     onClick={() => selectSection(nextSection.id)}
                                     className="text-right"
                                 >
