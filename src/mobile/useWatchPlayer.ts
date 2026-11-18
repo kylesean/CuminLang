@@ -1,10 +1,26 @@
 import React from 'react';
 import type { VirtuosoHandle } from 'react-virtuoso';
 import type { MobileSubtitleLine, MobileWatchDetail } from '@/common/contracts/mobile-web';
-import type { OpenAIDictionaryResult } from '@/common/types/DictionaryResult';
 import { mobileApi } from './api';
 import SubtitleTender from './subtitleTender';
 import type { PositionChannel } from './VideoBar';
+import { type AppTheme, applyTheme, readTheme, saveTheme } from './theme';
+import {
+    PREF_KEYS,
+    loadBoolPref,
+    loadSpeedPref,
+    savePref,
+    tapFeedback,
+} from './lib';
+import {
+    toggleMobileSentenceEndMode,
+    type MobileSentenceEndMode,
+} from './watch-player/mobile-sentence-end';
+import { useSubtitleFollowScroll } from './watch-player/useSubtitleFollowScroll';
+import { type DictionaryState, useWatchDictionary } from './watch-player/useWatchDictionary';
+import { useWatchTranslations } from './watch-player/useWatchTranslations';
+
+export type { DictionaryState };
 
 const createPositionStore = () => {
     let value = 0;
@@ -29,26 +45,6 @@ const createPositionStore = () => {
         },
     };
 };
-import { type AppTheme, applyTheme, readTheme, saveTheme } from './theme';
-import {
-    PREF_KEYS,
-    loadBoolPref,
-    loadSpeedPref,
-    savePref,
-    tapFeedback,
-} from './lib';
-
-/** 顶部查词条的数据。 */
-export interface DictionaryState {
-    /** 查询词。 */
-    word: string;
-    /** 词典结果；加载中或失败时为 null。 */
-    data: OpenAIDictionaryResult | null;
-    /** 是否仍在查询。 */
-    loading: boolean;
-    /** 查询失败信息。 */
-    error: string | null;
-}
 
 /** 播放页 hook 暴露给视图的状态和操作。 */
 export interface WatchPlayerApi {
@@ -115,71 +111,60 @@ export interface WatchPlayerApi {
     handleLoadedData: () => void;
 }
 
-/** seek 期间暂停循环判定的时间窗口（毫秒）。 */
+/** seek 期间暂停循环判定的时间窗口（秒）。 */
 const LOOP_EPSILON = 0.1;
 
 /** 跳句时提前多少秒起播，避免把第一个音切掉。 */
 const SEEK_PREROLL = 0.2;
 
-/** 程序滚动后多久没有 scroll 事件就算滚完（毫秒）。覆盖移动端 smooth scroll 步长。 */
-const AUTO_SCROLL_SETTLE_MS = 220;
-
-/** 用户停止滚动多久之后，再决定恢复跟随还是露出「回到当前」。 */
-const BROWSE_SETTLE_MS = 400;
-
 /**
- * 把播放页的播放、字幕、循环和查词逻辑收在一个 hook 里。
+ * 移动端播放页总控 Hook：编排字幕跟随滚动、按需翻译、查词、句末互斥模式与 seek/resume 代次。
  *
  * @param detail 播放详情。
- * @returns 视图需要的 ref、状态和操作。
+ * @returns 视图需要的 ref、状态和操作（逐字段解构供 WatchPlayer 消费）。
  */
 export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
     const videoRef = React.useRef<HTMLVideoElement | null>(null);
     const virtuosoRef = React.useRef<VirtuosoHandle | null>(null);
-    const scrollerRef = React.useRef<HTMLElement | null>(null);
     const dockRef = React.useRef<HTMLDivElement | null>(null);
     const dictRef = React.useRef<HTMLDivElement | null>(null);
     const mountedRef = React.useRef(true);
 
     const [currentIndex, setCurrentIndex] = React.useState(-1);
     const currentIndexRef = React.useRef(-1);
-    const scrollPhaseRef = React.useRef<'idle' | 'auto-scrolling' | 'browsing'>('idle');
-    /** 用户停下滚动后的判定计时；滚动期间不判定，免按钮跟着闪。 */
-    const browseSettleTimerRef = React.useRef<number | null>(null);
-    const autoScrollSettleTimerRef = React.useRef<number | null>(null);
-    /** Virtuoso 当前渲染到的下标范围，用来先排除肯定没渲染的行。 */
-    const renderedRangeRef = React.useRef<[number, number]>([0, -1]);
+
+    const {
+        showFollow,
+        handleScrollerRef,
+        handleScroll,
+        handleUserScroll,
+        handleRangeChanged,
+        followCurrent,
+        syncFollowOnIndexChange,
+        resetFollowForSeek,
+        clearScrollTimers,
+    } = useSubtitleFollowScroll(virtuosoRef, dockRef, currentIndexRef);
+
+    const {
+        showTranslation,
+        activeTranslations,
+        requestTranslationWindow,
+        toggleTranslation,
+        resetTranslations,
+    } = useWatchTranslations(detail.id, detail.subtitles, currentIndexRef, mountedRef);
+
+    const {
+        dict,
+        lookupWord,
+        closeDict,
+        clearDictTimer,
+    } = useWatchDictionary(dictRef, mountedRef);
 
     const [showEnglish, setShowEnglish] = React.useState(() => loadBoolPref(PREF_KEYS.showEnglish, true));
-    const [showTranslation, setShowTranslation] = React.useState(() => loadBoolPref(PREF_KEYS.showTranslation, true));
-    const [showFollow, setShowFollow] = React.useState(false);
-    const showFollowRef = React.useRef(false);
-    const updateShowFollow = React.useCallback((next: boolean): void => {
-        if (showFollowRef.current === next) return;
-        showFollowRef.current = next;
-        setShowFollow(next);
-    }, []);
-    const showTranslationRef = React.useRef(showTranslation);
-    const [translationsState, setTranslationsState] = React.useState<{
-        detailId: string;
-        subtitles: MobileSubtitleLine[];
-        map: Record<number, string>;
-    }>(() => ({
-        detailId: detail.id,
-        subtitles: detail.subtitles,
-        map: {},
-    }));
-    const translationsRef = React.useRef<Record<number, string>>({});
-    const attemptedTranslationsRef = React.useRef<Set<number>>(new Set());
-    const detailEpochRef = React.useRef(0);
-
-    const [repeatOn, setRepeatOn] = React.useState(false);
-    const repeatOnRef = React.useRef(false);
+    const [sentenceEndMode, setSentenceEndMode] = React.useState<MobileSentenceEndMode>('off');
+    const sentenceEndModeRef = React.useRef<MobileSentenceEndMode>('off');
     const repeatStartRef = React.useRef<number | null>(null);
     const repeatEndRef = React.useRef<number | null>(null);
-
-    const [autoPauseOn, setAutoPauseOn] = React.useState(false);
-    const autoPauseOnRef = React.useRef(false);
     const autoPauseArmedRef = React.useRef(true);
 
     const [speed, setSpeed] = React.useState(() => loadSpeedPref());
@@ -189,25 +174,20 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
     const [settingsOpen, setSettingsOpen] = React.useState(false);
     const [videoError, setVideoError] = React.useState(false);
     const [paused, setPaused] = React.useState(true);
-    /** 自绘进度条用的位置外部订阅通道与总时长；timeupdate 只通知 VideoBar，不重渲染页面与字幕列表。 */
     const positionStore = React.useMemo(() => createPositionStore(), []);
     const [duration, setDuration] = React.useState(0);
 
     const resumeDoneRef = React.useRef(detail.currentPosition <= 3);
     const resumeTimerRef = React.useRef<number | null>(null);
     const seekInFlightRef = React.useRef(false);
-    /** 程序化跳句的目标；预卷期间当前句先停在这里，不要退回上一句。 */
     const seekTargetIndexRef = React.useRef<number | null>(null);
-    const programmaticSeekRef = React.useRef(false);
+    const seekTokenRef = React.useRef(0);
+    /** 当前进行中的程序化 seek 代次；null 表示当前为原生拖进度条产生的 seeking。 */
+    const activeProgrammaticTokenRef = React.useRef<number | null>(null);
+    /** 续播定位对应的 seek 代次；若中途用户主动跳转，旧续播 token 自动失活。 */
+    const resumeTokenRef = React.useRef<number | null>(null);
     const lastSavedRef = React.useRef(-1);
 
-    const dictCacheRef = React.useRef(new Map<string, OpenAIDictionaryResult | null>());
-    const activeWordRef = React.useRef<string | null>(null);
-    const dictRequestIdRef = React.useRef(0);
-    const dictTimerRef = React.useRef<number | null>(null);
-    const [dict, setDict] = React.useState<DictionaryState | null>(null);
-
-    /** 与桌面端同思路的字幕时间轴索引：时间桶 + 上次命中缓存 + nextStart 覆盖空隙。 */
     const tender = React.useMemo(() => new SubtitleTender(detail.subtitles), [detail.subtitles]);
 
     React.useEffect(() => {
@@ -222,22 +202,12 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
     }, [showEnglish]);
 
     React.useEffect(() => {
-        savePref(PREF_KEYS.showTranslation, showTranslation ? '1' : '0');
-        showTranslationRef.current = showTranslation;
-    }, [showTranslation]);
-
-    React.useEffect(() => {
         speedRef.current = speed;
         if (videoRef.current) {
             videoRef.current.playbackRate = speed;
         }
     }, [speed]);
 
-    /**
-     * 写回当前播放位置。
-     *
-     * @param force 是否忽略 5 秒间隔立即写入。
-     */
     const saveProgress = React.useCallback((force: boolean, targetVideo?: HTMLVideoElement | null): void => {
         if (!resumeDoneRef.current) {
             return;
@@ -255,206 +225,6 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         void mobileApi.saveProgress(detail.id, second, force).catch(() => undefined);
     }, [detail.id, positionStore]);
 
-    /** Virtuoso 的滚动容器引用；它的实际 DOM 类型是 HTMLElement。 */
-    const handleScrollerRef = React.useCallback((ref: HTMLElement | Window | null): void => {
-        scrollerRef.current = ref instanceof HTMLElement ? ref : null;
-    }, []);
-
-    /**
-     * 判断某行字幕是否完整落在可视区内。
-     *
-     * Virtuoso 只渲染视口附近的行，查不到 DOM 时按不可见处理。
-     * 行元素按 Virtuoso 自带的 `data-item-index` 查找，不依赖字幕行的样式类名；
-     * 控制坞的遮挡范围用外部传进来的 ref 计算，同样不依赖类名。
-     *
-     * @param index 字幕下标。
-     * @returns 整行可见时为 true。
-     */
-    const isRowVisible = React.useCallback((index: number): boolean => {
-        const [start, end] = renderedRangeRef.current;
-        if (index < start || index > end) {
-            return false;
-        }
-        const list = scrollerRef.current;
-        const row = list?.querySelector<HTMLElement>(`[data-item-index="${index}"]`);
-        if (!list || !row) {
-            return false;
-        }
-        const listRect = list.getBoundingClientRect();
-        const rowRect = row.getBoundingClientRect();
-
-        // 计算底部被悬浮控制坞（Dock）遮挡的实际可视底线。
-        // 以 Dock 顶边为下限（留出 12px 呼吸缓冲），一旦进入 Dock 遮挡区域即视为不可见；
-        // 否则保底以容器底部扣除 Dock 高度与间距（约 110px）为准。
-        const dockEl = dockRef.current;
-        const visibleBottomLimit = dockEl
-            ? dockEl.getBoundingClientRect().top - 12
-            : listRect.bottom - 110;
-        const visibleTopLimit = listRect.top + 8;
-
-        return rowRect.top >= visibleTopLimit && rowRect.bottom <= visibleBottomLimit;
-    }, []);
-
-    /** 续一下程序滚动的静默计时；scroll 事件再来就重新计时。 */
-    const settleAutoScroll = React.useCallback((delayMs = AUTO_SCROLL_SETTLE_MS): void => {
-        if (autoScrollSettleTimerRef.current !== null) {
-            window.clearTimeout(autoScrollSettleTimerRef.current);
-        }
-        autoScrollSettleTimerRef.current = window.setTimeout(() => {
-            autoScrollSettleTimerRef.current = null;
-            if (scrollPhaseRef.current === 'auto-scrolling') {
-                scrollPhaseRef.current = 'idle';
-            }
-        }, delayMs);
-    }, []);
-
-    /**
-     * 只在当前句快离开可视区或被底部的 Dock 遮挡时滚动列表，滚到舒适区域。
-     *
-     * @param index 字幕下标。
-     */
-    const ensureRowVisible = React.useCallback((index: number): void => {
-        if (isRowVisible(index) || !virtuosoRef.current) {
-            return;
-        }
-        scrollPhaseRef.current = 'auto-scrolling';
-        settleAutoScroll(550);
-        virtuosoRef.current.scrollIntoView({ index, align: 'start', behavior: 'smooth' });
-    }, [isRowVisible, settleAutoScroll]);
-
-    /**
-     * 用户停下滚动后统一判定一次。
-     *
-     * 停在滚动中途就切换按钮会跟着手指闪，所以等静下来再看：当前句还在可视区
-     * 就直接恢复跟随，滚出去了才把「回到当前」露出来。
-     */
-    const settleBrowsing = React.useCallback((): void => {
-        if (browseSettleTimerRef.current !== null) {
-            window.clearTimeout(browseSettleTimerRef.current);
-        }
-        browseSettleTimerRef.current = window.setTimeout(() => {
-            browseSettleTimerRef.current = null;
-            if (scrollPhaseRef.current !== 'browsing') {
-                return;
-            }
-            const index = currentIndexRef.current;
-            if (index >= 0 && isRowVisible(index)) {
-                scrollPhaseRef.current = 'idle';
-                updateShowFollow(false);
-                return;
-            }
-            updateShowFollow(true);
-        }, BROWSE_SETTLE_MS);
-    }, [isRowVisible, updateShowFollow]);
-
-    /**
-     * 用户开始拖动列表：程序滚动立刻让位。
-     *
-     * 用 touchmove / wheel 而不是 pointerdown，点字幕行是跳句，不该算浏览。
-     */
-    const handleUserScroll = React.useCallback((): void => {
-        if (scrollPhaseRef.current === 'auto-scrolling') {
-            if (autoScrollSettleTimerRef.current !== null) {
-                window.clearTimeout(autoScrollSettleTimerRef.current);
-                autoScrollSettleTimerRef.current = null;
-            }
-        }
-        scrollPhaseRef.current = 'browsing';
-        settleBrowsing();
-    }, [settleBrowsing]);
-
-    /** 记录 Virtuoso 当前渲染范围。 */
-    const handleRangeChanged = React.useCallback((range: { startIndex: number; endIndex: number }): void => {
-        renderedRangeRef.current = [range.startIndex, range.endIndex];
-    }, []);
-
-    /**
-     * 为当前句附近的一小段字幕请求翻译。
-     *
-     * 只翻字幕文件里没有中文的行；支持回跳到已播段落或新窗口补翻，翻译服务不可用时
-     * 保持空白，避免播放过程中反复打模型（重新开启翻译开关时会重置重试记录）。
-     *
-     * @param index 当前字幕下标。
-     */
-    const requestTranslationWindow = React.useCallback((index: number): void => {
-        if (!showTranslationRef.current) {
-            return;
-        }
-        const lines = detail.subtitles;
-        if (lines.length === 0) {
-            return;
-        }
-        // 检查近期前瞻区间 [index, index + 6) 是否仍有未翻译且未尝试的行，兼顾向前滚动批量预取与向后回跳补翻
-        const probeStart = Math.max(0, index);
-        const probeEnd = Math.min(lines.length, probeStart + 6);
-        let hasUncoveredAhead = false;
-        for (let i = probeStart; i < probeEnd; i += 1) {
-            const line = lines[i];
-            if (
-                line.zh === ''
-                && line.en.trim() !== ''
-                && !attemptedTranslationsRef.current.has(i)
-                && (translationsRef.current[i] ?? '') === ''
-            ) {
-                hasUncoveredAhead = true;
-                break;
-            }
-        }
-        if (!hasUncoveredAhead) {
-            return;
-        }
-
-        const start = Math.max(0, index - 2);
-        const end = Math.min(lines.length, start + 20);
-        const indexes: number[] = [];
-        const texts: string[] = [];
-        for (let i = start; i < end; i += 1) {
-            const line = lines[i];
-            if (line.zh !== '' || line.en.trim() === '') {
-                continue;
-            }
-            if (attemptedTranslationsRef.current.has(i)) {
-                continue;
-            }
-            if ((translationsRef.current[i] ?? '') !== '') {
-                continue;
-            }
-            attemptedTranslationsRef.current.add(i);
-            indexes.push(i);
-            texts.push(line.en);
-        }
-        if (texts.length === 0) {
-            return;
-        }
-        const epoch = detailEpochRef.current;
-        const targetId = detail.id;
-        const targetSubtitles = detail.subtitles;
-        mobileApi.translateTexts(texts)
-            .then((result) => {
-                if (!mountedRef.current || detailEpochRef.current !== epoch) {
-                    return;
-                }
-                const next = { ...translationsRef.current };
-                indexes.forEach((lineIndex, position) => {
-                    next[lineIndex] = result[position] ?? '';
-                });
-                translationsRef.current = next;
-                setTranslationsState({
-                    detailId: targetId,
-                    subtitles: targetSubtitles,
-                    map: next,
-                });
-            })
-            .catch(() => {
-                // 没有配置翻译服务时保持空白，已请求过的行不反复重试。
-            });
-    }, [detail.id, detail.subtitles]);
-
-    /**
-     * 应用当前字幕下标，并更新高亮、循环区间和列表位置。
-     *
-     * @param index 字幕下标。
-     */
     const applyIndex = React.useCallback((index: number): void => {
         if (index !== currentIndexRef.current) {
             currentIndexRef.current = index;
@@ -466,33 +236,13 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         }
 
         const line = index >= 0 ? detail.subtitles[index] : null;
-        repeatStartRef.current = repeatOnRef.current && line ? line.start : null;
-        repeatEndRef.current = repeatOnRef.current && line ? line.end : null;
+        const repeating = sentenceEndModeRef.current === 'repeat';
+        repeatStartRef.current = repeating && line ? line.start : null;
+        repeatEndRef.current = repeating && line ? line.end : null;
 
-        if (index < 0) {
-            return;
-        }
-        if (scrollPhaseRef.current === 'browsing') {
-            // 没在滚（判定已经跑完）且当前句回到视口，就恢复跟随
-            if (browseSettleTimerRef.current === null && isRowVisible(index)) {
-                scrollPhaseRef.current = 'idle';
-                updateShowFollow(false);
-            }
-            return;
-        }
-        updateShowFollow(false);
-        ensureRowVisible(index);
-    }, [detail.subtitles, ensureRowVisible, requestTranslationWindow, isRowVisible, updateShowFollow]);
+        syncFollowOnIndexChange(index);
+    }, [detail.subtitles, requestTranslationWindow, syncFollowOnIndexChange]);
 
-    /**
-     * 计算时间点对应的当前句。
-     *
-     * 跳句会提前 0.2 秒起播，这段时间实际时间还落在上一句尾部；用 seekTargetIndexRef
-     * 把当前句固定在目标上，等时间真正越过目标句开头后再交还给时间轴索引。
-     *
-     * @param time 播放时间，单位秒。
-     * @returns 当前字幕下标。
-     */
     const resolveCurrentIndex = React.useCallback((time: number): number => {
         const target = seekTargetIndexRef.current;
         if (target !== null) {
@@ -505,7 +255,28 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         return tender.getIndexByTime(time);
     }, [detail.subtitles, tender]);
 
-    /** 处理视频时间更新。 */
+    const startProgrammaticSeek = React.useCallback((
+        video: HTMLVideoElement,
+        targetTime: number,
+        targetIndex: number | null,
+    ): number | null => {
+        const token = ++seekTokenRef.current;
+        activeProgrammaticTokenRef.current = token;
+        seekInFlightRef.current = true;
+        seekTargetIndexRef.current = targetIndex;
+        try {
+            video.currentTime = targetTime;
+            return token;
+        } catch {
+            if (activeProgrammaticTokenRef.current === token) {
+                activeProgrammaticTokenRef.current = null;
+                seekInFlightRef.current = false;
+                seekTargetIndexRef.current = null;
+            }
+            return null;
+        }
+    }, []);
+
     const handleTimeUpdate = React.useCallback((): void => {
         const video = videoRef.current;
         if (!video) {
@@ -517,23 +288,27 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         }
 
         const line = currentIndexRef.current >= 0 ? detail.subtitles[currentIndexRef.current] : null;
-        if (repeatOnRef.current && !seekInFlightRef.current && repeatEndRef.current !== null
-            && video.currentTime >= repeatEndRef.current - LOOP_EPSILON) {
+        if (
+            sentenceEndModeRef.current === 'repeat'
+            && !seekInFlightRef.current
+            && repeatEndRef.current !== null
+            && video.currentTime >= repeatEndRef.current - LOOP_EPSILON
+        ) {
             const target = currentIndexRef.current;
-            programmaticSeekRef.current = true;
-            seekTargetIndexRef.current = target >= 0 ? target : null;
-            try {
-                video.currentTime = Math.max(0, (repeatStartRef.current ?? 0) - SEEK_PREROLL);
-            } catch {
-                programmaticSeekRef.current = false;
-                seekTargetIndexRef.current = null;
-                return;
-            }
+            startProgrammaticSeek(
+                video,
+                Math.max(0, (repeatStartRef.current ?? 0) - SEEK_PREROLL),
+                target >= 0 ? target : null,
+            );
             return;
         }
 
-        if (autoPauseOnRef.current && autoPauseArmedRef.current && line
-            && video.currentTime >= line.end - LOOP_EPSILON) {
+        if (
+            sentenceEndModeRef.current === 'auto-pause'
+            && autoPauseArmedRef.current
+            && line
+            && video.currentTime >= line.end - LOOP_EPSILON
+        ) {
             autoPauseArmedRef.current = false;
             video.pause();
             return;
@@ -541,28 +316,38 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
 
         applyIndex(resolveCurrentIndex(video.currentTime));
         saveProgress(false);
-    }, [detail.subtitles, applyIndex, saveProgress, resolveCurrentIndex, positionStore]);
+    }, [detail.subtitles, applyIndex, saveProgress, resolveCurrentIndex, positionStore, startProgrammaticSeek]);
 
-    /** 原生进度条开始 seek 时暂停循环/自动暂停判定。 */
     const handleSeeking = React.useCallback((): void => {
-        if (!programmaticSeekRef.current) {
+        if (activeProgrammaticTokenRef.current === null) {
             seekTargetIndexRef.current = null;
         }
         seekInFlightRef.current = true;
         autoPauseArmedRef.current = false;
     }, []);
 
-    /** seek 结束后按新位置重新计算当前句。 */
     const handleSeeked = React.useCallback((): void => {
-        if (!resumeDoneRef.current) {
+        const settledToken = activeProgrammaticTokenRef.current;
+        // 用户发起了更新的 seek 时，忽略尚未对齐到最新 token 的旧 seeked 事件
+        if (settledToken !== null && settledToken !== seekTokenRef.current) {
+            return;
+        }
+        if (resumeTokenRef.current !== null && settledToken === resumeTokenRef.current) {
+            resumeTokenRef.current = null;
+            resumeDoneRef.current = true;
+            if (resumeTimerRef.current !== null) {
+                window.clearTimeout(resumeTimerRef.current);
+                resumeTimerRef.current = null;
+            }
+        } else if (!resumeDoneRef.current && settledToken === null) {
             resumeDoneRef.current = true;
             if (resumeTimerRef.current !== null) {
                 window.clearTimeout(resumeTimerRef.current);
                 resumeTimerRef.current = null;
             }
         }
+        activeProgrammaticTokenRef.current = null;
         seekInFlightRef.current = false;
-        programmaticSeekRef.current = false;
         autoPauseArmedRef.current = true;
         const video = videoRef.current;
         if (video) {
@@ -570,7 +355,6 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         }
     }, [applyIndex, resolveCurrentIndex]);
 
-    /** 处理元数据加载，按上次位置续播。 */
     const handleLoadedMetadata = React.useCallback((): void => {
         const video = videoRef.current;
         if (!video) {
@@ -580,26 +364,29 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         setDuration(Number.isFinite(video.duration) ? video.duration : 0);
 
         if (!resumeDoneRef.current) {
-            const duration = Number.isFinite(video.duration) ? video.duration : 0;
-            const target = duration > 5
-                ? Math.min(detail.currentPosition, duration - 2)
+            const totalDuration = Number.isFinite(video.duration) ? video.duration : 0;
+            const target = totalDuration > 5
+                ? Math.min(detail.currentPosition, totalDuration - 2)
                 : detail.currentPosition;
-            try {
-                video.currentTime = Math.max(0, target);
-            } catch {
+            const token = startProgrammaticSeek(video, Math.max(0, target), null);
+            if (token === null) {
                 resumeDoneRef.current = true;
-            }
-            if (!resumeDoneRef.current) {
+            } else {
+                resumeTokenRef.current = token;
                 if (resumeTimerRef.current !== null) {
                     window.clearTimeout(resumeTimerRef.current);
-                    resumeTimerRef.current = null;
                 }
                 resumeTimerRef.current = window.setTimeout(() => {
                     resumeTimerRef.current = null;
-                    if (!mountedRef.current) {
+                    if (!mountedRef.current || resumeTokenRef.current !== token) {
                         return;
                     }
+                    resumeTokenRef.current = null;
                     resumeDoneRef.current = true;
+                    if (activeProgrammaticTokenRef.current === token) {
+                        activeProgrammaticTokenRef.current = null;
+                        seekInFlightRef.current = false;
+                    }
                     const current = videoRef.current;
                     if (current) {
                         applyIndex(resolveCurrentIndex(current.currentTime));
@@ -612,22 +399,13 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
             applyIndex(resolveCurrentIndex(video.currentTime));
         }
         positionStore.set(video.currentTime);
-    }, [detail.currentPosition, applyIndex, resolveCurrentIndex, positionStore]);
+    }, [detail.currentPosition, applyIndex, resolveCurrentIndex, positionStore, startProgrammaticSeek]);
 
-    /** 暂停时写回进度，并让暂停菜单出现。 */
     const handlePause = React.useCallback((): void => {
         setPaused(true);
         saveProgress(true);
     }, [saveProgress]);
 
-    /**
-     * 开始播放后收起暂停菜单，并按本次起播位置决定是否重新武装自动暂停。
-     *
-     * 暂停后播放头通常已经越过当前句句尾，此时不能复位：否则下一次 timeupdate
-     * 会立刻再次暂停，「播放键」看起来失灵。只有播放头仍在本句内部（例如在句尾
-     * 前 0.1 秒就触发了暂停、或在句尾停留时刚打开自动暂停开关）才复位，
-     * 让这一句结束时仍然按预期暂停。越过句尾的情况由下标变化重新武装。
-     */
     const handlePlay = React.useCallback((): void => {
         setPaused(false);
         const video = videoRef.current;
@@ -635,13 +413,11 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         autoPauseArmedRef.current = !video || !line || video.currentTime < line.end - LOOP_EPSILON;
     }, [detail.subtitles]);
 
-    /** 播放结束时写回进度，并重新显示暂停菜单。 */
     const handleEnded = React.useCallback((): void => {
         setPaused(true);
         saveProgress(true);
     }, [saveProgress]);
 
-    /** 视频错误时显示格式提示。 */
     const handleError = React.useCallback((): void => {
         if (videoRef.current?.error?.code === 1) {
             return;
@@ -649,167 +425,38 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         setVideoError(true);
     }, []);
 
-    /** 视频有画面后收起错误提示。 */
     const handleLoadedData = React.useCallback((): void => {
         setVideoError(false);
     }, []);
 
-    /** 用户在字幕列表滚动。 */
-    const handleScroll = React.useCallback((): void => {
-        if (scrollPhaseRef.current === 'auto-scrolling') {
-            settleAutoScroll();
-            return;
-        }
-        scrollPhaseRef.current = 'browsing';
-        settleBrowsing();
-    }, [settleAutoScroll, settleBrowsing]);
-
-    /**
-     * 滚回当前句并恢复跟随。
-     */
-    const followCurrent = React.useCallback((): void => {
-        const index = currentIndexRef.current;
-        if (index < 0) {
-            return;
-        }
-        scrollPhaseRef.current = virtuosoRef.current ? 'auto-scrolling' : 'idle';
-        updateShowFollow(false);
-        if (browseSettleTimerRef.current !== null) {
-            window.clearTimeout(browseSettleTimerRef.current);
-            browseSettleTimerRef.current = null;
-        }
-        if (virtuosoRef.current) {
-            settleAutoScroll(550);
-            virtuosoRef.current.scrollToIndex({ index, align: 'start', behavior: 'smooth' });
-        }
-        tapFeedback();
-    }, [settleAutoScroll, updateShowFollow]);
-
-    /**
-     * 关闭查词条并清理定时器。
-     */
-    const closeDict = React.useCallback((): void => {
-        if (dictTimerRef.current !== null) {
-            window.clearTimeout(dictTimerRef.current);
-            dictTimerRef.current = null;
-        }
-        activeWordRef.current = null;
-        setDict(null);
-    }, []);
-
-    /**
-     * 安排查词条自动收起。
-     *
-     * @param delay 延迟毫秒数。
-     */
-    const scheduleDictHide = React.useCallback((delay: number): void => {
-        if (dictTimerRef.current !== null) {
-            window.clearTimeout(dictTimerRef.current);
-        }
-        dictTimerRef.current = window.setTimeout(() => {
-            dictTimerRef.current = null;
-            activeWordRef.current = null;
-            setDict(null);
-        }, delay);
-    }, []);
-
-    /**
-     * 查询单词并更新顶部查词条。
-     *
-     * @param raw 点击到的单词原文。
-     */
-    const lookupWord = React.useCallback((raw: string): void => {
-        const word = raw.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '');
-        if (word === '') {
-            return;
-        }
-        const key = word.toLowerCase();
-        activeWordRef.current = key;
-
-        const cached = dictCacheRef.current.get(key);
-        if (cached !== undefined) {
-            setDict({ word, data: cached, loading: false, error: null });
-            scheduleDictHide(9000);
-            return;
-        }
-
-        setDict({ word, data: null, loading: true, error: null });
-        if (dictTimerRef.current !== null) {
-            window.clearTimeout(dictTimerRef.current);
-            dictTimerRef.current = null;
-        }
-        const requestId = ++dictRequestIdRef.current;
-        mobileApi.lookupWord(word)
-            .then((result) => {
-                if (!mountedRef.current) {
-                    return;
-                }
-                dictCacheRef.current.set(key, result);
-                if (activeWordRef.current === key && dictRequestIdRef.current === requestId) {
-                    setDict({ word, data: result, loading: false, error: null });
-                    scheduleDictHide(9000);
-                }
-            })
-            .catch((reason: unknown) => {
-                if (!mountedRef.current) {
-                    return;
-                }
-                if (activeWordRef.current === key && dictRequestIdRef.current === requestId) {
-                    setDict({
-                        word,
-                        data: null,
-                        loading: false,
-                        error: reason instanceof Error ? reason.message : String(reason),
-                    });
-                    scheduleDictHide(12000);
-                }
-            });
-    }, [scheduleDictHide]);
-
-    /**
-     * 跳到指定字幕行。
-     *
-     * @param index 目标字幕下标。
-     * @param play 跳转后是否继续播放。
-     */
     const seekLine = React.useCallback((index: number, play = true): void => {
         const video = videoRef.current;
         const line = detail.subtitles[index];
         if (!video || !line) {
             return;
         }
-        programmaticSeekRef.current = true;
-        seekTargetIndexRef.current = index;
-        try {
-            video.currentTime = Math.max(0, line.start - SEEK_PREROLL);
-        } catch {
-            programmaticSeekRef.current = false;
-            seekTargetIndexRef.current = null;
+        // 用户明确跳句，提前结束旧的续播等待窗口避免误阻塞高亮
+        if (!resumeDoneRef.current) {
+            resumeDoneRef.current = true;
+            resumeTokenRef.current = null;
+            if (resumeTimerRef.current !== null) {
+                window.clearTimeout(resumeTimerRef.current);
+                resumeTimerRef.current = null;
+            }
+        }
+        const token = startProgrammaticSeek(video, Math.max(0, line.start - SEEK_PREROLL), index);
+        if (token === null) {
             return;
         }
-        scrollPhaseRef.current = 'idle';
-        updateShowFollow(false);
-        if (browseSettleTimerRef.current !== null) {
-            window.clearTimeout(browseSettleTimerRef.current);
-            browseSettleTimerRef.current = null;
-        }
-        if (autoScrollSettleTimerRef.current !== null) {
-            window.clearTimeout(autoScrollSettleTimerRef.current);
-            autoScrollSettleTimerRef.current = null;
-        }
+        resetFollowForSeek();
         closeDict();
         applyIndex(index);
         if (play) {
             void video.play().catch(() => undefined);
         }
         tapFeedback();
-    }, [detail.subtitles, applyIndex, closeDict, updateShowFollow]);
+    }, [detail.subtitles, applyIndex, closeDict, resetFollowForSeek, startProgrammaticSeek]);
 
-    /**
-     * 按句前后跳。
-     *
-     * @param delta -1 表示上一句，1 表示下一句。
-     */
     const stepLine = React.useCallback((delta: number): void => {
         if (detail.subtitles.length === 0) {
             return;
@@ -821,7 +468,6 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         seekLine(target, true);
     }, [detail.subtitles, seekLine, tender]);
 
-    /** 重播当前句。 */
     const replayCurrent = React.useCallback((): void => {
         if (detail.subtitles.length === 0) {
             return;
@@ -832,12 +478,6 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         seekLine(base < 0 ? 0 : base, true);
     }, [detail.subtitles, seekLine, tender]);
 
-    /**
-     * 切播放 / 暂停。
-     *
-     * 自绘控件后没有原生控件层的播放键，视频区和视频本身都走这里；
-     * iOS 上 play() 可能因手势时机被拒，失败时保持原状（paused 由 play/pause 事件维护）。
-     */
     const togglePlay = React.useCallback((): void => {
         closeDict();
         const video = videoRef.current;
@@ -851,14 +491,6 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         video.pause();
     }, [closeDict]);
 
-    /**
-     * 跳到指定秒数。
-     *
-     * 按「程序内 seek」标记，避免 repeat / 自动暂停用旧位置误判；
-     * 末尾留 0.3 秒，免得一跳就 ended。
-     *
-     * @param seconds 目标位置，单位秒。
-     */
     const seekTo = React.useCallback((seconds: number): void => {
         closeDict();
         const video = videoRef.current;
@@ -868,26 +500,19 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         const total = Number.isFinite(video.duration) ? video.duration : 0;
         const upper = total > 0 ? Math.max(0, total - 0.3) : seconds;
         const target = Math.max(0, Math.min(seconds, upper));
-        programmaticSeekRef.current = true;
-        seekTargetIndexRef.current = null;
-        try {
-            video.currentTime = target;
-        } catch {
-            // 元数据还没到等情形：放弃这次跳转，别把标记留在那里。
-            programmaticSeekRef.current = false;
+        if (!resumeDoneRef.current) {
+            resumeDoneRef.current = true;
+            resumeTokenRef.current = null;
+        }
+        const token = startProgrammaticSeek(video, target, null);
+        if (token === null) {
             return;
         }
         positionStore.set(target);
         applyIndex(resolveCurrentIndex(target));
         autoPauseArmedRef.current = true;
-    }, [applyIndex, resolveCurrentIndex, closeDict, positionStore]);
+    }, [applyIndex, resolveCurrentIndex, closeDict, positionStore, startProgrammaticSeek]);
 
-    /**
-     * 进入全屏。
-     *
-     * 去掉原生控件后没有系统全屏键，用户手势里调：iOS Safari 只提供带 webkit 前缀的
-     * 视频全屏 API，其它平台用标准 requestFullscreen。
-     */
     const enterFullscreen = React.useCallback((): void => {
         const video = videoRef.current;
         if (!video) {
@@ -901,109 +526,39 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         void video.requestFullscreen?.()?.catch(() => undefined);
     }, []);
 
-    /** 打开播放设置。 */
     const openSettings = React.useCallback((): void => setSettingsOpen(true), []);
-    /** 关闭播放设置。 */
     const closeSettings = React.useCallback((): void => setSettingsOpen(false), []);
+    const toggleEnglish = React.useCallback((): void => setShowEnglish((value) => !value), []);
 
-    /** 切换英文字幕轨道。 */
-    const toggleEnglish = React.useCallback((): void => {
-        setShowEnglish((value) => !value);
-    }, []);
-
-    /** 切换翻译显示；重新打开时重置失败记录并立即补当前窗口的翻译。 */
-    const toggleTranslation = React.useCallback((): void => {
-        const next = !showTranslationRef.current;
-        showTranslationRef.current = next;
-        setShowTranslation(next);
-        if (next) {
-            attemptedTranslationsRef.current.clear();
-            requestTranslationWindow(currentIndexRef.current >= 0 ? currentIndexRef.current : 0);
-        }
-    }, [requestTranslationWindow]);
-
-    /** 开关循环当前句（与每句自动暂停互斥）。 */
     const toggleRepeat = React.useCallback((): void => {
-        const next = !repeatOnRef.current;
-        repeatOnRef.current = next;
-        setRepeatOn(next);
-        if (next && autoPauseOnRef.current) {
-            autoPauseOnRef.current = false;
-            setAutoPauseOn(false);
-        }
+        const nextMode = toggleMobileSentenceEndMode(sentenceEndModeRef.current, 'repeat');
+        sentenceEndModeRef.current = nextMode;
+        setSentenceEndMode(nextMode);
         const line = currentIndexRef.current >= 0 ? detail.subtitles[currentIndexRef.current] : null;
-        repeatStartRef.current = next && line ? line.start : null;
-        repeatEndRef.current = next && line ? line.end : null;
+        repeatStartRef.current = nextMode === 'repeat' && line ? line.start : null;
+        repeatEndRef.current = nextMode === 'repeat' && line ? line.end : null;
     }, [detail.subtitles]);
 
-    /** 开关每句自动暂停（与循环当前句互斥）。 */
     const toggleAutoPause = React.useCallback((): void => {
-        const next = !autoPauseOnRef.current;
-        autoPauseOnRef.current = next;
-        setAutoPauseOn(next);
-        if (next && repeatOnRef.current) {
-            repeatOnRef.current = false;
-            setRepeatOn(false);
-            repeatStartRef.current = null;
-            repeatEndRef.current = null;
-        }
+        const nextMode = toggleMobileSentenceEndMode(sentenceEndModeRef.current, 'auto-pause');
+        sentenceEndModeRef.current = nextMode;
+        setSentenceEndMode(nextMode);
+        repeatStartRef.current = null;
+        repeatEndRef.current = null;
         autoPauseArmedRef.current = true;
     }, []);
 
-    /**
-     * 修改播放倍速。
-     *
-     * @param rate 目标倍速。
-     */
     const changeSpeed = React.useCallback((rate: number): void => {
         speedRef.current = rate;
         setSpeed(rate);
         savePref(PREF_KEYS.speed, String(rate));
     }, []);
 
-    /**
-     * 切换浅色 / 深色主题。
-     *
-     * @param next 目标主题。
-     */
     const changeTheme = React.useCallback((next: AppTheme): void => {
         setTheme(next);
         applyTheme(next);
         saveTheme(next);
     }, []);
-
-    React.useEffect(() => {
-        if (!dict) {
-            return;
-        }
-        const onPointerDown = (event: PointerEvent): void => {
-            if (!(event.target instanceof Node) || dictRef.current?.contains(event.target)) {
-                return;
-            }
-            if (event.target instanceof Element && event.target.closest('.word')) {
-                return;
-            }
-            closeDict();
-        };
-
-        const onScrollOrTouch = (event: Event): void => {
-            if (event.target instanceof Node && dictRef.current?.contains(event.target)) {
-                return;
-            }
-            closeDict();
-        };
-
-        document.addEventListener('pointerdown', onPointerDown, true);
-        window.addEventListener('scroll', onScrollOrTouch, { capture: true, passive: true });
-        window.addEventListener('touchmove', onScrollOrTouch, { passive: true });
-        window.addEventListener('wheel', onScrollOrTouch, { passive: true });
-        return () => {
-            document.removeEventListener('pointerdown', onPointerDown, true);
-            window.removeEventListener('scroll', onScrollOrTouch, true);
-            window.removeEventListener('touchmove', onScrollOrTouch);
-            window.removeEventListener('wheel', onScrollOrTouch);
-        };
-    }, [dict, closeDict]);
 
     React.useEffect(() => {
         const onPageHide = (): void => saveProgress(true);
@@ -1021,19 +576,18 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
     }, [saveProgress]);
 
     React.useEffect(() => {
-        detailEpochRef.current += 1;
-        translationsRef.current = {};
-        attemptedTranslationsRef.current.clear();
+        resetTranslations();
+        seekTokenRef.current += 1;
+        activeProgrammaticTokenRef.current = null;
+        resumeTokenRef.current = null;
         resumeDoneRef.current = detail.currentPosition <= 3;
         seekInFlightRef.current = false;
-        programmaticSeekRef.current = false;
         seekTargetIndexRef.current = null;
         lastSavedRef.current = -1;
         autoPauseArmedRef.current = true;
-    }, [detail.id, detail.currentPosition, detail.subtitles]);
+    }, [detail.id, detail.currentPosition, detail.subtitles, resetTranslations]);
 
     React.useEffect(() => {
-        // 进入播放页时把 video 节点固定下来：cleanup 里不再读可能已经变化的 ref。
         const video = videoRef.current;
         return () => {
             saveProgress(true, video);
@@ -1054,24 +608,13 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
                 window.clearTimeout(resumeTimerRef.current);
                 resumeTimerRef.current = null;
             }
-            if (autoScrollSettleTimerRef.current !== null) {
-                window.clearTimeout(autoScrollSettleTimerRef.current);
-                autoScrollSettleTimerRef.current = null;
-            }
-            if (browseSettleTimerRef.current !== null) {
-                window.clearTimeout(browseSettleTimerRef.current);
-                browseSettleTimerRef.current = null;
-            }
-            if (dictTimerRef.current !== null) {
-                window.clearTimeout(dictTimerRef.current);
-                dictTimerRef.current = null;
-            }
+            clearScrollTimers();
+            clearDictTimer();
         };
-    }, [saveProgress]);
+    }, [saveProgress, clearScrollTimers, clearDictTimer]);
 
-    const activeTranslations = translationsState.detailId === detail.id && translationsState.subtitles === detail.subtitles
-        ? translationsState.map
-        : {};
+    const repeatOn = sentenceEndMode === 'repeat';
+    const autoPauseOn = sentenceEndMode === 'auto-pause';
     const currentLine = currentIndex >= 0 ? detail.subtitles[currentIndex] : detail.subtitles[0] ?? null;
     const currentTranslation = currentLine
         ? (currentLine.zh || activeTranslations[currentIndex >= 0 ? currentIndex : 0] || '')

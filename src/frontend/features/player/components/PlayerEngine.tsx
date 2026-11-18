@@ -11,6 +11,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import HtmlPlayer from 'react-player/HtmlPlayer';
 import { usePlayer, type SeekRequest } from '@/frontend/features/player/playerStore';
+import {
+  beginStallRemount,
+  consumeStallRecovery,
+  INITIAL_STALL_RECOVERY_STATE,
+  reconcileRecoveryOnSeek,
+  type StallRecoveryState,
+} from '@/frontend/features/player/lib/stall-recovery-machine';
 import { useShallow } from 'zustand/react/shallow';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 
@@ -110,7 +117,7 @@ const PlayerEngine: React.FC<PlayerEngineProps> = ({
   // 卡死自愈状态
   const stallAttemptRef = useRef(0);
   const lastStallHealAtRef = useRef(0);
-  const pendingRecoveryRef = useRef<number | null>(null);
+  const recoveryStateRef = useRef<StallRecoveryState<SeekRequest>>(INITIAL_STALL_RECOVERY_STATE);
   const [recoveryKey, setRecoveryKey] = useState(0);
 
   // 当前媒体源已触发的恢复重建次数（source 变化时重置）
@@ -241,10 +248,10 @@ const PlayerEngine: React.FC<PlayerEngineProps> = ({
     if (!video) return;
     const next = seekTime;
 
-    if (lastSeekRef.current === next) return;
+    // 仅当收到 genuinely 新的 seekToken 时作废重挂载恢复；recoveryKey 引起的同引重跑不得清零。
+    recoveryStateRef.current = reconcileRecoveryOnSeek(recoveryStateRef.current, next);
 
-    // 新 seek 到达时，使未完成的卡死恢复失效（用户意图优先）
-    pendingRecoveryRef.current = null;
+    if (lastSeekRef.current === next) return;
 
     const now = Date.now();
     const delta = now - lastSeekTsRef.current;
@@ -326,7 +333,7 @@ const PlayerEngine: React.FC<PlayerEngineProps> = ({
 
   // source 变化时清除恢复状态与看门狗观察状态，避免旧代际状态残留
   useEffect(() => {
-    pendingRecoveryRef.current = null;
+    recoveryStateRef.current = INITIAL_STALL_RECOVERY_STATE;
     recoveryCountRef.current = 0;
     stallAttemptRef.current = 0;
     lastStallHealAtRef.current = 0;
@@ -412,7 +419,7 @@ const PlayerEngine: React.FC<PlayerEngineProps> = ({
       recoveryCountRef.current += 1;
       lastStallHealAtRef.current = Date.now();
       const target = video.currentTime;
-      pendingRecoveryRef.current = target;
+      recoveryStateRef.current = beginStallRemount(target, usePlayer.getState().seekTime);
       // 清空对旧元素的引用，避免恢复期间对已卸载元素采样/播放
       videoRef.current = null;
       videoGenerationRef.current = -1;
@@ -481,9 +488,9 @@ const PlayerEngine: React.FC<PlayerEngineProps> = ({
         }
 
         // 卡死重建恢复：仅当恢复目标仍有效（期间无新 seek）时回到目标时间并继续播放
-        const pending = pendingRecoveryRef.current;
+        const { targetTime: pending, nextState } = consumeStallRecovery(recoveryStateRef.current);
+        recoveryStateRef.current = nextState;
         if (video && pending !== null) {
-          pendingRecoveryRef.current = null;
           try {
             video.currentTime = pending;
           } catch (error) {

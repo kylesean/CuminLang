@@ -238,4 +238,54 @@ describe('mobile player & VideoBar state machines', () => {
 
         expect(mobileApi.saveProgress).toHaveBeenCalledWith(detail.id, 2, true);
     });
+
+    it('toggleRepeat 与 toggleAutoPause 严格互斥切换', () => {
+        const detail = makeDetail(5);
+        const { result } = renderHook(() => useWatchPlayer(detail));
+
+        act(() => result.current.toggleRepeat());
+        expect(result.current.repeatOn).toBe(true);
+        expect(result.current.autoPauseOn).toBe(false);
+
+        act(() => result.current.toggleAutoPause());
+        expect(result.current.repeatOn).toBe(false);
+        expect(result.current.autoPauseOn).toBe(true);
+
+        act(() => result.current.toggleAutoPause());
+        expect(result.current.repeatOn).toBe(false);
+        expect(result.current.autoPauseOn).toBe(false);
+    });
+
+    it('初始续播未落地时用户主动 seekLine，旧续播超时兜底不会把高亮拉回旧位置', () => {
+        const detail = { ...makeDetail(10), currentPosition: 10 };
+        const { result } = renderHook(() => useWatchPlayer(detail));
+        const mockVideo = {
+            currentTime: 0,
+            duration: 100,
+            playbackRate: 1,
+            paused: true,
+            play: vi.fn().mockResolvedValue(undefined),
+            pause: vi.fn(),
+            removeAttribute: vi.fn(),
+            load: vi.fn(),
+        } as unknown as HTMLVideoElement;
+        result.current.videoRef.current = mockVideo;
+
+        // 触发初始续播定位（目标第 5 句 = 10s），1500ms 定时器在途
+        act(() => {
+            result.current.handleLoadedMetadata();
+        });
+        // 用户紧接主动跳转到第 0 句
+        act(() => {
+            result.current.seekLine(0, false);
+        });
+        expect(result.current.currentIndex).toBe(0);
+
+        // 推进超过 1500ms 兜底阈值：旧续播 timer 若未带 token 过滤会按 currentTime 重算
+        mockVideo.currentTime = 10;
+        act(() => {
+            vi.advanceTimersByTime(1600);
+        });
+        expect(result.current.currentIndex).toBe(0);
+    });
 });

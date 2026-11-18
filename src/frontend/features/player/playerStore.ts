@@ -21,6 +21,7 @@ import {
   resolveSentenceEndStage,
   type SentenceEndBooleanMode,
 } from '@/frontend/features/player/lib/sentence-end-mode';
+import { resolvePlaybackIntervention } from '@/frontend/features/player/lib/playback-intervention';
 
 /**
  * seek 请求：目标时间与是否继续播放的意图。
@@ -519,10 +520,12 @@ export const usePlayer = create<PlayerState>((set, get) => {
     time,
     target,
     play = true,
+    tailPreview = null,
   }: {
     time: number;
     target?: Sentence;
     play?: boolean;
+    tailPreview?: TailPreviewState | null;
   }) => {
     clearShadowTimer();
     clearCurrentLockTimer();
@@ -540,6 +543,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
         exactPlayTime: time,
         timeOverride: { active: true, time },
         currentLock: buildCurrentLock(target),
+        tailPreview,
       },
     }));
   };
@@ -814,7 +818,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     return false;
   };
 
-  // 时间驱动：尾部预览 → 练习片段 → 瞬态播放计划 → 句末模式 → 正常回写
+  // 时间驱动：由 resolvePlaybackIntervention 仲裁唯一互斥阶段，再分派执行
   const onTimeUpdate = () => {
     const state = get();
     const { playing, currentSentence, srtTender, sentenceLoop } = state;
@@ -822,8 +826,16 @@ export const usePlayer = create<PlayerState>((set, get) => {
     const skipGap = useTrainingModeStore.getState().skipGap;
     const { seekInFlight, onPlaySeekTime, tailPreview, currentLock, transientPlan } = state.internal;
 
-    // 1) 尾部预览优先
-    if (tailPreview?.active) {
+    const intervention = resolvePlaybackIntervention({
+      tailPreviewActive: Boolean(tailPreview?.active),
+      hasClipStopBound: clipStopBound !== null,
+      hasSrtTender: srtTender !== null,
+      seekInFlight,
+      onPlaySeekTime,
+      hasTransientPlan: transientPlan !== null,
+    });
+
+    if (intervention === 'tail-preview' && tailPreview) {
       const now = Date.now();
       if (now >= tailPreview.untilTs) {
         set((prev) => ({
@@ -841,8 +853,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
       return;
     }
 
-    // 1.5) 练习工坊受控试听区间：严格用真实播放时间截断在句末
-    if (clipStopBound) {
+    if (intervention === 'practice-clip' && clipStopBound) {
       if (!playing) {
         return;
       }
@@ -876,15 +887,14 @@ export const usePlayer = create<PlayerState>((set, get) => {
       return;
     }
 
-    if (!srtTender) return;
-    // seek 在途 / 自动暂停待续播：播放时间尚不代表"本句已播完"，不做任何句末判定
-    if (seekInFlight || onPlaySeekTime !== null) return;
+    if (intervention === 'idle' || intervention === 'seeking' || !srtTender) {
+      return;
+    }
 
     const effectiveTime = getEffectiveTime();
     const rate = state.playbackRate || 1;
 
-    // 2) 瞬态播放计划：覆盖一切全局模式
-    if (transientPlan) {
+    if (intervention === 'transient-plan' && transientPlan) {
       // 遍数已完成且不跳过空隙：等待自然播放进入下一单元再续开新一轮
       // （等待期间计划分支会拦截常规回写，这里按单元边界决定推进或末句回环）
       if (transientPlan.completed) {
@@ -1959,20 +1969,18 @@ export const usePlayer = create<PlayerState>((set, get) => {
       const previewMs = options?.previewMs ?? 1000;
       const epsilon = 0.05;
 
-      // 预览尾部：使用带目标的 seek，确保高亮不被 getByTime 干扰；先发起 seekToTarget 再写入 tailPreview，
-      // 避免被 seekToTarget 的清理逻辑清掉本次预览契约。
-      state.seekToTarget({ time: Math.max(end - epsilon, 0), target: updated });
-      set((prev) => ({
-        internal: {
-          ...prev.internal,
-          tailPreview: {
-            active: true,
-            untilTs: Date.now() + previewMs,
-            returnTarget: updated,
-            resumePlaying: state.playing,
-          }
-        }
-      }));
+      // 原子写入目标位置跳转与尾部预览，消除两步写入之间的顺序脆弱性。
+      clearClipStopBound(true);
+      applyTargetedSeek({
+        time: Math.max(end - epsilon, 0),
+        target: updated,
+        tailPreview: {
+          active: true,
+          untilTs: Date.now() + previewMs,
+          returnTarget: updated,
+          resumePlaying: state.playing,
+        },
+      });
     },
 
     // 别名
