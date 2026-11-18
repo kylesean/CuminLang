@@ -22,6 +22,8 @@
     "folderNoMediaFound": "No playable media files found in the selected folder",
     "folderBadge": "Folder",
     "recentPlayedVideo": "Recently played: {{name}}",
+    "backToLibrary": "Back to library",
+    "emptyFolder": "No playable videos in this folder",
     "deleteConfirmTitle": "Delete watch record?",
     "deleteConfirmDesc": "Videos inside the library's video folder are deleted from disk along with the record, and this cannot be undone. Videos outside the library only lose the record; the original file is kept.",
     "deleteFolderConfirmDesc": "All watch records in this folder will be deleted. Videos inside the library's video folder are deleted from disk along with their records, and this cannot be undone. Videos outside the library only lose their records; the original files are kept.",

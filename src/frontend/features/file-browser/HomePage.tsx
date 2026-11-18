@@ -72,6 +72,19 @@ const HomePage = () => {
         }
     }
 
+    /**
+     * 打开聚合目录的列表页。
+     *
+     * 根列表把同目录视频合成一张「文件夹」卡片；点它必须进入列表页，
+     * 否则用户只能播放代表视频，其余视频无从访问。
+     *
+     * @param folderPath 目录绝对路径。
+     */
+    function handleOpenFolder(folderPath: string): void {
+        if (navigatingRef.current) return;
+        navigate(`/folder/${encodeURIComponent(folderPath)}`);
+    }
+
     const {
         data: vpsBasic,
         error: vpsBasicError,
@@ -247,7 +260,9 @@ const HomePage = () => {
                                     {vps?.slice(0, 3).map((v) => (
                                         <ProjectListCard
                                             key={v.id}
-                                            onSelected={() => handleClickById(v.id)}
+                                            onSelected={() => (
+                                                v.isFolder ? handleOpenFolder(v.basePath) : handleClickById(v.id)
+                                            )}
                                             video={v}
                                         />
                                     ))}
@@ -269,7 +284,9 @@ const HomePage = () => {
                                         {rest.map((v) => (
                                             <ProjectListItem
                                                 key={v.id}
-                                                onSelected={() => handleClickById(v.id)}
+                                                onSelected={() => (
+                                                    v.isFolder ? handleOpenFolder(v.basePath) : handleClickById(v.id)
+                                                )}
                                                 video={v}
                                             />
                                         ))}

@@ -30,6 +30,7 @@ import {
 } from '@/frontend/app/lib/startup-theme';
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
 import HomePage from '@/frontend/features/file-browser/HomePage';
+import FolderPage from '@/frontend/features/file-browser/FolderPage';
 import { useDesktopLyricsBridge } from '@/frontend/features/desktop-lyrics/useDesktopLyricsBridge';
 import { APP_SHELL_TESTIDS } from '@/common/constants/qa-testids';
 
@@ -246,6 +247,11 @@ export const App = () => {
                                 <Routes>
                             <Route path="/" element={<Eb key="home-root"><HomePage /></Eb>} />
                             <Route path="home" element={<Eb key="home"><HomePage /></Eb>} />
+                            {/* 文件夹路径作为单个编码段传入，避免 Windows 反斜杠与空格被路由拆段 */}
+                            <Route
+                                path="folder/:folderPath"
+                                element={<Eb key="folder"><FolderPage /></Eb>}
+                            />
                             <Route element={<TitleBarLayout />}>
                                 {/* 用 splat 承接 /learn 子路径：同一 Route 命中，切到学习视图时页面组件不重挂载 */}
                                 <Route
