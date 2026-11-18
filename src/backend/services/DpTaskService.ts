@@ -220,9 +220,16 @@ export class DpTaskServiceImpl implements DpTaskService {
             updated_at: TimeUtil.timeUtc(),
         };
         if (this.cache.has(task.id)) {
+            const previous = this.cache.get(task.id);
+            const resolvedProgressMeta = updatedTask.progressMeta !== undefined
+                ? updatedTask.progressMeta
+                : updatedTask.progress !== undefined
+                    ? null
+                    : previous?.progressMeta ?? null;
             this.cache.set(task.id, {
-                ...this.cache.get(task.id),
+                ...previous,
                 ...updatedTask,
+                progressMeta: resolvedProgressMeta,
             });
         }
         // progressMeta 只走内存与 IPC：dp_task 表没有对应列，落库前必须剔除。
@@ -347,7 +354,8 @@ export class DpTaskServiceImpl implements DpTaskService {
             this.update({
                 id,
                 status: DpTaskState.CANCELLED,
-                progress: '任务取消'
+                progress: '任务取消',
+                progressMeta: { code: 'cancelled' },
             });
             throw new CancelByUserError();
         }

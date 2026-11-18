@@ -408,7 +408,10 @@ export default class EnglishDictionaryService {
                         void terminateAndFail(err instanceof Error ? err : new CancelByUserError('任务已取消'));
                         return;
                     }
-                    this.dpTaskService.process(taskId, { progress: `解析 ${msg.file}…` });
+                    this.dpTaskService.process(taskId, {
+                        progress: `解析 ${msg.file}…`,
+                        progressMeta: { code: 'wordnetParsingFile', params: { file: msg.file } },
+                    });
                 } else if (msg.type === 'done') {
                     clearInterval(cancelCheckTimer);
                     if (!settled) {

@@ -293,6 +293,7 @@
             "wordnetDownloading": "下载 WordNet 3.1（{{percent}}%）…",
             "wordnetExtracting": "解压 WordNet 数据…",
             "wordnetBuilding": "构建本地词典…",
+            "wordnetParsingFile": "解析 {{file}}…",
             "done": "已完成",
             "cancelled": "任务取消",
             "failed": "任务失败"

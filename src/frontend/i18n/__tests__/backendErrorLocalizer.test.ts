@@ -238,4 +238,22 @@ describe('backendErrorLocalizer', () => {
             progressMeta: { code: 'wordnetDownloading', percent: 42 },
         })).toBe('下载 WordNet 3.1（42%）…');
     });
+
+    it('formatDpTaskProgress 在缺少 progressMeta 时回退翻译任务进度文案（不残余中文）', async () => {
+        await applyLanguageSetting('en-US');
+        expect(formatDpTaskProgress({ progress: '任务取消', progressMeta: null })).toBe('Cancelled');
+        expect(formatDpTaskProgress({ progress: '任务创建成功', progressMeta: undefined })).toBe('Task created');
+        expect(formatDpTaskProgress({ progress: '字幕生成完成' })).toBe('Subtitles generated');
+        expect(formatDpTaskProgress({ progress: '字幕生成失败' })).toBe('Subtitle generation failed');
+        expect(formatDpTaskProgress({ progress: '英英释义包安装失败' })).toBe(
+            'English-English dictionary pack installation failed',
+        );
+        expect(formatDpTaskProgress({ progress: '识别中 2/4（50%）' })).toBe('Recognizing speech 2/4 (50%)');
+        expect(formatDpTaskProgress({ progress: '下载中 40%' })).toBe('Downloading 40%');
+        expect(formatDpTaskProgress({ progress: '解析 data.noun…' })).toBe('Parsing data.noun…');
+
+        await applyLanguageSetting('zh-CN');
+        expect(formatDpTaskProgress({ progress: '任务取消', progressMeta: null })).toBe('任务取消');
+        expect(formatDpTaskProgress({ progress: '识别中 2/4（50%）' })).toBe('识别中 2/4（50%）');
+    });
 });

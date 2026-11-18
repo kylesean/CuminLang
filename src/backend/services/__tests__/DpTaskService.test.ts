@@ -269,4 +269,28 @@ describe('任务状态终态守卫与 cache-miss 读路径', () => {
         // 首次立即刷写失败后应转为退避定时重试，而不是在微任务里无限连刷。
         expect(updateSpy).toHaveBeenCalledTimes(1);
     });
+
+    it('checkCancel 覆盖 progressMeta 为 cancelled，且纯 progress 更新会清除旧阶段的陈旧 progressMeta', async () => {
+        const taskId = await service.create();
+        service.process(taskId, {
+            progress: '下载中 40%',
+            progressMeta: { code: 'downloading', percent: 40 },
+        });
+        expect((await service.detail(taskId))?.progressMeta).toEqual({ code: 'downloading', percent: 40 });
+
+        service.process(taskId, { progress: '纯文本阶段' });
+        expect((await service.detail(taskId))?.progressMeta).toBeNull();
+
+        service.process(taskId, {
+            progress: '下载中 80%',
+            progressMeta: { code: 'downloading', percent: 80 },
+        });
+        service.cancel(taskId);
+        expect(() => service.checkCancel(taskId)).toThrow();
+
+        const detail = await service.detail(taskId);
+        expect(detail?.status).toBe(DpTaskState.CANCELLED);
+        expect(detail?.progress).toBe('任务取消');
+        expect(detail?.progressMeta).toEqual({ code: 'cancelled' });
+    });
 });

@@ -79,7 +79,17 @@ const EXACT_MESSAGES: ReadonlyMap<string, string> = new Map([
     ['英英释义包已安装', 'englishDict.alreadyInstalled'],
     ['英英释义包正在下载', 'englishDict.downloading'],
     ['英英释义包安装完成', 'englishDict.installed'],
+    ['英英释义包安装失败', 'dpTask.englishDictFailed'],
     ['WordNet 归档缺少 dict 目录', 'englishDict.missingDictDir'],
+    ['任务创建成功', 'dpTask.taskCreated'],
+    ['任务取消', 'dpTask.cancelled'],
+    ['读取媒体时长…', 'dpTask.readingDuration'],
+    ['音文对账与断句整理…', 'dpTask.reconciling'],
+    ['字幕生成完成', 'dpTask.subtitleDone'],
+    ['字幕生成失败', 'dpTask.subtitleFailed'],
+    ['下载 WordNet 3.1…', 'dpTask.wordnetPreparing'],
+    ['解压 WordNet 数据…', 'dpTask.wordnetExtracting'],
+    ['构建本地词典…', 'dpTask.wordnetBuilding'],
     ['语义模型正在下载，请等待完成后再试', 'localEmbedding.downloading'],
     ['语义模型校验失败，请重试', 'localEmbedding.checksumFailed'],
     ['下载失败', 'download.failed'],
@@ -369,6 +379,21 @@ const PATTERN_RULES: readonly PatternRule[] = [
     {
         pattern: /^不存在内置预设：(.+)$/,
         build: (m) => ({ key: 'chat.missingPreset', params: { id: m[1] } }),
+    },
+    {
+        pattern: /^识别中 (\d+)\/(\d+)（(\d+)%）$/,
+        build: (m) => ({
+            key: 'dpTask.transcribingChunk',
+            params: { current: Number(m[1]), total: Number(m[2]), percent: Number(m[3]) },
+        }),
+    },
+    {
+        pattern: /^下载中 (\d+)%$/,
+        build: (m) => ({ key: 'dpTask.downloadingPercent', params: { percent: Number(m[1]) } }),
+    },
+    {
+        pattern: /^解析 (.+)…$/,
+        build: (m) => ({ key: 'dpTask.wordnetParsingFile', params: { file: m[1] } }),
     },
 ];
 

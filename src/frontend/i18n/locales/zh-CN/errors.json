@@ -207,5 +207,20 @@
         "missingSubtitleLines": "AI 复盘没有可用的真实字幕句",
         "invalidParaphraseReview": "模型未返回有效的复述点评",
         "invalidRolePlayReview": "模型未返回有效的场景回应点评"
+    },
+    "dpTask": {
+        "taskCreated": "任务创建成功",
+        "cancelled": "任务取消",
+        "readingDuration": "读取媒体时长…",
+        "reconciling": "音文对账与断句整理…",
+        "subtitleDone": "字幕生成完成",
+        "subtitleFailed": "字幕生成失败",
+        "englishDictFailed": "英英释义包安装失败",
+        "wordnetPreparing": "下载 WordNet 3.1…",
+        "wordnetExtracting": "解压 WordNet 数据…",
+        "wordnetBuilding": "构建本地词典…",
+        "transcribingChunk": "识别中 {{current}}/{{total}}（{{percent}}%）",
+        "downloadingPercent": "下载中 {{percent}}%",
+        "wordnetParsingFile": "解析 {{file}}…"
     }
 }

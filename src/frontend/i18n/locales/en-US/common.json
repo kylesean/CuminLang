@@ -293,6 +293,7 @@
             "wordnetDownloading": "Downloading WordNet 3.1 ({{percent}}%)…",
             "wordnetExtracting": "Extracting WordNet data…",
             "wordnetBuilding": "Building local dictionary…",
+            "wordnetParsingFile": "Parsing {{file}}…",
             "done": "Completed",
             "cancelled": "Cancelled",
             "failed": "Failed"

@@ -207,5 +207,20 @@
         "missingSubtitleLines": "AI recap had no available subtitle lines",
         "invalidParaphraseReview": "Model did not return a valid paraphrase review",
         "invalidRolePlayReview": "Model did not return a valid role-play review"
+    },
+    "dpTask": {
+        "taskCreated": "Task created",
+        "cancelled": "Cancelled",
+        "readingDuration": "Reading media duration…",
+        "reconciling": "Aligning transcript & segmenting lines…",
+        "subtitleDone": "Subtitles generated",
+        "subtitleFailed": "Subtitle generation failed",
+        "englishDictFailed": "English-English dictionary pack installation failed",
+        "wordnetPreparing": "Downloading WordNet 3.1…",
+        "wordnetExtracting": "Extracting WordNet data…",
+        "wordnetBuilding": "Building local dictionary…",
+        "transcribingChunk": "Recognizing speech {{current}}/{{total}} ({{percent}}%)",
+        "downloadingPercent": "Downloading {{percent}}%",
+        "wordnetParsingFile": "Parsing {{file}}…"
     }
 }
