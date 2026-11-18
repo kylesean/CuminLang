@@ -1,0 +1,50 @@
+pkgname=cuminlang
+pkgver=__PKGVER__
+pkgrel=1
+pkgdesc='Immersive media player and AI-native language learning desktop app'
+arch=('x86_64')
+url='https://github.com/kylesean/CuminLang'
+license=('AGPL-3.0-only')
+depends=(
+  'alsa-lib'
+  'at-spi2-core'
+  'gtk3'
+  'libnotify'
+  'libxss'
+  'libxtst'
+  'nss'
+  'xdg-utils'
+)
+options=('!strip' '!debug')
+source=('cuminlang-app.tar.gz' 'cuminlang-icons.tar.gz' 'cuminlang.desktop')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -dm755 "${pkgdir}/usr/lib/cuminlang"
+  cp -a "${srcdir}/CuminLang-linux-x64/." "${pkgdir}/usr/lib/cuminlang/"
+
+  install -dm755 "${pkgdir}/usr/bin"
+  cat > "${pkgdir}/usr/bin/cuminlang" <<'EOF'
+#!/bin/sh
+exec /usr/lib/cuminlang/cuminlang "$@"
+EOF
+  chmod 755 "${pkgdir}/usr/bin/cuminlang"
+
+  install -Dm644 "${srcdir}/cuminlang.desktop" "${pkgdir}/usr/share/applications/cuminlang.desktop"
+
+  if [ -f "${srcdir}/CuminLang-linux-x64/LICENSE" ]; then
+    install -Dm644 "${srcdir}/CuminLang-linux-x64/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  fi
+
+  local size
+  for size in 16x16 24x24 32x32 48x48 64x64 128x128 256x256; do
+    if [ -f "${srcdir}/icons/${size}.png" ]; then
+      install -Dm644 "${srcdir}/icons/${size}.png" \
+        "${pkgdir}/usr/share/icons/hicolor/${size}/apps/cuminlang.png"
+    fi
+  done
+  if [ -f "${srcdir}/icons/icon.svg" ]; then
+    install -Dm644 "${srcdir}/icons/icon.svg" \
+      "${pkgdir}/usr/share/icons/hicolor/scalable/apps/cuminlang.svg"
+  fi
+}

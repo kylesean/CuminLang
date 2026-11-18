@@ -4,7 +4,7 @@ CuminLang 基于 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) �
 
 ## 上游派生致谢
 
-- **[solidSpoon/DashPlayer](https://github.com/solidSpoon/DashPlayer)**（AGPL-3.0）：CuminLang 最初基于 DashPlayer 早期版本派生，随后独立重构、扩展并持续维护。
+- **[solidSpoon/DashPlayer](https://github.com/solidSpoon/DashPlayer)**（AGPL-3.0）：CuminLang 基于 DashPlayer 提交 `2cf57c694b0015b51730c0c03abdfbc141feaf8b`（2026-11-07）派生，并从提交 `0bd93e61bcf70fbe94b2ae1a9ce28d25f3224e5e` 起独立重构、扩展并持续维护。
 
 ## 随包资源与数据
 

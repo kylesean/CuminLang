@@ -843,7 +843,7 @@ async function installWhisperRuntimeFromRelease({basePath, exePath, markerPath, 
     const markerPath = path.join(basePath, WHISPER_RUNTIME_MARKER);
 
     // 核显运行时仅覆盖主流桌面平台；其余平台由 sherpa-onnx 引擎兜底
-    const supportedArchs = { linux: ['x64'], win32: ['x64'], darwin: ['arm64', 'x64'] };
+    const supportedArchs = { linux: ['x64'], win32: ['x64'], darwin: ['arm64'] };
     if (!supportedArchs[platform]?.includes(arch)) {
         console.info(chalk.yellow(`=> whisper.cpp 暂不提供 ${platform}/${arch} 运行时，已跳过；whisper.cpp 引擎在该平台不可用，请使用 sherpa-onnx 引擎`));
     } else {

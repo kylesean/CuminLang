@@ -246,17 +246,23 @@ const config: ForgeConfig = {
                 categories: ['AudioVideo', 'Video'],
             },
         }),
-        new MakerWix({
-            name: 'CuminLang',
-            description: 'Immersive media player and AI-native language learning desktop app',
-            manufacturer: 'kylesean',
-            version: packageJson.version,
-            icon: './assets/icons/icon.ico',
-            exe: 'cuminlang.exe',
-            ui: {
-                chooseDirectory: true,
-            },
-        }),
+        // @electron-forge/maker-wix（WiX v3）仅支持 x86 / x64 / ia64，会在 arm64 上抛 Invalid arch: arm64；
+        // Windows ARM64 通过上方的 MakerSquirrel 产出带架构后缀的 `-arm64-Setup.exe` 安装包。
+        ...(process.env.npm_config_arch === 'arm64' || process.argv.includes('--arch=arm64')
+            ? []
+            : [
+                  new MakerWix({
+                      name: 'CuminLang',
+                      description: 'Immersive media player and AI-native language learning desktop app',
+                      manufacturer: 'kylesean',
+                      version: packageJson.version,
+                      icon: './assets/icons/icon.ico',
+                      exe: 'cuminlang.exe',
+                      ui: {
+                          chooseDirectory: true,
+                      },
+                  }),
+              ]),
     ],
     plugins: [
         new VitePlugin({
@@ -311,19 +317,29 @@ const config: ForgeConfig = {
             const version = packageJson.version;
             for (const result of makeResults) {
                 if (result.platform !== 'win32') continue;
-                for (let i = 0; i < result.artifacts.length; i++) {
-                    const oldPath = result.artifacts[i];
-                    if (!oldPath.toLowerCase().endsWith('.msi')) continue;
+                const nextArtifacts: string[] = [];
+                for (const oldPath of result.artifacts) {
+                    const lower = oldPath.toLowerCase();
+                    if (lower.endsWith('.nupkg') || path.basename(oldPath) === 'RELEASES') {
+                        // Drop Squirrel update-feed files so win32 x64 and arm64 never overwrite each other on GitHub Releases
+                        // (CheckUpdate uses the GitHub Releases API directly rather than Squirrel RELEASES feeds).
+                        continue;
+                    }
                     const dir = path.dirname(oldPath);
                     const arch = result.arch; // 'x64' | 'ia32' | 'arm64'
-                    const newPath = path.join(dir, `CuminLang-${version}-${arch}.msi`);
+                    let newPath = oldPath;
+                    if (lower.endsWith('.msi')) {
+                        newPath = path.join(dir, `CuminLang-${version}-${arch}.msi`);
+                    } else if (lower.endsWith('.exe')) {
+                        newPath = path.join(dir, `CuminLang-${version}-${arch}-Setup.exe`);
+                    }
                     if (oldPath !== newPath) {
                         await fs.rename(oldPath, newPath);
-                        // 更新 artifacts，确保 Publisher 上传重命名后的文件
-                        result.artifacts[i] = newPath;
-                        console.log(`Renamed MSI: ${oldPath} -> ${newPath}`);
+                        console.log(`Renamed Windows artifact: ${oldPath} -> ${newPath}`);
                     }
+                    nextArtifacts.push(newPath);
                 }
+                result.artifacts = nextArtifacts;
             }
             return makeResults;
         },

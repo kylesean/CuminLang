@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=CuminLang
+Comment=Immersive media player and AI-native language learning desktop app
+Exec=/usr/bin/cuminlang %U
+Icon=cuminlang
+Type=Application
+Terminal=false
+StartupNotify=true
+StartupWMClass=cuminlang
+Categories=AudioVideo;Education;Languages;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;audio/mpeg;audio/mp4;audio/wav;audio/flac;
+Keywords=language;learning;player;subtitles;ai;whisper;

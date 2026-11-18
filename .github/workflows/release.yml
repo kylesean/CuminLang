@@ -46,22 +46,53 @@ jobs:
       - name: Unit tests
         run: pnpm run test:coverage
 
-  build:
+  # 在并行矩阵构建之前创建唯一的 draft Release，避免多平台并发 publish 时重复建 Release
+  prepare:
     needs: verify
+    if: ${{ !inputs.package_only }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Github checkout
+        uses: actions/checkout@v5
+      - name: Resolve version and ensure draft release
+        id: meta
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists"
+          else
+            gh release create "$TAG" \
+              --draft \
+              --target "$GITHUB_SHA" \
+              --title "CuminLang ${TAG}" \
+              --generate-notes
+          fi
+
+  build:
+    needs: [verify, prepare]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
     # whisper.cpp 运行时不再随发版构建：它由 whisper-runtime.yml 发布成 tag = 配方的
-    # prerelease Release，这里的 yarn download 只做下载（缺产物会带着 tag 信息显式失败，
-    # 不会静默发出一个默认识别引擎不可用的包）。所以本任务不再依赖运行时任务、也没有
-    # “只跑运行时矩阵”的开关（那个场景请直接跑 whisper-runtime.yml）
+    # prerelease Release，这里的 download 只做下载（缺产物会带着 tag 信息显式失败，
+    # 不会静默发出一个默认识别引擎不可用的包）。
     strategy:
-      # 某个平台构建失败时，其他平台继续构建发布，不互相拖累
+      # 某个平台构建失败时，其他平台继续构建发布，但最终 publish job 不会发布不完整的草稿
       fail-fast: false
       matrix:
         os:
           [
-            { name: 'linux', image: 'ubuntu-latest' },
-            { name: 'windows', image: 'windows-2022' },
-            { name: 'macos-x64', image: 'macos-15-intel' },
-            { name: 'macos-arm64', image: 'macos-15' },
+            { name: 'linux', image: 'ubuntu-latest', arch: 'x64', is_windows: false, vs_arch: '' },
+            { name: 'windows-x64', image: 'windows-2022', arch: 'x64', is_windows: true, vs_arch: 'x64' },
+            { name: 'windows-arm64', image: 'windows-2022', arch: 'arm64', is_windows: true, vs_arch: 'arm64 -host_arch=amd64' },
+            { name: 'macos-arm64', image: 'macos-15', arch: 'arm64', is_windows: false, vs_arch: '' },
           ]
     runs-on: ${{ matrix.os.image }}
     steps:
@@ -75,37 +106,77 @@ jobs:
           # 与 ci.yml 同源：只认 .nvmrc，避免发版环境与门禁环境出现版本漂移
           node-version-file: .nvmrc
           cache: pnpm
-      - name: Install WiX Toolset (Windows only)
-        if: matrix.os.name == 'windows'
+      - name: Install WiX Toolset (Windows x64 only)
+        if: matrix.os.name == 'windows-x64'
         run: |
           choco install wixtoolset
           # pwsh 里环境变量必须写 $env:GITHUB_PATH；裸 $GITHUB_PATH 是未定义 PS 变量，
           # 重定向会静默失败
           Add-Content $env:GITHUB_PATH "C:\Program Files (x86)\WiX Toolset v3.11\bin"
-      # AppImage maker (@reforged/maker-appimage) 需要系统提供 mksquashfs，
-      # 显式安装而不依赖 runner 镜像恰好预装
-      - name: Install squashfs-tools (Linux only)
+      # AppImage maker (@reforged/maker-appimage) 需要 mksquashfs，rpm 需要 rpmbuild
+      - name: Install Linux packaging tools (Linux only)
         if: matrix.os.name == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y squashfs-tools
+        run: sudo apt-get update && sudo apt-get install -y squashfs-tools rpm
       - name: Install dependencies
-        if: matrix.os.name != 'windows'
+        if: ${{ !matrix.os.is_windows }}
+        env:
+          SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
         run: pnpm install --frozen-lockfile
       - name: Install dependencies with Visual Studio (Windows only)
-        if: matrix.os.name == 'windows'
+        if: matrix.os.is_windows
         shell: cmd
-        run: call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 && pnpm install --frozen-lockfile
-      - name: Publish app
-        if: matrix.os.name != 'windows'
+        env:
+          SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
+        run: call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.os.vs_arch }} && pnpm install --frozen-lockfile
+      - name: Package or publish app
+        if: ${{ !matrix.os.is_windows }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 主进程 bundle 已大过 V8 默认 ~2GB 堆上限，构建时 OOM（v6.7.0 arm64 dmg 缺失的直接原因）
           NODE_OPTIONS: --max-old-space-size=4096
+          npm_config_arch: ${{ matrix.os.arch }}
         # package_only：只跑 make 验证打包，不做 GitHub 发布
-        run: pnpm run ${{ inputs.package_only && 'make' || 'publish' }}
-      - name: Publish app with Visual Studio (Windows only)
-        if: matrix.os.name == 'windows'
+        run: pnpm run build:mobile && pnpm run download && pnpm exec electron-forge ${{ inputs.package_only && 'make' || 'publish' }} --arch=${{ matrix.os.arch }}
+      - name: Package or publish app with Visual Studio (Windows only)
+        if: matrix.os.is_windows
         shell: cmd
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
-        run: call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 && pnpm run ${{ inputs.package_only && 'make' || 'publish' }}
+          npm_config_arch: ${{ matrix.os.arch }}
+        run: call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=${{ matrix.os.vs_arch }} && pnpm run build:mobile && pnpm run download && pnpm exec electron-forge ${{ inputs.package_only && 'make' || 'publish' }} --arch=${{ matrix.os.arch }}
+      - name: Build Arch Linux / Omarchy package (Linux only)
+        if: matrix.os.name == 'linux'
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p out/make/arch/x86_64
+          docker run --rm \
+            -e VERSION="${VERSION}" \
+            -v "$PWD:/work" \
+            -w /work \
+            archlinux:latest \
+            bash -lc '
+              pacman -Syu --noconfirm base-devel zstd &&
+              useradd -m builder &&
+              chown -R builder:builder /work/out/make/arch &&
+              su - builder -c "cd /work && ./packaging/arch/build-pkg.sh \"${VERSION}\" /work/out/CuminLang-linux-x64 /work/out/make/arch/x86_64"
+            '
+      - name: Upload Arch Linux package (Linux only)
+        if: matrix.os.name == 'linux' && !inputs.package_only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          gh release upload "v${VERSION}" out/make/arch/x86_64/*.pkg.tar.zst --clobber
+
+  # 所有平台均构建上传完成后，才将 draft Release 正式对外发布为 Latest
+  publish:
+    needs: [prepare, build]
+    if: ${{ !inputs.package_only }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Finalize GitHub Release
+        run: gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false --latest

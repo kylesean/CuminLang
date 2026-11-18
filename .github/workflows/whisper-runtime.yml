@@ -1,7 +1,7 @@
 # .github/workflows/whisper-runtime.yml
 name: Release whisper runtime
 
-# whisper.cpp 核显运行时的唯一产地：按固定 ref + 配方构建四个平台的 parakeet-cli，
+# whisper.cpp 核显运行时的唯一产地：按固定 ref + 配方构建三个平台的 parakeet-cli，
 # 发布成**运行时 Release**（prerelease），tag = 配方号。与 app 发版彻底解耦：
 # - app 发版（release.yml）不再构建运行时，只从该 tag 下载现成归档；
 # - 开发机走同一条下载路径，因此不再需要 cmake / glslc / Vulkan SDK / 编译器。
@@ -63,7 +63,6 @@ jobs:
           # macOS arm64 用 macos-15：macos-14 已被 GitHub 下线，作业会以
           # "configuration 'macos-14-arm64-us-default' is not supported" 秒挂
           - { name: darwin-arm64, os: macos-15, gpu: metal }
-          - { name: darwin-x64, os: macos-15-intel, gpu: metal }
     runs-on: ${{ matrix.os }}
     env:
       # whisper.cpp 源码 ref 与 Vulkan SDK 版本都来自 meta job（即 whisper-runtime-meta.mjs）
@@ -210,7 +209,7 @@ jobs:
         # prerelease 是硬要求（更新检查过滤稳定版）；--latest=false 保证它不会被当成最新发行版
         run: |
           cat > notes.md <<'NOTES'
-          whisper.cpp parakeet-cli 离线识别运行时（四个平台），由 `.github/workflows/whisper-runtime.yml` 构建。
+          whisper.cpp parakeet-cli 离线识别运行时（三个平台），由 `.github/workflows/whisper-runtime.yml` 构建。
 
           - 消费方：`scripts/download.mjs`（本地与 CI 同一条路径，仅下载，不本地编译）
           - 版本依据：tag 即运行时配方号，配方由 `scripts/whisper-runtime-meta.mjs` 定义
