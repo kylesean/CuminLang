@@ -12,7 +12,6 @@ import { storeSchemaSubtitleEngineLocalMtMigrationV1 } from './migrations/storeS
 import { defaultVocabularySourceMigrationV1 } from './migrations/defaultVocabularySourceMigrationV1';
 import { legacyEmbeddingVectorPurgeMigrationV1 } from './migrations/legacyEmbeddingVectorPurgeMigrationV1';
 import { storeSchemaRemoveLocalLlmMigrationV1 } from './migrations/storeSchemaRemoveLocalLlmMigrationV1';
-import { storeSchemaCloudProvidersMigrationV1 } from './migrations/storeSchemaCloudProvidersMigrationV1';
 
 const logger = getMainLogger('custom-migrations');
 
@@ -31,7 +30,6 @@ const customMigrations: CustomMigration[] = [
     defaultVocabularySourceMigrationV1,
     legacyEmbeddingVectorPurgeMigrationV1,
     storeSchemaRemoveLocalLlmMigrationV1,
-    storeSchemaCloudProvidersMigrationV1,
 ];
 
 /**

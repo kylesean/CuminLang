@@ -111,29 +111,6 @@ export function parseStoredProviderProfiles(raw: string): PersistedCloudAiProvid
 }
 
 /**
- * 根据 endpoint 与 apiFormat 推断默认显示名称（首次从单配置升级时使用）。
- */
-export function inferProviderProfileFromLegacy(params: {
-    endpoint: string;
-    apiFormat: AiApiFormat;
-    models: string[];
-    disabledModels: string[];
-}): PersistedCloudAiProvider {
-    const matchedPreset = CLOUD_AI_PROVIDER_PRESETS.find(
-        (preset) => preset.endpoint === params.endpoint && preset.apiFormat === params.apiFormat,
-    ) ?? CLOUD_AI_PROVIDER_PRESETS.find((preset) => preset.apiFormat === params.apiFormat);
-
-    return {
-        id: matchedPreset?.id ?? 'default',
-        name: matchedPreset?.name ?? 'Default',
-        apiFormat: params.apiFormat,
-        endpoint: params.endpoint,
-        models: params.models,
-        disabledModels: params.disabledModels,
-    };
-}
-
-/**
  * 按模型 ID 或指定 providerId 查找归属服务商配置。
  */
 export function findProviderForModel(

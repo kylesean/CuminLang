@@ -26,11 +26,6 @@ const SECRET_SETTING_KEYS: ReadonlySet<string> = new Set([
     'proxy.url',
 ]);
 
-/** 仅用于启动迁移解密已废弃历史键的只读凭据集合。 */
-const LEGACY_SECRET_SETTING_KEYS: ReadonlySet<string> = new Set([
-    'apiKeys.openAi.key',
-]);
-
 /** 加密值的落盘前缀；用来区分「密文」与「历史遗留的明文」。 */
 const ENCRYPTED_PREFIX = 'dp-enc:';
 
@@ -181,10 +176,8 @@ export const storeGetPersisted = (key: string): string | null => {
     if (trimmed.length === 0) {
         return null;
     }
-    // 凭据类键（含待迁移的废弃历史密钥键）落盘的是密文，这里要还原成明文才对得上调用方的预期。
-    return SECRET_SETTING_KEYS.has(key) || LEGACY_SECRET_SETTING_KEYS.has(key)
-        ? decryptSecret(trimmed)
-        : trimmed;
+    // 凭据类键落盘的是密文，这里要还原成明文才对得上调用方的预期。
+    return SECRET_SETTING_KEYS.has(key) ? decryptSecret(trimmed) : trimmed;
 };
 
 /**
