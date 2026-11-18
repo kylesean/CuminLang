@@ -39,9 +39,7 @@ const createHarness = ({
 const userWord = (word: string, status: Word['status'], mastery: number): Word => ({
     id: 1,
     word,
-    stem: null,
     translate: '释义',
-    note: null,
     status,
     source: 'manual',
     mastery,

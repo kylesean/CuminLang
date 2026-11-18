@@ -261,9 +261,7 @@ CREATE INDEX `dp_word_encounter_created_idx` ON `dp_word_encounter` (`created_at
 CREATE TABLE `dp_words` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`word` text NOT NULL,
-	`stem` text,
 	`translate` text,
-	`note` text,
 	`status` text DEFAULT 'learning' NOT NULL,
 	`source` text DEFAULT 'manual' NOT NULL,
 	`mastery` real DEFAULT 0 NOT NULL,

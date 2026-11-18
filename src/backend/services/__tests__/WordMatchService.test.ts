@@ -11,9 +11,7 @@ import type { Word } from '@/backend/infrastructure/db/tables/words';
 const buildWord = (word: string, status: Word['status']): Word => ({
     id: 1,
     word,
-    stem: null,
     translate: null,
-    note: null,
     status,
     source: 'manual',
     mastery: 0,

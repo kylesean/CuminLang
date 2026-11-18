@@ -16,7 +16,7 @@ export type WordStatus = (typeof WORD_STATUSES)[number];
  *
  * default 是产品内置 starter pack，不是用户个人词表；它默认不参与正文标注。
  */
-export const WORD_SOURCES = ['manual', 'imported', 'default', 'suggested', 'legacy'] as const;
+export const WORD_SOURCES = ['manual', 'imported', 'default', 'suggested'] as const;
 export type WordSource = (typeof WORD_SOURCES)[number];
 
 /** 会进入正常学习/标注流程的活跃状态。 */

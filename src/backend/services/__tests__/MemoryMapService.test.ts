@@ -11,9 +11,7 @@ const NOW = Date.now();
 
 const word = (value: Partial<Word> & Pick<Word, 'word'>): Word => ({
     id: 1,
-    stem: null,
     translate: null,
-    note: null,
     status: 'learning',
     source: 'manual',
     mastery: 0.3,

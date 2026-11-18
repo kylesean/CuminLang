@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0f4f471e-dfeb-46f7-9d4e-7e90095d3105",
+  "id": "eb26abc6-2bae-4ccf-b1f2-b0d58264509e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "dp_task": {
@@ -1711,22 +1711,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "stem": {
-          "name": "stem",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "translate": {
           "name": "translate",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "note": {
-          "name": "note",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
