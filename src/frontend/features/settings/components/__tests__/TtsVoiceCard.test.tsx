@@ -205,12 +205,12 @@ describe('TtsVoiceCard', () => {
             </SWRConfig>,
         );
 
-        const downloadBtn = await screen.findByRole('button', { name: /下载音色|Download voice/ }) as HTMLButtonElement;
-        expect(downloadBtn.disabled).toBe(true);
+        const downloadBtn = await screen.findByRole('button', { name: /下载音色|Download voice/ });
+        expect(downloadBtn).toHaveAttribute('aria-disabled', 'true');
 
         resolveOther();
-        await waitFor(() => expect(downloadBtn.disabled).toBe(true));
+        await waitFor(() => expect(downloadBtn).toHaveAttribute('aria-disabled', 'true'));
         resolveTts();
-        await waitFor(() => expect(downloadBtn.disabled).toBe(false));
+        await waitFor(() => expect(downloadBtn).not.toHaveAttribute('aria-disabled', 'true'));
     });
 });

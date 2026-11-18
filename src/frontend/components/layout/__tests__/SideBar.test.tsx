@@ -43,7 +43,7 @@ describe('SideBar branding and alignment', () => {
         const { container } = renderSideBar(false);
 
         const textEl = screen.getByText('uminLang');
-        expect(textEl.parentElement).toHaveStyle({ fontFamily: 'var(--font-family-heading)' });
+        expect(textEl.parentElement?.style.fontFamily).toBe('var(--font-family-heading)');
         expect(container.querySelector('img')).not.toBeInTheDocument();
         expect(screen.getByTestId('nav-home').closest('[class*="items-center"]')).toBeNull();
     });

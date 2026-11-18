@@ -11,7 +11,7 @@ describe('BrandLogo', () => {
         const { container } = render(<BrandLogo variant="lockup" size="md" />);
 
         const logo = screen.getByRole('img', { name: 'CuminLang' });
-        expect(logo).toHaveStyle({ fontFamily: 'var(--font-family-heading)' });
+        expect(logo.style.fontFamily).toBe('var(--font-family-heading)');
         expect(screen.getByText('uminLang')).toBeInTheDocument();
         expect(screen.queryByText('CuminLang')).not.toBeInTheDocument();
         expect(container.querySelectorAll('svg')).toHaveLength(1);

@@ -116,8 +116,8 @@ export default function StudyWorkbenchShell({
             </div>
 
             <div className="min-h-0 flex-1 overflow-hidden">
-                <SplitLayout direction="horizontal" className="h-full w-full">
-                    <SplitPane defaultSize={44} minSize={30} className="min-w-0 h-full overflow-hidden">
+                <SplitLayout orientation="horizontal" className="h-full w-full">
+                    <SplitPane defaultSize="44%" minSize="30%" className="min-w-0 h-full overflow-hidden">
                         {leftCanvas}
                     </SplitPane>
                     <SplitHandle
@@ -128,7 +128,7 @@ export default function StudyWorkbenchShell({
                     >
                         <div className="w-0.5 h-12 rounded-full bg-secondary/30 group-hover:bg-accent-bg group-hover:h-16 transition-all" />
                     </SplitHandle>
-                    <SplitPane defaultSize={56} minSize={34} className="min-w-0 h-full overflow-hidden bg-surface/30">
+                    <SplitPane defaultSize="56%" minSize="34%" className="min-w-0 h-full overflow-hidden bg-surface/30">
                         {rightCopilot}
                     </SplitPane>
                 </SplitLayout>

@@ -1,6 +1,8 @@
+import type { TFunction } from 'i18next';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-type Translate = (key: string, options?: Record<string, unknown>) => string;
+type Translate = TFunction<'player', undefined>;
 
 /**
  * 格式化复习到期时间；近一天内用相对时间，更远用日期。

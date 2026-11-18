@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 
@@ -37,15 +38,8 @@ export default defineConfig({
     plugins: [
         tailwindcss(),
         contentSecurityPolicy(),
-        react(
-            enableReactCompiler
-                ? {
-                    babel: {
-                        plugins: ['babel-plugin-react-compiler'],
-                    },
-                }
-                : undefined
-        ),
+        react(),
+        ...(enableReactCompiler ? [babel({ presets: [reactCompilerPreset()] })] : []),
     ],
     resolve: {
         alias: {

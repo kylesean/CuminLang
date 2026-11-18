@@ -6,7 +6,7 @@ import MainSubtitle from './MainSubtitle';
 import Subtitle from './components/Subtitle';
 import LearningToolbar from '@/frontend/features/player/components/learning-toolbar/LearningToolbar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ImperativePanelGroupHandle } from 'react-resizable-panels';
+import type { GroupImperativeHandle } from 'react-resizable-panels';
 import { BookOpen, EyeOff, PanelBottomOpen } from 'lucide-react';
 import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
@@ -76,8 +76,8 @@ const PlaybackLayout = () => {
     const [sizeIa, setSizeIa] = useLocalStorage<number>('split-size-ia', DEFAULT_INNER_STAGE_SIZE);
     const [sizeIb, setSizeIb] = useLocalStorage<number>('split-size-ib', DEFAULT_INNER_SUBTITLE_SIZE);
     const [toolbarPinned, setToolbarPinned] = useLocalStorage<boolean>('cuminlang.learning_toolbar_pinned', true);
-    const outerGroupRef = useRef<ImperativePanelGroupHandle>(null);
-    const innerGroupRef = useRef<ImperativePanelGroupHandle>(null);
+    const outerGroupRef = useRef<GroupImperativeHandle>(null);
+    const innerGroupRef = useRef<GroupImperativeHandle>(null);
     const prePracticeSplitRef = useRef<[number, number] | null>(null);
     const prevPracticeVisibleRef = useRef(practiceVisible);
     const transcriptPosition = (useSetting((s) => s.values.get('appearance.transcriptPosition')) || 'right') as 'left' | 'right';
@@ -167,11 +167,12 @@ const PlaybackLayout = () => {
         }
 
         if (practiceVisible) {
-            if (group && group.getLayout().length === 2) {
+            const layout = group?.getLayout();
+            if (group && layout && 'inner-stage' in layout && 'inner-subtitle' in layout) {
                 const [, baseSub] = prePracticeSplitRef.current ?? [sizeIa, sizeIb];
                 const nextDock = practiceFocusMode ? 64 : Math.max(46, baseSub);
                 const nextStage = Math.max(20, 100 - nextDock);
-                group.setLayout([nextStage, nextDock]);
+                group.setLayout({ 'inner-stage': nextStage, 'inner-subtitle': nextDock });
             }
             return;
         }
@@ -179,8 +180,9 @@ const PlaybackLayout = () => {
         if (wasVisible && prePracticeSplitRef.current) {
             const [restoreStage, restoreSub] = prePracticeSplitRef.current;
             prePracticeSplitRef.current = null;
-            if (group && group.getLayout().length === 2) {
-                group.setLayout([restoreStage, restoreSub]);
+            const layout = group?.getLayout();
+            if (group && layout && 'inner-stage' in layout && 'inner-subtitle' in layout) {
+                group.setLayout({ 'inner-stage': restoreStage, 'inner-subtitle': restoreSub });
             }
         }
     }, [practiceVisible, practiceFocusMode, sizeIa, sizeIb]);
@@ -209,14 +211,14 @@ const PlaybackLayout = () => {
      */
     const resetOuterLayout = () => {
         const group = outerGroupRef.current;
-        if (!group || group.getLayout().length !== 2) {
+        const layout = group?.getLayout();
+        if (!group || !layout || !('video-stage' in layout && 'subtitle-script' in layout)) {
             return;
         }
-        group.setLayout(
-            isLeftTranscript
-                ? [DEFAULT_OUTER_TRANSCRIPT_SIZE, DEFAULT_OUTER_VIDEO_SIZE]
-                : [DEFAULT_OUTER_VIDEO_SIZE, DEFAULT_OUTER_TRANSCRIPT_SIZE]
-        );
+        group.setLayout({
+            'video-stage': DEFAULT_OUTER_VIDEO_SIZE,
+            'subtitle-script': DEFAULT_OUTER_TRANSCRIPT_SIZE,
+        });
         setSizeOa(DEFAULT_OUTER_VIDEO_SIZE);
         setSizeOb(DEFAULT_OUTER_TRANSCRIPT_SIZE);
     };
@@ -228,11 +230,12 @@ const PlaybackLayout = () => {
      */
     const resetInnerLayout = () => {
         const group = innerGroupRef.current;
-        if (!group || group.getLayout().length !== 2) {
+        const layout = group?.getLayout();
+        if (!group || !layout || !('inner-stage' in layout && 'inner-subtitle' in layout)) {
             return;
         }
         const { stage: stageSize, subtitle: subtitleSize } = getDefaultInnerSplit(fontSize);
-        group.setLayout([stageSize, subtitleSize]);
+        group.setLayout({ 'inner-stage': stageSize, 'inner-subtitle': subtitleSize });
         setSizeIa(stageSize);
         setSizeIb(subtitleSize);
     };
@@ -250,36 +253,38 @@ const PlaybackLayout = () => {
 
     const videoStagePanel = (
         <SplitPane
+            id="video-stage"
             key="video-stage-panel"
-            defaultSize={sizeOa}
-            onResize={(e) => {
+            defaultSize={`${sizeOa}%`}
+            onResize={(size) => {
                 // 全屏不记忆；文稿收起时视频面板会被拉到 100%，这是临时形态，
                 // 不能覆盖用户拖出来的比例，否则收起态退出后下次会以 100% 启动。
                 if (fullScreen || !effectiveShowTranscript) {
                     return;
                 }
-                logger.debug('Outer panel resized', { size: e });
-                setSizeOa(e);
+                logger.debug('Outer panel resized', { size: size.asPercentage });
+                setSizeOa(size.asPercentage);
             }}
         >
             <div className="relative w-full h-full overflow-hidden">
                 {/* 视频与主字幕：学习页打开时隐藏底层界面但抬高层级让唯一微画中画舞台越过 LearningPage (z-20) 显现 */}
                 <SplitLayout
-                    ref={innerGroupRef}
-                    direction={'vertical'}
+                    groupRef={innerGroupRef}
+                    orientation="vertical"
                     className={cn(
                         'relative',
                         learningVisible ? 'z-30 invisible pointer-events-none' : 'z-10',
                     )}
                 >
                     <SplitPane
-                        minSize={10}
-                        defaultSize={sizeIa}
-                        onResize={(e) => {
+                        id="inner-stage"
+                        minSize="10%"
+                        defaultSize={`${sizeIa}%`}
+                        onResize={(size) => {
                             if (fullScreen || practiceVisible) {
                                 return;
                             }
-                            setSizeIa(e);
+                            setSizeIa(size.asPercentage);
                         }}
                     >
                         <div className="group/stage relative w-full h-full" style={stageFloatingStyle}>
@@ -327,14 +332,15 @@ const PlaybackLayout = () => {
                                 <div className="w-10 h-1 rounded-full bg-secondary/30 group-hover:bg-accent-bg group-hover:w-14 transition-all duration-200" />
                             </SplitHandle>
                             <SplitPane
+                                id="inner-subtitle"
                                 className={cn('overflow-hidden bg-surface/70 backdrop-blur-2xl')}
-                                minSize={0}
-                                defaultSize={sizeIb}
-                                onResize={(e) => {
+                                minSize="0%"
+                                defaultSize={`${sizeIb}%`}
+                                onResize={(size) => {
                                     if (fullScreen || practiceVisible) {
                                         return;
                                     }
-                                    setSizeIb(e);
+                                    setSizeIb(size.asPercentage);
                                 }}
                             >
                                 {practiceVisible ? (
@@ -387,6 +393,7 @@ const PlaybackLayout = () => {
 
     const subtitlePanel = (
         <SplitPane
+            id="subtitle-script"
             key="subtitle-script-panel"
             className={cn(
                 'relative overflow-hidden backdrop-blur-2xl transition-colors duration-300',
@@ -395,12 +402,12 @@ const PlaybackLayout = () => {
                     ? 'bg-surface/90'
                     : 'bg-body/60 dark:bg-body/40'
             )}
-            defaultSize={sizeOb}
-            onResize={(e) => {
+            defaultSize={`${sizeOb}%`}
+            onResize={(size) => {
                 if (fullScreen) {
                     return;
                 }
-                setSizeOb(e);
+                setSizeOb(size.asPercentage);
             }}
         >
             <div className="group/subtitlepanel relative h-full w-full">
@@ -443,12 +450,12 @@ const PlaybackLayout = () => {
                 </div>
             )}
             <SplitLayout
-                ref={outerGroupRef}
+                groupRef={outerGroupRef}
                 key={`layout-group-${transcriptPosition}`}
                 className={cn(
                     'relative z-10 bg-transparent'
                 )}
-                direction={'horizontal'}
+                orientation="horizontal"
             >
                 {isLeftTranscript ? (
                     <>

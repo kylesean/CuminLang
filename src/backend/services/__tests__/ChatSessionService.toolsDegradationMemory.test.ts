@@ -21,7 +21,7 @@ import type CacheService from '@/backend/services/CacheService';
 
 const makeTextSseResponse = (text: string) => {
     const payload = [
-        { event: 'response.created', data: { type: 'response.created', response: { id: 'resp_x' } } },
+        { event: 'response.created', data: { type: 'response.created', response: { id: 'resp_x', created_at: 0, model: 'deepseek-chat' } } },
         {
             event: 'response.output_item.added',
             data: {

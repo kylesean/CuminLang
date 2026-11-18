@@ -239,7 +239,7 @@ export const App = () => {
                     </Suspense>
                 )}
                 {gate?.kind === 'main' && (
-                    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                    <HashRouter>
                         <NavigationHistoryTracker />
                         <LinkProvider component={RouterLinkAdapter}>
                             <Suspense fallback={<StartupLoading />}>

@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import Store from 'electron-store';
 import { safeStorage } from 'electron';
 import {
@@ -11,7 +13,21 @@ import { getEnvironmentConfigName } from '@/backend/utils/runtimeEnv';
 
 const buildStore = (name: string): Store<Record<string, unknown>> => {
     // configFileMode 0o600：配置文件里存着云端 API 密钥，默认的 0644 会让同机器的其他账号直接读到。
-    return new Store({ name, configFileMode: 0o600 });
+    try {
+        return new Store({ name, configFileMode: 0o600 });
+    } catch (error) {
+        // electron-store@12 在测试环境（非 Electron 主进程且未 mock electron-store）要求显式绝对 cwd；
+        // 仅在 VITEST 下回退到隔离的临时目录，避免污染用户真实配置目录。
+        if (process.env.VITEST === 'true') {
+            return new Store({
+                name,
+                configFileMode: 0o600,
+                cwd: path.join(os.tmpdir(), 'cuminlang-vitest-store', String(process.pid)),
+                projectVersion: '0.0.0',
+            });
+        }
+        throw error;
+    }
 };
 
 const store = buildStore(getEnvironmentConfigName('config'));

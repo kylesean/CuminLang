@@ -17,7 +17,7 @@ interface EbProps {
  * @param error 被边界捕获的异常。
  * @param info React 提供的组件栈信息；React 无法定位组件树时 componentStack 可能缺省。
  */
-function handleBoundaryError(error: Error, info: React.ErrorInfo): void {
+function handleBoundaryError(error: unknown, info: React.ErrorInfo): void {
     const componentStack = info.componentStack ?? 'unknown';
     reportSuppressedError({
         module: 'ErrorBoundary',

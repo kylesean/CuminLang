@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
-import react from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -48,10 +49,9 @@ export default defineConfig({
     root: path.resolve(__dirname, 'src/mobile'),
     base: '/',
     plugins: [
-        react({
-            babel: {
-                plugins: [['babel-plugin-react-compiler']],
-            },
+        react(),
+        babel({
+            presets: [reactCompilerPreset()],
         }),
         mobileIconPlugin(),
     ],

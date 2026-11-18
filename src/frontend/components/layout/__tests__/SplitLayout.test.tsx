@@ -5,12 +5,12 @@ import { SplitHandle, SplitLayout, SplitPane } from '../SplitLayout';
 describe('SplitLayout', () => {
     it('横向分栏保留面板内容，并把把手渲染为可聚焦的分隔条', () => {
         render(
-            <SplitLayout direction="horizontal">
-                <SplitPane defaultSize={75}>
+            <SplitLayout orientation="horizontal">
+                <SplitPane defaultSize="75%">
                     <div>stage</div>
                 </SplitPane>
                 <SplitHandle data-testid="outer-handle" />
-                <SplitPane defaultSize={25}>
+                <SplitPane defaultSize="25%">
                     <div>transcript</div>
                 </SplitPane>
             </SplitLayout>,
@@ -19,8 +19,8 @@ describe('SplitLayout', () => {
         expect(screen.getByText('stage')).toBeInTheDocument();
         expect(screen.getByText('transcript')).toBeInTheDocument();
 
-        const group = screen.getByText('stage').closest('[data-panel-group]');
-        expect(group).toHaveAttribute('data-panel-group-direction', 'horizontal');
+        const group = screen.getByText('stage').closest('[data-group]');
+        expect(group).toHaveAttribute('data-orientation', 'horizontal');
 
         const handle = screen.getByTestId('outer-handle');
         expect(handle).toHaveAttribute('role', 'separator');
@@ -29,18 +29,18 @@ describe('SplitLayout', () => {
 
     it('纵向分栏把方向与列布局类透传到容器', () => {
         render(
-            <SplitLayout direction="vertical">
-                <SplitPane defaultSize={70}>
+            <SplitLayout orientation="vertical">
+                <SplitPane defaultSize="70%">
                     <div>video</div>
                 </SplitPane>
-                <SplitPane defaultSize={30}>
+                <SplitPane defaultSize="30%">
                     <div>subtitle</div>
                 </SplitPane>
             </SplitLayout>,
         );
 
-        const group = screen.getByText('video').closest('[data-panel-group]');
-        expect(group).toHaveAttribute('data-panel-group-direction', 'vertical');
+        const group = screen.getByText('video').closest('[data-group]');
+        expect(group).toHaveAttribute('data-orientation', 'vertical');
         expect(group).toHaveClass('flex', 'h-full', 'w-full');
     });
 
@@ -48,12 +48,12 @@ describe('SplitLayout', () => {
         const onDoubleClick = vi.fn();
 
         render(
-            <SplitLayout direction="horizontal">
-                <SplitPane defaultSize={50}>
+            <SplitLayout orientation="horizontal">
+                <SplitPane defaultSize="50%">
                     <div>left</div>
                 </SplitPane>
                 <SplitHandle data-testid="inner-handle" onDoubleClick={onDoubleClick} />
-                <SplitPane defaultSize={50}>
+                <SplitPane defaultSize="50%">
                     <div>right</div>
                 </SplitPane>
             </SplitLayout>,

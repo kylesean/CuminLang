@@ -2,9 +2,12 @@ import { Client } from 'tencentcloud-sdk-nodejs/tencentcloud/services/tmt/v20180
 import type { ClientConfig } from 'tencentcloud-sdk-nodejs/tencentcloud/common/interface';
 import TransHolder from '@/common/utils/TransHolder';
 import { getMainLogger } from '@/backend/infrastructure/logger';
-import type { TextTranslateBatchResponse } from 'tencentcloud-sdk-nodejs/src/services/tmt/v20180321/tmt_models';
 import { WithRateLimit } from '@/backend/utils/concurrency/decorators';
 import type { TencentTranslateBatchLogContext } from '@/backend/services/gateways/translate/TencentTranslateClient';
+
+interface TextTranslateBatchResponse {
+    TargetTextList?: string[];
+}
 
 class TencentClient extends Client {
     private readonly SIZE_LIMIT: number;
@@ -66,9 +69,8 @@ class TencentClient extends Client {
             charCount,
         });
         try {
-            const transResult: string[] | undefined = await super
-                .TextTranslateBatch(param)
-                .then((resp: TextTranslateBatchResponse) => resp.TargetTextList);
+            const resp = await this.request('TextTranslateBatch', param) as TextTranslateBatchResponse;
+            const transResult = resp.TargetTextList;
             this.logger.debug('tencent batch trans ok', {
                 ...logContext,
                 batchSize,

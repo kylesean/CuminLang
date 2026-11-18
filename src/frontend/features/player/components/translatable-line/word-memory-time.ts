@@ -1,8 +1,11 @@
+import type { TFunction } from 'i18next';
+
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
-type Translate = (key: string, options?: Record<string, unknown>) => string;
+type SimpleTranslate = (key: string, options?: Record<string, unknown>) => string;
+type Translate = TFunction<'common', undefined> | SimpleTranslate;
 
 /**
  * 把「上次遇见 / 上次复习」的时间格式化成相对描述。
@@ -22,27 +25,28 @@ export const formatMemoryWhen = (
     t: Translate,
     neverKey: string,
 ): string => {
+    const tr = t as SimpleTranslate;
     if (!iso) {
-        return t(neverKey);
+        return tr(neverKey);
     }
     const time = Date.parse(iso);
     if (Number.isNaN(time)) {
-        return t(neverKey);
+        return tr(neverKey);
     }
     const diff = Date.now() - time;
     // 未来时间（时钟漂移或数据异常）按「刚刚」处理，不显示负数。
     if (diff < MINUTE_MS) {
-        return t('wordMemory.justNow');
+        return tr('wordMemory.justNow');
     }
     if (diff < HOUR_MS) {
-        return t('wordMemory.minutesAgo', { count: Math.round(diff / MINUTE_MS) });
+        return tr('wordMemory.minutesAgo', { count: Math.round(diff / MINUTE_MS) });
     }
     if (diff < DAY_MS) {
-        return t('wordMemory.hoursAgo', { count: Math.round(diff / HOUR_MS) });
+        return tr('wordMemory.hoursAgo', { count: Math.round(diff / HOUR_MS) });
     }
     const days = Math.round(diff / DAY_MS);
     if (days <= 30) {
-        return t('wordMemory.daysAgo', { count: days });
+        return tr('wordMemory.daysAgo', { count: days });
     }
     return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date(time));
 };

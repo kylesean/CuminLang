@@ -51,7 +51,7 @@ describe('ChatSessionService OpenAI Responses 多轮工具调用兼容性', () =
                 return makeSseResponse([
                     {
                         event: 'response.created',
-                        data: { type: 'response.created', response: { id: 'resp_1' } },
+                        data: { type: 'response.created', response: { id: 'resp_1', created_at: 0, model: 'deepseek-chat' } },
                     },
                     {
                         event: 'response.output_item.added',
@@ -108,7 +108,7 @@ describe('ChatSessionService OpenAI Responses 多轮工具调用兼容性', () =
             return makeSseResponse([
                 {
                     event: 'response.created',
-                    data: { type: 'response.created', response: { id: 'resp_2' } },
+                    data: { type: 'response.created', response: { id: 'resp_2', created_at: 0, model: 'deepseek-chat' } },
                 },
                 {
                     event: 'response.output_item.added',
@@ -231,7 +231,7 @@ describe('ChatSessionService OpenAI Responses 多轮工具调用兼容性', () =
             return makeSseResponse([
                 {
                     event: 'response.created',
-                    data: { type: 'response.created', response: { id: 'resp_fallback' } },
+                    data: { type: 'response.created', response: { id: 'resp_fallback', created_at: 0, model: 'weak-local-model' } },
                 },
                 {
                     event: 'response.output_item.added',

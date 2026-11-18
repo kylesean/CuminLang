@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, Brain, ChevronDown, ChevronRight, Film, Flame, Layers, Play } from 'lucide-react';
 import { Badge } from '@astryxdesign/core/Badge';
@@ -68,7 +69,7 @@ const STATUS_DOT_CLASS: Record<WordStatus, string> = {
  */
 const topicLabel = (
     topic: { label: string | null; keywords?: string[] },
-    t: (key: string, options?: Record<string, unknown>) => string,
+    t: TFunction<readonly ['memoryMap', 'common'], undefined>,
 ): string => {
     if (topic.label) {
         return topic.label;
