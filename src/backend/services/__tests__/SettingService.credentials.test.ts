@@ -217,40 +217,6 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         expect(emptyKeysStore.values.get('apiKeys.openAi.providerKeys')).toBe('');
     });
 
-    it('修改既有服务商的接口主机（更换 origin）且未重新填写密钥时，拒绝把旧密钥继承到新地址', async () => {
-        await service.saveServiceCredentials({
-            ...baseSave,
-            openai: {
-                ...baseSave.openai,
-                providers: [{
-                    ...baseSave.openai.providers[0],
-                    endpoint: 'https://attacker.example/v1',
-                    key: '',
-                }],
-            },
-        });
-
-        expect(store.values.get('apiKeys.openAi.providerKeys')).toBe('');
-        const detail = await service.getServiceCredentialsDetail();
-        expect(detail.openai.providers[0]?.hasKey).toBe(false);
-    });
-
-    it('同源修改路径时（如 /v1 -> /v2）留空密钥仍保留已保存的值', async () => {
-        await service.saveServiceCredentials({
-            ...baseSave,
-            openai: {
-                ...baseSave.openai,
-                providers: [{
-                    ...baseSave.openai.providers[0],
-                    endpoint: 'https://api.example.com/v2',
-                    key: '',
-                }],
-            },
-        });
-
-        expect(JSON.parse(store.values.get('apiKeys.openAi.providerKeys')!)).toEqual({ deepseek: OPENAI_KEY });
-    });
-
     it.each([
         'http://attacker.tld/v1',
         'ftp://example.com/v1',

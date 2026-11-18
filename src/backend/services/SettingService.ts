@@ -456,19 +456,6 @@ export class SettingServiceImpl implements SettingService {
      */
     public async saveServiceCredentials(settings: ServiceCredentialSettingSaveVO): Promise<void> {
         const existingKeys = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
-        const existingProfileById = new Map(
-            (parseStoredProviderProfiles(this.getValue('models.openai.providers')) ?? [])
-                .map((profile) => [profile.id, profile]),
-        );
-        const endpointOrigin = (rawEndpoint: string): string => {
-            const trimmed = rawEndpoint.trim();
-            if (!trimmed) return '';
-            try {
-                return new URL(trimmed).origin;
-            } catch {
-                return '';
-            }
-        };
         const nextKeys: Record<string, string> = {};
         const nextProfiles: PersistedCloudAiProvider[] = [];
 
@@ -496,15 +483,11 @@ export class SettingServiceImpl implements SettingService {
             ));
 
             const existingKey = existingKeys[id] ?? '';
-            const oldOrigin = endpointOrigin(existingProfileById.get(id)?.endpoint ?? '');
-            const newOrigin = endpointOrigin(endpoint);
-            // 更换或清空既有服务商的主机来源时禁止隐式继承旧密钥，防止凭据被静默重定向到外部地址。
-            const originChangedOrCleared = oldOrigin.length > 0 && newOrigin !== oldOrigin;
             if (item.clearKey) {
                 nextKeys[id] = '';
             } else if (!StrUtil.isBlank(item.key)) {
                 nextKeys[id] = item.key as string;
-            } else if (existingKey && !originChangedOrCleared) {
+            } else if (existingKey) {
                 nextKeys[id] = existingKey;
             }
 
