@@ -75,3 +75,14 @@ export const SettingKeyObj = {
     'subtitle.autoRefineWithLocalAsr': 'true',
 }
 export type SettingKey = keyof typeof SettingKeyObj;
+
+/**
+ * 含敏感凭据的设置键列表（统一供后端加密存储与 QA 证据快照脱敏共享，防止两处清单漂移）。
+ */
+export const SECRET_SETTING_KEYS: readonly SettingKey[] = [
+    'apiKeys.tencent.secretId',
+    'apiKeys.tencent.secretKey',
+    'apiKeys.openAi.providerKeys',
+    'mobileAccess.token',
+    'proxy.url',
+];

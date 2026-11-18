@@ -39,6 +39,7 @@ import type MobileAccessService from '@/backend/services/MobileAccessService';
 import type RendererEvents from '@/backend/services/gateways/renderer/RendererEvents';
 import { MEDIA_PROTOCOL_SCHEME, registerMediaProtocol } from '@/backend/infrastructure/media/MediaProtocol';
 import { installRendererSecurityGuards } from '@/backend/infrastructure/system/RendererSecurityGuard';
+import { configureIpcOriginGuard } from '@/backend/controllers/ipc/registerRoute';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
 
@@ -399,6 +400,10 @@ app.on('ready', async () => {
         container.get<MediaPathRegistry>(TYPES.MediaPathRegistry),
     );
     appPhase = 'migrating';
+    configureIpcOriginGuard({
+        devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL,
+        rendererDirectory: path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`),
+    });
     try {
         await runStartupMigrations();
     } catch (error) {

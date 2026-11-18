@@ -8,9 +8,47 @@ import { getMainLogger, resolveTraceId, runWithTrace } from '@/backend/infrastru
 import type RendererEvents from '@/backend/services/gateways/renderer/RendererEvents';
 import type { TraceCarrier } from '@/common/log/simple-types';
 import { describeAsrFailure, isNoSpeechError } from '@/common/utils/practice/asr-error';
+import { isAppPageUrl, type RendererSecurityOptions } from '@/backend/infrastructure/system/RendererSecurityGuard';
 import { registerIpcRoute } from './routeRegistry';
 
 const logger = getMainLogger('ipc');
+
+interface IpcEventWithFrame {
+    senderFrame?: { url?: string } | null;
+    sender?: { mainFrame?: unknown } | null;
+}
+
+let configuredOriginOptions: RendererSecurityOptions | null = null;
+
+/**
+ * 配置 IPC 路由的调用源守卫（生产环境由 `main.ts` 在注册控制器前注入）。
+ *
+ * 与渲染进程导航/开窗守卫形成双保险：即便未来引入了未拦截的外部页面或子帧，
+ * 也无法通过 `ipcRenderer.invoke` 调用任何受控主进程能力。
+ * 传 `null` 可恢复未配置态（供单元测试复位）。
+ */
+export function configureIpcOriginGuard(options: RendererSecurityOptions | null): void {
+    configuredOriginOptions = options;
+}
+
+function assertTrustedIpcSender(path: string, event: unknown): void {
+    if (!configuredOriginOptions) {
+        return;
+    }
+    const ipcEvent = event as IpcEventWithFrame | null | undefined;
+    const frame = ipcEvent?.senderFrame ?? null;
+    const mainFrame = ipcEvent?.sender?.mainFrame ?? null;
+    const frameUrl = typeof frame?.url === 'string' ? frame.url : '';
+    if (!frame || frame !== mainFrame || !isAppPageUrl(frameUrl, configuredOriginOptions)) {
+        logger.warn('ipc request blocked from untrusted senderFrame', {
+            path,
+            hasFrame: Boolean(frame),
+            isMainFrame: Boolean(frame && frame === mainFrame),
+            url: frameUrl || '<missing>',
+        });
+        throw new Error(`拒绝来自不可信页面或子帧的 IPC 请求 (${path})`);
+    }
+}
 
 /**
  * 高频/敏感路径的日志策略：降为 debug，并按需跳过 param/result，避免噪音与密钥落盘。
@@ -137,7 +175,8 @@ export default function registerRoute<K extends keyof ApiMap>(
     func: (params: ApiDefinitions[K]['params']) => Promise<ApiDefinitions[K]['return']>,
     options?: { schema?: z.ZodType<ApiDefinitions[K]['params']>; broadcastError?: boolean },
 ): void {
-    registerIpcRoute(path, Boolean(options?.schema), async (_event, param: unknown, traceCarrier?: TraceCarrier) => {
+    registerIpcRoute(path, Boolean(options?.schema), async (event, param: unknown, traceCarrier?: TraceCarrier) => {
+        assertTrustedIpcSender(String(path), event);
         const traceId = resolveTraceId(traceCarrier?.traceId);
         return runWithTrace(traceId, async () => {
             const start = Date.now();

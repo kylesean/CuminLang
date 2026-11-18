@@ -10,6 +10,7 @@ import path from 'node:path';
 import { CURRENT_ONBOARDING_VERSION } from '../../src/common/constants/onboarding';
 import { ONBOARDING_COMPLETED_VERSION_KEY } from '../../src/common/constants/systemConfigKeys';
 import { NAV_TESTIDS } from '../../src/common/constants/qa-testids';
+import { redactConfigSnapshot } from '../../src/common/settings/redactConfigSnapshot';
 import {
     installProcessObserver,
     isFatalProcessGone,
@@ -175,20 +176,10 @@ export function readMainLogsTail(userDataDir: string, logsSubdir: string): strin
     }
 }
 
-/** 读取配置快照用于失败留证（脱敏 apiKeys 明文）。 */
+/** 读取配置快照用于失败留证（脱敏全部 SECRET_SETTING_KEYS 明文）。 */
 export function readRedactedConfigSnapshot(userDataDir: string, configFileName: string): unknown {
     try {
-        const raw = readJsonConfig(userDataDir, configFileName);
-        if (raw.apiKeys && typeof raw.apiKeys === 'object') {
-            const clone = structuredClone(raw) as { apiKeys?: Record<string, Record<string, unknown>> };
-            for (const entry of Object.values(clone.apiKeys ?? {})) {
-                if (entry && typeof entry.key === 'string' && entry.key.length > 0 && !entry.key.startsWith('dp-enc:')) {
-                    entry.key = `[redacted:${entry.key.length}]`;
-                }
-            }
-            return clone;
-        }
-        return raw;
+        return redactConfigSnapshot(readJsonConfig(userDataDir, configFileName));
     } catch {
         return null;
     }

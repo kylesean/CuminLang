@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,12 +24,17 @@ class TestMultiFileModelService extends MultiFileModelService {
     }
 }
 
-const makeSpec = (): MultiFileModelSpec => ({
+const sha256Hex = (data: Buffer | string): string => createHash('sha256').update(data).digest('hex');
+
+const makeSpec = (
+    expectedSha256: string = sha256Hex('ok-model-bytes'),
+    urls: readonly string[] = ['https://example.invalid/weights.bin'],
+): MultiFileModelSpec => ({
     modelDirectoryName: 'test-model',
-    files: [{ fileName: 'weights.bin', urls: ['https://example.invalid/weights.bin'], reportProgress: true }],
+    files: [{ fileName: 'weights.bin', urls, sha256: expectedSha256, reportProgress: true }],
     progressEventName: 'settings/sense-voice-model-download-progress',
     modelDisplayName: '测试模型',
-    primaryDownloadUrls: ['https://example.invalid/weights.bin'],
+    primaryDownloadUrls: urls,
     primaryFileName: 'weights.bin',
 });
 
@@ -44,7 +50,10 @@ describe('MultiFileModelService 下载并发与流错误处理', () => {
         }
     });
 
-    const setupService = async () => {
+    const setupService = async (
+        expectedSha256: string = sha256Hex('ok-model-bytes'),
+        urls: readonly string[] = ['https://example.invalid/weights.bin'],
+    ) => {
         tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cl-multifile-'));
         const gateway = new FileSystemGatewayImpl();
         const provider = {
@@ -54,7 +63,7 @@ describe('MultiFileModelService 下载并发与流错误处理', () => {
         const rendererGateway = { fireAndForget: vi.fn(), call: vi.fn() } as unknown as RendererGateway;
         return {
             tempDir,
-            service: new TestMultiFileModelService(makeSpec(), rendererGateway, provider, gateway),
+            service: new TestMultiFileModelService(makeSpec(expectedSha256, urls), rendererGateway, provider, gateway),
         };
     };
 
@@ -160,7 +169,7 @@ describe('MultiFileModelService 下载并发与流错误处理', () => {
     });
 
     it('cancelDownload() 后旧任务收尾前立即再次 download() 会等待清理并成功重下，同时 getStatus 上报真实进度', async () => {
-        const { service } = await setupService();
+        const { service } = await setupService(sha256Hex(Buffer.from([1, 2, 3, 4])));
         let finishFirstStream!: () => void;
         let firstCall = true;
         const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -202,5 +211,44 @@ describe('MultiFileModelService 下载并发与流错误处理', () => {
         const [firstResult, retryResult] = await Promise.all([firstDownload, retryDownload]);
         expect(firstResult.success).toBe(false);
         expect(retryResult.success).toBe(true);
+    });
+
+    it('首镜像 SHA-256 不一致时自动回退到备用镜像并完成安装，全部不一致则失败并清理临时目录', async () => {
+        const expected = Buffer.from('verified-model-binary');
+        const { tempDir: root, service } = await setupService(sha256Hex(expected), [
+            'https://mirror-bad.invalid/weights.bin',
+            'https://official-ok.invalid/weights.bin',
+        ]);
+        const fetchFallback = vi.fn(async (url: string) => new Response(
+            url.includes('mirror-bad') ? Buffer.from('tampered-bytes') : expected,
+            { status: 200, headers: { 'content-length': '21' } },
+        ));
+        vi.stubGlobal('fetch', fetchFallback);
+
+        const okResult = await service.download();
+        expect(okResult.success).toBe(true);
+        expect(fetchFallback).toHaveBeenCalledTimes(2);
+
+        const { tempDir: rootBad, service: badService } = await setupService(sha256Hex(expected), [
+            'https://only-bad.invalid/weights.bin',
+        ]);
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(Buffer.from('corrupt'), { status: 200 })));
+        const failResult = await badService.download();
+        expect(failResult.success).toBe(false);
+        expect(failResult.message).toContain('SHA256');
+        await expect(fs.access(path.join(root, 'test-model', 'weights.bin'))).resolves.toBeUndefined();
+        await expect(fs.access(path.join(rootBad, 'test-model', 'weights.bin'))).rejects.toThrow();
+    });
+
+    it('deleteModel() 同时清理正式目录与遗留的 .downloading 临时目录', async () => {
+        const { tempDir: root, service } = await setupService();
+        const downloadWorkDir = path.join(root, 'test-model.downloading');
+        await fs.mkdir(downloadWorkDir, { recursive: true });
+        await fs.writeFile(path.join(downloadWorkDir, 'partial.bin'), 'half');
+
+        const result = await service.deleteModel();
+
+        expect(result.success).toBe(true);
+        await expect(fs.access(downloadWorkDir)).rejects.toThrow();
     });
 });

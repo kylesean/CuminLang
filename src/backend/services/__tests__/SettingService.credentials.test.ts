@@ -216,6 +216,72 @@ describe('服务凭据：不把明文送进渲染进程', () => {
 
         expect(emptyKeysStore.values.get('apiKeys.openAi.providerKeys')).toBe('');
     });
+
+    it('修改既有服务商的接口主机（更换 origin）且未重新填写密钥时，拒绝把旧密钥继承到新地址', async () => {
+        await service.saveServiceCredentials({
+            ...baseSave,
+            openai: {
+                ...baseSave.openai,
+                providers: [{
+                    ...baseSave.openai.providers[0],
+                    endpoint: 'https://attacker.example/v1',
+                    key: '',
+                }],
+            },
+        });
+
+        expect(store.values.get('apiKeys.openAi.providerKeys')).toBe('');
+        const detail = await service.getServiceCredentialsDetail();
+        expect(detail.openai.providers[0]?.hasKey).toBe(false);
+    });
+
+    it('同源修改路径时（如 /v1 -> /v2）留空密钥仍保留已保存的值', async () => {
+        await service.saveServiceCredentials({
+            ...baseSave,
+            openai: {
+                ...baseSave.openai,
+                providers: [{
+                    ...baseSave.openai.providers[0],
+                    endpoint: 'https://api.example.com/v2',
+                    key: '',
+                }],
+            },
+        });
+
+        expect(JSON.parse(store.values.get('apiKeys.openAi.providerKeys')!)).toEqual({ deepseek: OPENAI_KEY });
+    });
+
+    it.each([
+        'http://attacker.tld/v1',
+        'ftp://example.com/v1',
+        'file:///etc/passwd',
+        'https://user:pass@api.example.com/v1',
+        'not-a-url',
+    ])('拒绝非可信协议或带认证信息的接口地址 %s', async (badEndpoint) => {
+        await expect(service.saveServiceCredentials({
+            ...baseSave,
+            openai: {
+                ...baseSave.openai,
+                providers: [{ ...baseSave.openai.providers[0], endpoint: badEndpoint }],
+            },
+        })).rejects.toThrow();
+    });
+
+    it.each([
+        'http://localhost:11434/v1',
+        'http://127.0.0.1:1234/v1',
+        'http://192.168.1.25:8080/v1',
+        'https://api.openai.com/v1',
+        '',
+    ])('允许合法的 https、空地址与本地推理 HTTP 接口地址 %s', async (goodEndpoint) => {
+        await expect(service.saveServiceCredentials({
+            ...baseSave,
+            openai: {
+                ...baseSave.openai,
+                providers: [{ ...baseSave.openai.providers[0], endpoint: goodEndpoint }],
+            },
+        })).resolves.toBeUndefined();
+    });
 });
 
 describe('代理设置校验与落盘', () => {

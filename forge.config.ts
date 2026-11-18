@@ -272,6 +272,7 @@ const config: ForgeConfig = {
             [FuseV1Options.EnableCookieEncryption]: true,
             [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
             [FuseV1Options.EnableNodeCliInspectArguments]: false,
+            [FuseV1Options.GrantFileProtocolExtraPrivileges]: false,
             // 刻意**不**启用 EnableEmbeddedAsarIntegrityValidation：
             // 1) 该 fuse 依赖有效的代码签名——macOS 需要 Developer ID 签名、Windows 需要
             //    Authenticode 签名。Electron 的 asar 完整性元数据（resources 里的

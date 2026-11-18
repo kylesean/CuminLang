@@ -7,8 +7,10 @@ import MultiFileModelService from '@/backend/services/models/MultiFileModelServi
 import {
     SENSE_VOICE_MODEL_DIRECTORY,
     SENSE_VOICE_MODEL_FILE,
+    SENSE_VOICE_MODEL_SHA256,
     SENSE_VOICE_MODEL_URLS,
     SENSE_VOICE_TOKENS_FILE,
+    SENSE_VOICE_TOKENS_SHA256,
     SENSE_VOICE_TOKENS_URLS,
 } from '@/backend/services/models/senseVoiceModel';
 
@@ -26,8 +28,8 @@ export class SenseVoiceModelServiceImpl extends MultiFileModelService {
             {
                 modelDirectoryName: SENSE_VOICE_MODEL_DIRECTORY,
                 files: [
-                    { fileName: SENSE_VOICE_TOKENS_FILE, urls: SENSE_VOICE_TOKENS_URLS },
-                    { fileName: SENSE_VOICE_MODEL_FILE, urls: SENSE_VOICE_MODEL_URLS, reportProgress: true },
+                    { fileName: SENSE_VOICE_TOKENS_FILE, urls: SENSE_VOICE_TOKENS_URLS, sha256: SENSE_VOICE_TOKENS_SHA256 },
+                    { fileName: SENSE_VOICE_MODEL_FILE, urls: SENSE_VOICE_MODEL_URLS, sha256: SENSE_VOICE_MODEL_SHA256, reportProgress: true },
                 ],
                 progressEventName: 'settings/sense-voice-model-download-progress',
                 modelDisplayName: 'SenseVoice 中英双语语音模型',

@@ -8,7 +8,9 @@
 
 export const PHONEME_GOP_MODEL_DIRECTORY = 'wav2vec2-lv-60-espeak-cv-ft-onnx';
 export const PHONEME_GOP_MODEL_FILE = 'model_q4.onnx';
+export const PHONEME_GOP_MODEL_SHA256 = 'f020386a4f730675b59f833af1581c7a0fa2f1e1c48adcf526e5c3c96115f772';
 export const PHONEME_GOP_VOCAB_FILE = 'vocab.json';
+export const PHONEME_GOP_VOCAB_SHA256 = 'd732ab2456c0c017930001dc9af0b41b3b93d25b2eb9740bf9d925508d7d87d0';
 
 export const PHONEME_GOP_REQUIRED_FILES = [
     PHONEME_GOP_MODEL_FILE,

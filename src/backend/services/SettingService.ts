@@ -5,7 +5,10 @@ import { generateText } from 'ai';
 import type AiProviderService from '@/backend/services/AiProviderService';
 import StrUtil from '@/common/utils/str-util';
 import { maskSecret } from '@/common/utils/secret-mask';
-import { isLocalLlmEndpoint } from '@/common/constants/cloud-ai-provider-presets';
+import {
+    isAllowedProviderEndpoint,
+    isLocalLlmEndpoint,
+} from '@/common/constants/cloud-ai-provider-presets';
 import type ClientProviderService from '@/backend/services/ClientProviderService';
 import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
 import { getMainLogger } from '@/backend/infrastructure/logger';
@@ -453,6 +456,19 @@ export class SettingServiceImpl implements SettingService {
      */
     public async saveServiceCredentials(settings: ServiceCredentialSettingSaveVO): Promise<void> {
         const existingKeys = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
+        const existingProfileById = new Map(
+            (parseStoredProviderProfiles(this.getValue('models.openai.providers')) ?? [])
+                .map((profile) => [profile.id, profile]),
+        );
+        const endpointOrigin = (rawEndpoint: string): string => {
+            const trimmed = rawEndpoint.trim();
+            if (!trimmed) return '';
+            try {
+                return new URL(trimmed).origin;
+            } catch {
+                return '';
+            }
+        };
         const nextKeys: Record<string, string> = {};
         const nextProfiles: PersistedCloudAiProvider[] = [];
 
@@ -460,6 +476,10 @@ export class SettingServiceImpl implements SettingService {
             const id = item.id.trim();
             if (!id) {
                 throw new Error('服务商标识不能为空');
+            }
+            const endpoint = item.endpoint.trim();
+            if (!isAllowedProviderEndpoint(endpoint)) {
+                throw new Error(`openai.providers.${id}.endpoint 仅支持 https:// 或本机/局域网推理 http:// 地址`);
             }
             const itemFormat = this.requireEnumValue(item.apiFormat, AI_API_FORMATS, `openai.providers.${id}.apiFormat`);
             const parsedModels = item.models.map((m) => m.trim());
@@ -476,11 +496,15 @@ export class SettingServiceImpl implements SettingService {
             ));
 
             const existingKey = existingKeys[id] ?? '';
+            const oldOrigin = endpointOrigin(existingProfileById.get(id)?.endpoint ?? '');
+            const newOrigin = endpointOrigin(endpoint);
+            // 更换或清空既有服务商的主机来源时禁止隐式继承旧密钥，防止凭据被静默重定向到外部地址。
+            const originChangedOrCleared = oldOrigin.length > 0 && newOrigin !== oldOrigin;
             if (item.clearKey) {
                 nextKeys[id] = '';
             } else if (!StrUtil.isBlank(item.key)) {
                 nextKeys[id] = item.key as string;
-            } else if (existingKey) {
+            } else if (existingKey && !originChangedOrCleared) {
                 nextKeys[id] = existingKey;
             }
 
@@ -488,7 +512,7 @@ export class SettingServiceImpl implements SettingService {
                 id,
                 name: item.name.trim() || id,
                 apiFormat: itemFormat,
-                endpoint: item.endpoint.trim(),
+                endpoint,
                 models: itemModels,
                 disabledModels: itemDisabled,
             });

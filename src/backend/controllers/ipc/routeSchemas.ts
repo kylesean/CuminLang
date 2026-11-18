@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { isAllowedProviderEndpoint } from '@/common/constants/cloud-ai-provider-presets';
 import type { SimpleClipQuery } from '@/common/api/dto';import {
     APPEARANCE_THEME_FAMILIES,
     type AppearanceSettingVO,
@@ -86,7 +87,9 @@ const providerProfileSaveSchema = z.object({
     id: z.string(),
     name: z.string(),
     apiFormat: aiApiFormatSchema,
-    endpoint: z.string(),
+    endpoint: z.string().refine(isAllowedProviderEndpoint, {
+        message: '接口地址必须使用 https://，或使用本机/局域网推理服务的 http:// 地址',
+    }),
     key: z.string().optional(),
     clearKey: z.boolean().optional(),
     models: z.array(z.string()),

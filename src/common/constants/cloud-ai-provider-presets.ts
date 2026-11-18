@@ -51,6 +51,30 @@ export function isLocalLlmEndpoint(endpoint: string): boolean {
 }
 
 /**
+ * 校验云端 AI 服务商接口地址是否允许保存与请求：
+ * - 允许空串（自定义服务商未填写或清空编辑中的中间态，真正发起请求前由调用方拦截）；
+ * - 非空时必须为合法 URL、禁止内嵌认证凭据，且仅允许 `https:` 或局域网/本机本地推理 `http:`。
+ */
+export function isAllowedProviderEndpoint(endpoint: string): boolean {
+    const trimmed = endpoint.trim();
+    if (trimmed.length === 0) {
+        return true;
+    }
+    try {
+        const parsed = new URL(trimmed);
+        if (parsed.username || parsed.password) {
+            return false;
+        }
+        if (parsed.protocol === 'https:') {
+            return true;
+        }
+        return parsed.protocol === 'http:' && isLocalLlmEndpoint(trimmed);
+    } catch {
+        return false;
+    }
+}
+
+/**
  * 仅保留四家主流预设：OpenAI、Anthropic、Gemini、DeepSeek。
  */
 export const CLOUD_AI_PROVIDER_PRESETS: CloudAiProviderPreset[] = [

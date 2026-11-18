@@ -1,6 +1,10 @@
 import Store from 'electron-store';
 import { safeStorage } from 'electron';
-import {type SettingKey, SettingKeyObj} from '@/common/types/store_schema';
+import {
+    SECRET_SETTING_KEYS as SCHEMA_SECRET_SETTING_KEYS,
+    type SettingKey,
+    SettingKeyObj,
+} from '@/common/types/store_schema';
 import StrUtil from '@/common/utils/str-util';
 import { getEnvironmentConfigName } from '@/backend/utils/runtimeEnv';
 
@@ -18,13 +22,7 @@ const store = buildStore(getEnvironmentConfigName('config'));
  * 这些值是用户的凭据，落盘即为明文的话，任何能读这个用户目录的进程都能拿到。
  * 代理地址常带 `user:pass@host` 形式的认证信息，与 API 密钥同级。
  */
-const SECRET_SETTING_KEYS: ReadonlySet<string> = new Set([
-    'apiKeys.tencent.secretId',
-    'apiKeys.tencent.secretKey',
-    'apiKeys.openAi.providerKeys',
-    'mobileAccess.token',
-    'proxy.url',
-]);
+const SECRET_SETTING_KEYS: ReadonlySet<string> = new Set(SCHEMA_SECRET_SETTING_KEYS);
 
 /** 加密值的落盘前缀；用来区分「密文」与「历史遗留的明文」。 */
 const ENCRYPTED_PREFIX = 'dp-enc:';

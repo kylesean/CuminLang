@@ -21,7 +21,7 @@ vi.mock('@/backend/infrastructure/logger', () => ({
 
 vi.mock('@/backend/ioc/inversify.config', () => ({ default: { get: containerGet } }));
 
-import registerRoute from '@/backend/controllers/ipc/registerRoute';
+import registerRoute, { configureIpcOriginGuard } from '@/backend/controllers/ipc/registerRoute';
 import type { RouteHandler } from '@/backend/controllers/ipc/routeRegistry';
 import {
     resetRouteRegistry,
@@ -41,6 +41,7 @@ const rendererError = vi.fn();
 describe('registerRoute IPC 边界语义', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        configureIpcOriginGuard(null);
         resetRouteRegistry();
         captured = new Map();
         setRouteTransport((path, handler) => captured.set(path, handler));
@@ -170,5 +171,26 @@ describe('registerRoute IPC 边界语义', () => {
 
         expect(ipcLogger.error).toHaveBeenCalledWith('ipc request failed', expect.objectContaining({ path: 'dp-task/detail' }));
         expect(rendererError).not.toHaveBeenCalled();
+    });
+
+    it('启用调用源守卫后，仅放行来自应用主帧的 IPC 调用，拒绝外部页面与子帧', async () => {
+        configureIpcOriginGuard({ rendererDirectory: '/app/renderer/main_window' });
+        const handler = vi.fn(async () => 'ok');
+        registerRoute('system/app-version', handler);
+        const invoke = captured.get('system/app-version')!;
+
+        const mainFrame = { url: 'file:///app/renderer/main_window/index.html#/settings' };
+        await expect(invoke({ senderFrame: mainFrame, sender: { mainFrame } }, undefined)).resolves.toBe('ok');
+        expect(handler).toHaveBeenCalledTimes(1);
+
+        const subframe = { url: 'file:///app/renderer/main_window/index.html#/embed' };
+        const evilFrame = { url: 'https://evil.example/xss.html' };
+        const localFileFrame = { url: 'file:///etc/passwd' };
+
+        await expect(invoke({ senderFrame: subframe, sender: { mainFrame } }, undefined)).rejects.toThrow('不可信');
+        await expect(invoke({ senderFrame: evilFrame, sender: { mainFrame: evilFrame } }, undefined)).rejects.toThrow('不可信');
+        await expect(invoke({ senderFrame: localFileFrame, sender: { mainFrame: localFileFrame } }, undefined)).rejects.toThrow('不可信');
+        await expect(invoke({}, undefined)).rejects.toThrow('不可信');
+        expect(handler).toHaveBeenCalledTimes(1);
     });
 });

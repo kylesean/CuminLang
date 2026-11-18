@@ -7,8 +7,10 @@ import MultiFileModelService from '@/backend/services/models/MultiFileModelServi
 import {
     PHONEME_GOP_MODEL_DIRECTORY,
     PHONEME_GOP_MODEL_FILE,
+    PHONEME_GOP_MODEL_SHA256,
     PHONEME_GOP_MODEL_URLS,
     PHONEME_GOP_VOCAB_FILE,
+    PHONEME_GOP_VOCAB_SHA256,
     PHONEME_GOP_VOCAB_URLS,
 } from '@/backend/services/models/phonemeGopModel';
 
@@ -26,8 +28,8 @@ export class PhonemeGopModelServiceImpl extends MultiFileModelService {
             {
                 modelDirectoryName: PHONEME_GOP_MODEL_DIRECTORY,
                 files: [
-                    { fileName: PHONEME_GOP_VOCAB_FILE, urls: PHONEME_GOP_VOCAB_URLS },
-                    { fileName: PHONEME_GOP_MODEL_FILE, urls: PHONEME_GOP_MODEL_URLS, reportProgress: true },
+                    { fileName: PHONEME_GOP_VOCAB_FILE, urls: PHONEME_GOP_VOCAB_URLS, sha256: PHONEME_GOP_VOCAB_SHA256 },
+                    { fileName: PHONEME_GOP_MODEL_FILE, urls: PHONEME_GOP_MODEL_URLS, sha256: PHONEME_GOP_MODEL_SHA256, reportProgress: true },
                 ],
                 progressEventName: 'settings/phoneme-gop-model-download-progress',
                 modelDisplayName: '音素 GOP 模型',

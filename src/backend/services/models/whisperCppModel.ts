@@ -23,6 +23,8 @@ export const WHISPER_CPP_MODEL_DOWNLOAD_URLS = [
 ] as const;
 /** whisper.cpp 引擎使用的 GGUF 模型归档文件名（单文件形态，归档即模型文件）。 */
 export const WHISPER_CPP_MODEL_ARCHIVE_NAME = 'ggml-parakeet-tdt-0.6b-v3-q8_0.bin';
+/** Parakeet v3 GGUF (q8_0, 668,757,119 bytes) 官方 SHA-256 校验值（HuggingFace LFS / ModelScope 一致）。 */
+export const WHISPER_CPP_MODEL_ARCHIVE_SHA256 = '4d64e9e96c2792186d072fde0034df0ad670cf680a2f53069052ead827fd600e';
 
 /** whisper.cpp 引擎完整运行所需的模型文件。 */
 export const WHISPER_CPP_REQUIRED_FILES = [

@@ -6,6 +6,7 @@ import TYPES from '@/backend/ioc/types';
 import ModelArchiveService from '@/backend/services/models/ModelArchiveService';
 import {
     WHISPER_CPP_MODEL_ARCHIVE_NAME,
+    WHISPER_CPP_MODEL_ARCHIVE_SHA256,
     WHISPER_CPP_MODEL_DIRECTORY,
     WHISPER_CPP_MODEL_DOWNLOAD_URLS,
     WHISPER_CPP_REQUIRED_FILES,
@@ -30,6 +31,7 @@ export class WhisperCppModelServiceImpl extends ModelArchiveService {
                 // 断点续传依赖固定工作目录名，不要随版本改。
                 workDirectoryName: '.whisper-cpp-download',
                 archiveFileName: WHISPER_CPP_MODEL_ARCHIVE_NAME,
+                archiveSha256: WHISPER_CPP_MODEL_ARCHIVE_SHA256,
                 archiveKind: 'raw',
                 modelDirectoryName: WHISPER_CPP_MODEL_DIRECTORY,
                 requiredFiles: [...WHISPER_CPP_REQUIRED_FILES],

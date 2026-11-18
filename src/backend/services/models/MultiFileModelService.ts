@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'node:stream';
@@ -16,6 +17,8 @@ export interface MultiFileDownloadItem {
     fileName: string;
     /** 有序镜像地址列表：优先尝试靠前镜像。 */
     urls: readonly string[];
+    /** 预期的十六进制 SHA-256 校验值；所有下载源落盘后都必须通过完整性校验。 */
+    sha256: string;
     /** 是否把该文件字节流作为整体进度主指标（一般指向最大的模型权重文件）。 */
     reportProgress?: boolean;
 }
@@ -127,7 +130,10 @@ export default abstract class MultiFileModelService implements LocalModelService
             await inflight.catch(() => undefined);
         }
         const modelDir = await this.getModelDir();
-        await this.fileSystemGateway.removeDirectoryIfExists(modelDir);
+        await Promise.all([
+            this.fileSystemGateway.removeDirectoryIfExists(modelDir),
+            this.fileSystemGateway.removeDirectoryIfExists(`${modelDir}.downloading`),
+        ]);
         return { success: true, message: `${this.spec.modelDisplayName}已删除` };
     }
 
@@ -146,6 +152,7 @@ export default abstract class MultiFileModelService implements LocalModelService
                 await this.downloadWithFallback(
                     item.urls,
                     path.join(workDir, item.fileName),
+                    item.sha256,
                     abortController.signal,
                     Boolean(item.reportProgress),
                 );
@@ -179,6 +186,7 @@ export default abstract class MultiFileModelService implements LocalModelService
     private async downloadWithFallback(
         urls: readonly string[],
         targetPath: string,
+        expectedSha256: string,
         signal: AbortSignal,
         reportProgress: boolean,
     ): Promise<void> {
@@ -205,8 +213,10 @@ export default abstract class MultiFileModelService implements LocalModelService
                 });
                 const writer = fs.createWriteStream(targetPath);
                 await pipeline(bodyStream, writer, { signal });
+                await this.verifyFileSha256(targetPath, expectedSha256, signal);
                 return;
             } catch (error) {
+                await this.fileSystemGateway.removeFileIfExists(targetPath).catch(() => undefined);
                 lastError = error;
                 if (signal.aborted) {
                     throw error;
@@ -214,6 +224,20 @@ export default abstract class MultiFileModelService implements LocalModelService
             }
         }
         throw lastError instanceof Error ? lastError : new Error('下载失败');
+    }
+
+    private async verifyFileSha256(filePath: string, expectedSha256: string, signal: AbortSignal): Promise<void> {
+        const hash = createHash('sha256');
+        const stream = fs.createReadStream(filePath, { signal });
+        for await (const chunk of stream) {
+            hash.update(chunk as Buffer);
+        }
+        const actual = hash.digest('hex');
+        if (actual !== expectedSha256.toLowerCase()) {
+            throw new Error(
+                `${this.spec.modelDisplayName}文件完整性校验失败 (${path.basename(filePath)} SHA256 不一致)`,
+            );
+        }
     }
 
     private emitProgress(
