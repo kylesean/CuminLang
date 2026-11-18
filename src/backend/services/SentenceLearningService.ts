@@ -3,8 +3,8 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import TYPES from '@/backend/ioc/types';
+import { CLOUD_AI_NOT_CONFIGURED_MESSAGE } from '@/common/constants/cloud-ai-errors';
 import type AiProviderService from '@/backend/services/AiProviderService';
-import { CLOUD_AI_NOT_CONFIGURED_MESSAGE } from '@/backend/services/AiProviderService';
 import type {
     CompleteSentenceParams,
     CompleteSentenceResult,

@@ -222,7 +222,10 @@ export default class EnglishDictionaryService {
             fs.mkdirSync(tempDir, { recursive: true });
             const archivePath = path.join(tempDir, 'wordnet.tar.gz');
             this.installPhase = 'downloading';
-            this.dpTaskService.process(taskId, { progress: '下载 WordNet 3.1…' });
+            this.dpTaskService.process(taskId, {
+                progress: '下载 WordNet 3.1…',
+                progressMeta: { code: 'wordnetPreparing' },
+            });
             await this.download(taskId, archivePath);
             this.dpTaskService.checkCancel(taskId);
 
@@ -232,7 +235,10 @@ export default class EnglishDictionaryService {
             }
 
             this.installPhase = 'extracting';
-            this.dpTaskService.process(taskId, { progress: '解压 WordNet 数据…' });
+            this.dpTaskService.process(taskId, {
+                progress: '解压 WordNet 数据…',
+                progressMeta: { code: 'wordnetExtracting' },
+            });
             const extractDir = path.join(tempDir, 'extract');
             fs.mkdirSync(extractDir, { recursive: true });
             await pipeline(
@@ -251,21 +257,37 @@ export default class EnglishDictionaryService {
             fs.mkdirSync(targetDir, { recursive: true });
             const dbPath = path.join(targetDir, DB_FILE);
             this.installPhase = 'building';
-            this.dpTaskService.process(taskId, { progress: '构建本地词典…' });
+            this.dpTaskService.process(taskId, {
+                progress: '构建本地词典…',
+                progressMeta: { code: 'wordnetBuilding' },
+            });
             await this.buildDatabaseInWorker(taskId, dictDir, dbPath);
             fs.writeFileSync(path.join(targetDir, MARKER_FILE), new Date().toISOString(), 'utf8');
 
-            this.dpTaskService.finish(taskId, { progress: '英英释义包安装完成', result: targetDir });
+            this.dpTaskService.finish(taskId, {
+                progress: '英英释义包安装完成',
+                progressMeta: { code: 'done' },
+                result: targetDir,
+            });
             this.logger.info('english dictionary installed', { dbPath });
         } catch (error) {
             if (error instanceof CancelByUserError || this.cancelledTasks.has(taskId)) {
-                this.dpTaskService.update({ id: taskId, status: DpTaskState.CANCELLED, progress: '任务取消' });
+                this.dpTaskService.update({
+                    id: taskId,
+                    status: DpTaskState.CANCELLED,
+                    progress: '任务取消',
+                    progressMeta: { code: 'cancelled' },
+                });
                 return;
             }
             const message = error instanceof Error ? error.message : String(error);
             this.lastError = message;
             this.logger.error('english dictionary install failed', { taskId, error: message });
-            this.dpTaskService.fail(taskId, { progress: '英英释义包安装失败', result: message });
+            this.dpTaskService.fail(taskId, {
+                progress: '英英释义包安装失败',
+                progressMeta: { code: 'failed' },
+                result: message,
+            });
         } finally {
             this.installPhase = 'idle';
             this.activeAbort = null;
@@ -304,7 +326,10 @@ export default class EnglishDictionaryService {
             const percent = Math.min(99, Math.floor((received / total) * 100));
             if (percent !== lastPercent) {
                 lastPercent = percent;
-                this.dpTaskService.process(taskId, { progress: `下载中 ${percent}%` });
+                this.dpTaskService.process(taskId, {
+                    progress: `下载中 ${percent}%`,
+                    progressMeta: { code: 'wordnetDownloading', percent },
+                });
             }
         });
         const out = fs.createWriteStream(dest);

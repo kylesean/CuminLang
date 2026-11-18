@@ -282,5 +282,20 @@
     "wordDetailsToggle": "Learning history",
     "dictionarySourceImported": "Local dictionary",
     "dictionarySourceBuiltin": "Built-in dictionary",
-    "dictionarySourceAi": "AI definition · may vary"
+    "dictionarySourceAi": "AI definition · may vary",
+    "dpTask": {
+        "stages": {
+            "taskCreated": "Task created",
+            "readingDuration": "Reading media duration…",
+            "transcribingChunk": "Recognizing speech {{current}}/{{total}} ({{percent}}%)",
+            "reconciling": "Aligning transcript & segmenting lines…",
+            "wordnetPreparing": "Downloading WordNet 3.1…",
+            "wordnetDownloading": "Downloading WordNet 3.1 ({{percent}}%)…",
+            "wordnetExtracting": "Extracting WordNet data…",
+            "wordnetBuilding": "Building local dictionary…",
+            "done": "Completed",
+            "cancelled": "Cancelled",
+            "failed": "Failed"
+        }
+    }
 }

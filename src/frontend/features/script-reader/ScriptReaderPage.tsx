@@ -30,6 +30,7 @@ import {
     replaceSentenceRangeText,
 } from '@/frontend/features/player/lib/transcript-edit-ops';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
+import { formatDpTaskProgress } from '@/frontend/i18n/dpTaskProgress';
 import {
     canCancelSubtitleGeneration,
     deriveSubtitleGenerationState,
@@ -930,7 +931,7 @@ export default function ScriptReaderPage() {
         activeDoc?.videoId,
     );
     const activeTask = activeTaskId !== undefined ? tasks.get(activeTaskId) : undefined;
-    const activeProgress = activeTask && activeTask !== 'init' ? activeTask.progress : null;
+    const activeProgress = formatDpTaskProgress(activeTask);
     const activePercent = activeTask && activeTask !== 'init' ? activeTask.progressMeta?.percent : undefined;
 
     const editingSentenceKey = activeDoc && editingState?.videoId === activeDoc.videoId

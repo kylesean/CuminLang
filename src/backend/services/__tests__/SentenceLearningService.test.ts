@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
 
 import { SentenceLearningServiceImpl } from '@/backend/services/SentenceLearningService';
 import type AiProviderService from '@/backend/services/AiProviderService';
-import { CLOUD_AI_NOT_CONFIGURED_MESSAGE } from '@/backend/services/AiProviderService';
+import { CLOUD_AI_NOT_CONFIGURED_MESSAGE } from '@/common/constants/cloud-ai-errors';
 
 const PARAMS = {
     text: 'I was just going to finish my thing.',

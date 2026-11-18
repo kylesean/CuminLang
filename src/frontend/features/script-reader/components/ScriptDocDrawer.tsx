@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@astryxdesign/core/Button';
 import type { ReaderDocumentSummary } from '@/common/types/contextStudio';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
+import { formatDpTaskProgress } from '@/frontend/i18n/dpTaskProgress';
 import { deriveSubtitleGenerationState } from '@/frontend/features/player/lib/subtitle-generation-phase';
 import { useSubtitleGenerationStore } from '@/frontend/features/player/subtitleGenerationStore';
 import { cn } from '@/frontend/lib/utils';
@@ -153,7 +154,7 @@ export function ScriptDocDrawer({
                                 doc.videoId,
                             );
                             const task = taskId !== undefined ? tasks.get(taskId) : undefined;
-                            const taskProgress = task && task !== 'init' ? task.progress : null;
+                            const taskProgress = formatDpTaskProgress(task);
 
                             let subline: string | null = null;
                             if (transcribing) {

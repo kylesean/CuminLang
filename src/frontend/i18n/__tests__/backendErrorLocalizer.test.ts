@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n, { applyLanguageSetting } from '@/frontend/i18n';
+import { CLOUD_AI_NOT_CONFIGURED_MESSAGE } from '@/common/constants/cloud-ai-errors';
 import {
     localizeBackendError,
     localizeBackendMessage,
     localizeBackendResult,
 } from '@/frontend/i18n/backendErrorLocalizer';
+import { formatDpTaskProgress } from '@/frontend/i18n/dpTaskProgress';
 import { backendClient } from '@/frontend/infrastructure/electron/backendClient';
 import { initIpcMessageToasts } from '@/frontend/app/bootstrap/initIpcMessageToasts';
 import * as notification from '@/frontend/components/shared/toasts/notification';
@@ -39,6 +41,78 @@ describe('backendErrorLocalizer', () => {
         [
             'whisper.cpp 模型下载完成',
             'whisper.cpp installed',
+        ],
+        [
+            '英英释义包安装完成',
+            'English-English dictionary pack installed',
+        ],
+        [
+            'Parakeet 模型下载已取消',
+            'Parakeet download cancelled',
+        ],
+        [
+            '语义模型下载已取消',
+            'Local semantic model download cancelled',
+        ],
+        [
+            'whisper.cpp 模型下载已取消',
+            'whisper.cpp download cancelled',
+        ],
+        [
+            '说话人分离模型下载已取消',
+            'Speaker diarization model download cancelled',
+        ],
+        [
+            '模型下载请求失败（HTTP 500）',
+            'Model download request failed (HTTP 500)',
+        ],
+        [
+            '模型下载请求失败（HTTP 502 Bad Gateway）',
+            'Model download request failed (HTTP 502 Bad Gateway)',
+        ],
+        [
+            'whisper.cpp 模型归档校验失败（SHA256 不一致），已删除损坏文件，请重新下载。',
+            'whisper.cpp archive checksum verification failed (SHA-256 mismatch). The corrupted file was deleted; please download again.',
+        ],
+        [
+            CLOUD_AI_NOT_CONFIGURED_MESSAGE,
+            'AI model is not configured. Go to Settings → Services & Resources to fill in Endpoint, API key (optional for local servers), and model, or click Use Preset.',
+        ],
+        [
+            '手机访问服务已经在运行',
+            'Mobile access service is already running',
+        ],
+        [
+            '语义模型正在下载，请等待完成后再试',
+            'Local semantic model is currently downloading. Please wait until it finishes.',
+        ],
+        [
+            '语义模型下载失败：HTTP 503',
+            'Local semantic model download failed (HTTP 503)',
+        ],
+        [
+            'whisper.cpp 模型文件缺失：/models/ggml.bin，请先在设置中心下载模型',
+            'whisper.cpp model file missing: /models/ggml.bin. Please download the model in Settings first.',
+        ],
+        [
+            '输入文件不存在：/tmp/a.mp4',
+            'Input file not found: /tmp/a.mp4',
+        ],
+        [
+            '输出目录不存在：/tmp/out',
+            'Output directory not found: /tmp/out',
+        ],
+        [
+            'constructor',
+            'constructor',
+        ],
+        [
+            '__proto__',
+            '__proto__',
+        ],
+        [
+            'valueOf',
+            'valueOf',
         ],
         [
             '测试失败: API Key 或 API URL 未配置',
@@ -137,5 +211,31 @@ describe('backendErrorLocalizer', () => {
             variant: 'info',
             dedupeKey: 'ipc-info:Phoneme GOP model is ready',
         });
+    });
+
+    it('formatDpTaskProgress 根据界面语言格式化结构化 progressMeta', async () => {
+        await applyLanguageSetting('en-US');
+        expect(formatDpTaskProgress({
+            progress: '识别中 2/4（50%）',
+            progressMeta: { code: 'transcribingChunk', percent: 50, params: { current: 2, total: 4 } },
+        })).toBe('Recognizing speech 2/4 (50%)');
+        expect(formatDpTaskProgress({
+            progress: '下载中 42%',
+            progressMeta: { code: 'wordnetDownloading', percent: 42 },
+        })).toBe('Downloading WordNet 3.1 (42%)…');
+        expect(formatDpTaskProgress({
+            progress: '解压 WordNet 数据…',
+            progressMeta: { code: 'wordnetExtracting' },
+        })).toBe('Extracting WordNet data…');
+
+        await applyLanguageSetting('zh-CN');
+        expect(formatDpTaskProgress({
+            progress: '识别中 2/4（50%）',
+            progressMeta: { code: 'transcribingChunk', percent: 50, params: { current: 2, total: 4 } },
+        })).toBe('识别中 2/4（50%）');
+        expect(formatDpTaskProgress({
+            progress: '下载中 42%',
+            progressMeta: { code: 'wordnetDownloading', percent: 42 },
+        })).toBe('下载 WordNet 3.1（42%）…');
     });
 });

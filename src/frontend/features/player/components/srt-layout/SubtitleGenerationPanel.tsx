@@ -12,6 +12,7 @@ import {
 } from '@/frontend/features/player/lib/subtitle-generation-phase';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { useSubtitleGenerationStore } from '@/frontend/features/player/subtitleGenerationStore';
+import { formatDpTaskProgress } from '@/frontend/i18n/dpTaskProgress';
 
 /**
  * 无字幕视频的字幕生成入口。
@@ -29,7 +30,7 @@ export default function SubtitleGenerationPanel() {
     const cancelGeneration = useSubtitleGenerationStore((s) => s.cancel);
     const task = useDpTaskCenter((s) => (taskId !== undefined ? s.tasks.get(taskId) : undefined));
     const cancelling = phase === 'cancelling';
-    const progress = task && task !== 'init' ? task.progress ?? null : null;
+    const progress = formatDpTaskProgress(task);
 
     const formatFailed = (message: string) => t('subtitleGeneration.failed', { message });
 

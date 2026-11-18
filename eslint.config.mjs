@@ -143,8 +143,9 @@ export default tseslint.config(
             ...playwright.configs['flat/recommended'].rules,
             // 合法跨平台守卫（如 Windows/root 跳过 chmod 权限校验）使用条件 test.skip(cond, reason)
             'playwright/no-skipped-test': ['error', { allowConditional: true }],
-            // 局部子元素定位（如原生 <video>）与语义定位器协同工作，避免被迫退回 page.evaluate(querySelector)
+            // 局部原生元素定位（<video>/<canvas>/input[type="file"]）允许裸选择器，其余一律禁止直接 .locator(css)
             'playwright/prefer-native-locators': 'off',
+            'playwright/no-raw-locators': ['error', { allowed: ['video', 'canvas', 'input[type="file"]'] }],
             // 允许合法的平台分支（如 !isMac）与夹具构造；禁止“吞掉断言的条件分支”交由评审控制
             'playwright/no-conditional-in-test': 'off',
             'playwright/no-conditional-expect': 'off',

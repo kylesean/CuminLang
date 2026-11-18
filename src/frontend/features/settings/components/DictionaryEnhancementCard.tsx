@@ -13,9 +13,11 @@ import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { Text } from '@astryxdesign/core/Text';
 import { Token } from '@astryxdesign/core/Token';
 import { VStack } from '@astryxdesign/core/VStack';
-import type { DpTask } from '@/common/contracts/dp-task';
+import type { DpTask, DpTaskProgressMeta } from '@/common/contracts/dp-task';
 import type { EnglishDictionaryStatusVO } from '@/common/contracts/english-dictionary';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
+import { localizeBackendMessage } from '@/frontend/i18n/backendErrorLocalizer';
+import { formatDpTaskProgress } from '@/frontend/i18n/dpTaskProgress';
 import { englishDictionaryApi } from '@/frontend/features/settings/englishDictionaryApi';
 import { SettingField } from '@/frontend/features/settings/components/form/SettingSection';
 
@@ -25,10 +27,11 @@ const STATUS_KEY = 'dictionary-enhancement/status';
 interface ActiveInstallState {
     taskId: number | null;
     progress: string | null;
+    progressMeta: DpTaskProgressMeta | null;
 }
 
 /** 跨组件卸载保留当前安装任务状态，避免切换设置页签后丢失取消句柄与进度文本。 */
-let activeInstallState: ActiveInstallState = { taskId: null, progress: null };
+let activeInstallState: ActiveInstallState = { taskId: null, progress: null, progressMeta: null };
 const installStateListeners = new Set<() => void>();
 
 function subscribeInstallState(listener: () => void): () => void {
@@ -60,11 +63,12 @@ export default function DictionaryEnhancementCard({
 }) {
     const { t } = useI18nTranslation('settings');
     const { data: status, mutate } = useSWR<EnglishDictionaryStatusVO>(STATUS_KEY, englishDictionaryApi.status);
-    const { taskId, progress } = useSyncExternalStore(
+    const { taskId, progress: rawProgress, progressMeta } = useSyncExternalStore(
         subscribeInstallState,
         getInstallStateSnapshot,
         getInstallStateSnapshot,
     );
+    const progress = formatDpTaskProgress({ progress: rawProgress, progressMeta });
     const [localError, setLocalError] = useState<string | null>(null);
     /** 删除增强包的确认弹窗是否打开。 */
     const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
@@ -90,18 +94,23 @@ export default function DictionaryEnhancementCard({
                         updateActiveInstallState({
                             taskId: registeredTaskId ?? activeInstallState.taskId,
                             progress: task.progress ?? null,
+                            progressMeta: task.progressMeta ?? null,
                         });
                     },
                     onFinish: () => {
                         settled = true;
-                        updateActiveInstallState({ taskId: null, progress: null });
+                        updateActiveInstallState({ taskId: null, progress: null, progressMeta: null });
                         void swrMutate(STATUS_KEY);
                     },
                 },
             );
             registeredTaskId = id;
             if (!settled) {
-                updateActiveInstallState({ taskId: id, progress: activeInstallState.progress });
+                updateActiveInstallState({
+                    taskId: id,
+                    progress: activeInstallState.progress,
+                    progressMeta: activeInstallState.progressMeta,
+                });
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -146,7 +155,8 @@ export default function DictionaryEnhancementCard({
     };
 
     const downloading = taskId !== null || Boolean(status?.downloading);
-    const displayError = !downloading ? (localError || status?.error || null) : null;
+    const rawError = !downloading ? (localError || status?.error || null) : null;
+    const displayError = rawError ? localizeBackendMessage(rawError) : null;
 
     return (
         <VStack gap={3} width="100%">

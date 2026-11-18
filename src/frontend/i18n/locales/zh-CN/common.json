@@ -282,5 +282,20 @@
     "wordDetailsToggle": "学习记录",
     "dictionarySourceImported": "本地词典",
     "dictionarySourceBuiltin": "内置词典",
-    "dictionarySourceAi": "AI 释义 · 仅供参考"
+    "dictionarySourceAi": "AI 释义 · 仅供参考",
+    "dpTask": {
+        "stages": {
+            "taskCreated": "任务创建成功",
+            "readingDuration": "读取媒体时长…",
+            "transcribingChunk": "识别中 {{current}}/{{total}}（{{percent}}%）",
+            "reconciling": "音文对账与断句整理…",
+            "wordnetPreparing": "下载 WordNet 3.1…",
+            "wordnetDownloading": "下载 WordNet 3.1（{{percent}}%）…",
+            "wordnetExtracting": "解压 WordNet 数据…",
+            "wordnetBuilding": "构建本地词典…",
+            "done": "已完成",
+            "cancelled": "任务取消",
+            "failed": "任务失败"
+        }
+    }
 }

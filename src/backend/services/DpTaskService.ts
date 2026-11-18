@@ -180,6 +180,7 @@ export class DpTaskServiceImpl implements DpTaskService {
             id: taskId,
             status: DpTaskState.INIT,
             progress: '任务创建成功',
+            progressMeta: { code: 'taskCreated' },
             result: null,
             created_at: TimeUtil.timeUtc(),
             updated_at: TimeUtil.timeUtc()

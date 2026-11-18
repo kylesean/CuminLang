@@ -19,7 +19,8 @@
         "noEnglishSpeech": "No English speech detected. Make sure to speak English into the microphone and check that it is not muted.",
         "noSpeech": "No speech detected. Move closer to the microphone and avoid background noise, then try again.",
         "noSpeechDetected": "No speech detected",
-        "failed": "Speech recognition failed"
+        "failed": "Speech recognition failed",
+        "whisperModelMissing": "whisper.cpp model file missing: {{path}}. Please download the model in Settings first."
     },
     "ai": {
         "notConfigured": "AI model is not configured. Go to Settings → Services & Resources to fill in Endpoint, API key (optional for local servers), and model, or click Use Preset.",
@@ -52,6 +53,7 @@
     },
     "mobileAccess": {
         "invalidPort": "Port must be between 1 and 65535",
+        "alreadyRunning": "Mobile access service is already running",
         "portStartFailed": "Failed to start on port {{port}}: {{detail}}",
         "missingAssets": "Mobile web assets missing: {{path}}",
         "thumbnailQueueFull": "Thumbnail request queue is full. Please try again shortly."
@@ -63,6 +65,8 @@
     "media": {
         "emptyPath": "Media path cannot be empty",
         "fileNotFound": "Media file not found: {{path}}",
+        "inputFileNotFound": "Input file not found: {{path}}",
+        "outputDirNotFound": "Output directory not found: {{path}}",
         "unauthorizedPath": "Media path is not authorized: {{path}}",
         "invalidDuration": "Failed to read a valid media duration: {{path}}",
         "invalidThumbnailTime": "Thumbnail timestamp must be a finite number",
@@ -132,19 +136,28 @@
     "englishDict": {
         "alreadyInstalled": "English-English dictionary pack is already installed",
         "downloading": "English-English dictionary pack is currently downloading",
+        "installed": "English-English dictionary pack installed",
         "sha256Mismatch": "WordNet archive SHA-256 mismatch: {{hash}}",
         "missingDictDir": "WordNet archive is missing the dict directory",
         "missingDataFile": "Missing WordNet data file: {{file}}"
     },
+    "localEmbedding": {
+        "downloading": "Local semantic model is currently downloading. Please wait until it finishes.",
+        "checksumFailed": "Local semantic model verification failed. Please retry.",
+        "httpFailed": "Local semantic model download failed (HTTP {{status}})",
+        "sha256Mismatch": "Local semantic model \"{{name}}\" failed SHA-256 check. The corrupted file was deleted; please download again."
+    },
     "download": {
         "httpFailed": "Download failed (HTTP {{status}})",
         "modelHttpFailed": "Model download request failed (HTTP {{status}} {{statusText}})",
+        "modelHttpFailedNoText": "Model download request failed (HTTP {{status}})",
         "emptyResponseBody": "Model download response body is empty: {{url}}",
         "insufficientDiskSpace": "Insufficient disk space: about {{requiredMb}} MB required, {{availableMb}} MB available",
         "checksumMismatch": "{{model}} integrity check failed ({{file}} SHA-256 mismatch)",
         "archiveMissingFiles": "{{model}} archive is missing files: {{files}}",
         "archiveExtractFailed": "Failed to extract {{model}} archive: {{detail}}",
         "archiveMissingModelDir": "Complete model directory not found in {{model}} archive",
+        "archiveChecksumCorrupted": "{{model}} archive checksum verification failed (SHA-256 mismatch). The corrupted file was deleted; please download again.",
         "cancelled": "{{model}} download cancelled",
         "failed": "Download failed"
     },
@@ -158,7 +171,9 @@
             "senseVoice": "SenseVoice bilingual speech model",
             "speakerSegmentation": "Speaker segmentation model",
             "speakerEmbedding": "Speaker embedding model",
-            "speakerDiarization": "Speaker diarization model"
+            "speakerDiarization": "Speaker diarization model",
+            "localEmbedding": "Local semantic model",
+            "englishDict": "English-English dictionary pack"
         }
     },
     "youtube": {

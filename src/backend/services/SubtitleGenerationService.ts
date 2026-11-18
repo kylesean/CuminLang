@@ -422,7 +422,10 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
                 },
             });
 
-            this.dpTaskService.process(taskId, { progress: '读取媒体时长…' });
+            this.dpTaskService.process(taskId, {
+                progress: '读取媒体时长…',
+                progressMeta: { code: 'readingDuration' },
+            });
             const duration = await this.ffmpegService.duration(videoPath);
             if (!Number.isFinite(duration) || duration <= 0) {
                 throw new Error(`无法读取媒体时长：${duration}`);
@@ -448,6 +451,11 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
                 const percent = Math.floor((index / Math.max(wavPaths.length, 1)) * 100);
                 this.dpTaskService.process(taskId, {
                     progress: `识别中 ${index + 1}/${wavPaths.length}（${percent}%）`,
+                    progressMeta: {
+                        code: 'transcribingChunk',
+                        percent,
+                        params: { current: index + 1, total: wavPaths.length },
+                    },
                 });
                 const result = await gateway.transcribe({
                     audioPath: wavPaths[index],
@@ -464,7 +472,10 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
             }
 
             this.dpTaskService.checkCancel(taskId);
-            this.dpTaskService.process(taskId, { progress: '音文对账与断句整理…' });
+            this.dpTaskService.process(taskId, {
+                progress: '音文对账与断句整理…',
+                progressMeta: { code: 'reconciling' },
+            });
 
             const mergedTokens = this.segmenter.mergeTimelines(timelines, cutPoints);
             const asrWords = this.segmenter.createWords(mergedTokens);
@@ -523,10 +534,19 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
                 lines: lines.length,
                 srtPath,
             });
-            this.dpTaskService.finish(taskId, { progress: '字幕生成完成', result: srtPath });
+            this.dpTaskService.finish(taskId, {
+                progress: '字幕生成完成',
+                progressMeta: { code: 'done' },
+                result: srtPath,
+            });
         } catch (error) {
             if (error instanceof CancelByUserError) {
-                this.dpTaskService.update({ id: taskId, status: DpTaskState.CANCELLED, progress: '任务取消' });
+                this.dpTaskService.update({
+                    id: taskId,
+                    status: DpTaskState.CANCELLED,
+                    progress: '任务取消',
+                    progressMeta: { code: 'cancelled' },
+                });
                 return;
             }
             if (options?.silent) {
@@ -535,7 +555,11 @@ export class SubtitleGenerationServiceImpl implements SubtitleGenerationService 
             }
             const message = error instanceof Error ? error.message : String(error);
             this.logger.error('subtitle generation failed', { job, error: message });
-            this.dpTaskService.fail(taskId, { progress: '字幕生成失败', result: message });
+            this.dpTaskService.fail(taskId, {
+                progress: '字幕生成失败',
+                progressMeta: { code: 'failed' },
+                result: message,
+            });
         } finally {
             this.activeVideos.delete(videoPath);
             this.gatewayByTask.delete(taskId);

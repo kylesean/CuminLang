@@ -19,7 +19,8 @@
         "noEnglishSpeech": "没有识别到英文语音。请确认对着麦克风用英语朗读，且麦克风没有被静音。",
         "noSpeech": "没有识别到语音。请靠近麦克风、避开环境噪音后重试。",
         "noSpeechDetected": "未识别到任何语音内容",
-        "failed": "语音识别失败"
+        "failed": "语音识别失败",
+        "whisperModelMissing": "whisper.cpp 模型文件缺失：{{path}}，请先在设置中心下载模型"
     },
     "ai": {
         "notConfigured": "AI 模型未配置：请到「设置 → 服务与资源」填写接口地址、API Key（本地服务可留空）与模型，或点「使用预设」快速填入",
@@ -52,6 +53,7 @@
     },
     "mobileAccess": {
         "invalidPort": "端口需在 1-65535 之间",
+        "alreadyRunning": "手机访问服务已经在运行",
         "portStartFailed": "端口 {{port}} 启动失败：{{detail}}",
         "missingAssets": "手机页资源缺失：{{path}}",
         "thumbnailQueueFull": "缩略图请求排队已满，请稍后重试"
@@ -63,6 +65,8 @@
     "media": {
         "emptyPath": "媒体路径不能为空",
         "fileNotFound": "媒体文件不存在：{{path}}",
+        "inputFileNotFound": "输入文件不存在：{{path}}",
+        "outputDirNotFound": "输出目录不存在：{{path}}",
         "unauthorizedPath": "媒体路径未授权：{{path}}",
         "invalidDuration": "无法读取有效的媒体时长：{{path}}",
         "invalidThumbnailTime": "缩略图时间必须是有限数字",
@@ -132,19 +136,28 @@
     "englishDict": {
         "alreadyInstalled": "英英释义包已安装",
         "downloading": "英英释义包正在下载",
+        "installed": "英英释义包安装完成",
         "sha256Mismatch": "WordNet 归档 sha256 不匹配：{{hash}}",
         "missingDictDir": "WordNet 归档缺少 dict 目录",
         "missingDataFile": "WordNet 数据文件缺失：{{file}}"
     },
+    "localEmbedding": {
+        "downloading": "语义模型正在下载，请等待完成后再试",
+        "checksumFailed": "语义模型校验失败，请重试",
+        "httpFailed": "语义模型下载失败：HTTP {{status}}",
+        "sha256Mismatch": "语义模型「{{name}}」SHA256 校验失败，文件已损坏并被删除，请重新下载"
+    },
     "download": {
         "httpFailed": "下载失败 HTTP {{status}}",
         "modelHttpFailed": "模型下载请求失败（HTTP {{status}} {{statusText}}）",
+        "modelHttpFailedNoText": "模型下载请求失败（HTTP {{status}}）",
         "emptyResponseBody": "模型下载响应体为空：{{url}}",
         "insufficientDiskSpace": "磁盘空间不足：需要约 {{requiredMb}} MB，可用 {{availableMb}} MB",
         "checksumMismatch": "{{model}}文件完整性校验失败 ({{file}} SHA256 不一致)",
         "archiveMissingFiles": "{{model}} 模型归档缺少文件：{{files}}",
         "archiveExtractFailed": "{{model}} 模型归档解压失败：{{detail}}",
         "archiveMissingModelDir": "{{model}} 模型归档中未找到完整模型目录",
+        "archiveChecksumCorrupted": "{{model}} 模型归档校验失败（SHA256 不一致），已删除损坏文件，请重新下载。",
         "cancelled": "{{model}}下载已取消",
         "failed": "下载失败"
     },
@@ -158,7 +171,9 @@
             "senseVoice": "SenseVoice 中英双语语音模型",
             "speakerSegmentation": "说话人分割模型",
             "speakerEmbedding": "声纹嵌入模型",
-            "speakerDiarization": "说话人分离模型"
+            "speakerDiarization": "说话人分离模型",
+            "localEmbedding": "语义模型",
+            "englishDict": "英英释义包"
         }
     },
     "youtube": {
