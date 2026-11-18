@@ -60,8 +60,12 @@ const isToolsUnsupportedError = (message: string): boolean => {
     return (
         /(?:tools?|function[_\s-]?calling|tool[_\s-]?choice).{0,40}(?:not\s+supported|unsupported|not\s+allowed|disabled|unavailable)/.test(normalized)
         || /(?:does\s+not\s+support|unrecognized|unknown|invalid|unsupported).{0,40}(?:tools?|function[_\s-]?calling|tool[_\s-]?choice)/.test(normalized)
+        || /(?:请求参数或格式有误|参数有误|不支持.{0,12}工具|工具.{0,12}不支持|invalid_request|\bhttp\s*400\b)/.test(normalized)
     );
 };
+
+const isOpenAiResponsesModel = (model: LanguageModel): boolean =>
+    (model as { provider?: unknown }).provider === 'openai.responses';
 
 /** 从 LanguageModel 提取「provider:modelId」作为降级记忆键；取不到 modelId 时返回 null（不做记忆）。 */
 const resolveToolsUnsupportedKey = (model: LanguageModel): string | null => {
@@ -237,13 +241,16 @@ export class ChatSessionServiceImpl implements ChatSessionService {
                     stopWhen: isStepCount(20),
                 }
                 : {}),
-            // 关闭 OpenAI Responses 的服务端状态引用（store: false），强制多轮工具调用回传完整 function_call
-            // 而非 item_reference，兼容无状态的三方 Open Responses / 代理网关。
-            providerOptions: {
-                openai: {
-                    store: false,
-                },
-            },
+            // 仅 OpenAI Responses API 关闭服务端状态引用（store: false），避免在标准 /chat/completions 下注入非标准字段
+            ...(isOpenAiResponsesModel(model)
+                ? {
+                    providerOptions: {
+                        openai: {
+                            store: false,
+                        },
+                    },
+                }
+                : {}),
             abortSignal,
             timeout: { firstChunkMs: 30_000, chunkMs: 60_000 },
         });

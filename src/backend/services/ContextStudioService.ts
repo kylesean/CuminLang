@@ -4,11 +4,12 @@ import { desc, eq, inArray, or } from 'drizzle-orm';
 import { inject, injectable, optional } from 'inversify';
 import type { Db } from '@/backend/infrastructure/db/createDb';
 import { wordEncounter } from '@/backend/infrastructure/db/tables/wordEncounter';
-import { watchHistory, WatchHistoryType } from '@/backend/infrastructure/db/tables/watchHistory';
+import { watchHistory } from '@/backend/infrastructure/db/tables/watchHistory';
 import { sentenceTranslates } from '@/backend/infrastructure/db/tables/sentenceTranslates';
 import TYPES from '@/backend/ioc/types';
 import type SavedSentenceRepository from '@/backend/services/repositories/SavedSentenceRepository';
 import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
+import { isHtml5VariantFileName } from '@/backend/services/watch-history-file-rules';
 import MatchSrt from '@/backend/utils/MatchSrt';
 import { parseAss, parseSrt, resegmentIntoMeaningGroups, type SrtLine } from '@/common/utils/subtitle';
 import { findBetterEnglishSubtitle } from '@/common/utils/subtitle/preferred-track';
@@ -36,12 +37,27 @@ function normalizeSubtitleText(text: string): string {
     return text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-async function resolveSubtitlePathForVideo(meta: VideoMetadataEntry): Promise<string | null> {
+async function readDirNamesCached(
+    dirPath: string,
+    cache?: Map<string, string[]>,
+): Promise<string[]> {
+    if (cache?.has(dirPath)) {
+        return cache.get(dirPath)!;
+    }
+    const names = await fs.readdir(dirPath).catch(() => [] as string[]);
+    cache?.set(dirPath, names);
+    return names;
+}
+
+async function resolveSubtitlePathForVideo(
+    meta: VideoMetadataEntry,
+    dirCache?: Map<string, string[]>,
+): Promise<string | null> {
     if (meta.srtFile && MediaUtil.isSubtitle(meta.srtFile)) {
         try {
             await fs.access(meta.srtFile);
             const dir = path.dirname(meta.srtFile);
-            const names = await fs.readdir(dir).catch(() => [] as string[]);
+            const names = await readDirNamesCached(dir, dirCache);
             const better = findBetterEnglishSubtitle(path.basename(meta.srtFile), names);
             return better ? path.join(dir, better) : meta.srtFile;
         } catch {
@@ -52,13 +68,17 @@ async function resolveSubtitlePathForVideo(meta: VideoMetadataEntry): Promise<st
     if (!meta.videoPath) return null;
     try {
         const videoDir = path.dirname(meta.videoPath);
-        const names = await fs.readdir(videoDir);
+        const names = await readDirNamesCached(videoDir, dirCache);
         const subtitlePaths = names
             .filter((name) => MediaUtil.isSubtitle(name))
             .map((name) => path.join(videoDir, name));
         if (subtitlePaths.length === 0) return null;
         const matched = MatchSrt.matchOneDetail(meta.videoPath, subtitlePaths);
-        return matched && !matched.suspicious ? matched.path : null;
+        if (!matched || matched.suspicious) {
+            return null;
+        }
+        const better = findBetterEnglishSubtitle(path.basename(matched.path), names);
+        return better ? path.join(videoDir, better) : matched.path;
     } catch {
         return null;
     }
@@ -176,10 +196,11 @@ export default class ContextStudioService {
                 videoTitle = MediaUtil.formatDisplayTitle(rows[0].fileName);
             }
         }
-        return this.savedSentenceRepo.upsert({
+        const saved = await this.savedSentenceRepo.upsert({
             ...input,
             videoTitle,
         });
+        return this.enrichSavedSentence(saved);
     }
 
     public async unsaveSentence(sentenceKey: string): Promise<boolean> {
@@ -207,6 +228,15 @@ export default class ContextStudioService {
         return map;
     }
 
+    private async enrichSavedSentence(sentence: SavedSentenceVO): Promise<SavedSentenceVO> {
+        if (!sentence.videoId) {
+            return sentence;
+        }
+        const videoMap = await this.loadVideoMetadataMap([sentence.videoId]);
+        const meta = videoMap.get(sentence.videoId);
+        return meta?.videoPath ? { ...sentence, videoPath: meta.videoPath } : sentence;
+    }
+
     public async listSavedSentences(): Promise<SavedSentenceVO[]> {
         const list = await this.savedSentenceRepo.findAll();
         const videoIds = Array.from(new Set(list.map((s) => s.videoId).filter(Boolean)));
@@ -225,7 +255,8 @@ export default class ContextStudioService {
     }
 
     public async updateSavedSentence(input: UpdateSavedSentenceInput): Promise<SavedSentenceVO | null> {
-        return this.savedSentenceRepo.updateNoteOrTag(input);
+        const updated = await this.savedSentenceRepo.updateNoteOrTag(input);
+        return updated ? this.enrichSavedSentence(updated) : null;
     }
 
     /**
@@ -320,29 +351,49 @@ export default class ContextStudioService {
 
     /**
      * 列出带有字幕文件的视频文档以及全部纯音频播客记录，供「精读文稿（Script Reader）」选择阅读与转写。
+     *
+     * 包含从媒体库/YouTube 文件夹扫入的条目（`WatchHistoryType.DIRECTORY`），
+     * 并在库记录 `srt_file` 为空时按同目录同名字幕规则自动发现并优选英文轨。
      */
     public async listReaderDocuments(): Promise<ReaderDocumentSummary[]> {
         const rows = await this.db
             .select()
             .from(watchHistory)
-            .where(eq(watchHistory.project_type, WatchHistoryType.FILE))
             .orderBy(desc(watchHistory.updated_at))
-            .limit(150);
+            .limit(250);
 
+        const dirCache = new Map<string, string[]>();
+        const seenVideoPaths = new Set<string>();
         const docs: ReaderDocumentSummary[] = [];
         for (const row of rows) {
-            const srtFile = row.srt_file?.trim() ?? '';
-            const isAudio = MediaUtil.isAudio(row.file_name);
-            const hasSubtitle = Boolean(srtFile);
-            if (!hasSubtitle && !isAudio) {
+            if (!MediaUtil.isMedia(row.file_name) || isHtml5VariantFileName(row.file_name)) {
                 continue;
             }
             const videoPath = path.join(row.base_path, row.file_name);
+            const canonicalVideoPath = path.resolve(videoPath);
+            if (seenVideoPaths.has(canonicalVideoPath)) {
+                continue;
+            }
+            seenVideoPaths.add(canonicalVideoPath);
+
+            const recordedSrt = row.srt_file?.trim() ?? '';
+            const resolvedSrt = (await resolveSubtitlePathForVideo(
+                { title: '', videoPath, srtFile: recordedSrt || null },
+                dirCache,
+            )) ?? (recordedSrt && MediaUtil.isSubtitle(recordedSrt) ? recordedSrt : '');
+            const isAudio = MediaUtil.isAudio(row.file_name);
+            const hasSubtitle = Boolean(resolvedSrt);
+            if (!hasSubtitle && !isAudio) {
+                continue;
+            }
             this.mediaPathRegistry?.allowFile(videoPath);
+            if (resolvedSrt) {
+                this.mediaPathRegistry?.allowFile(resolvedSrt);
+            }
             docs.push({
                 videoId: row.id,
                 title: MediaUtil.formatDisplayTitle(row.file_name),
-                srtFile,
+                srtFile: resolvedSrt,
                 videoPath,
                 updatedAt: row.updated_at,
                 mediaType: isAudio ? 'audio' : 'video',

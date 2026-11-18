@@ -359,4 +359,78 @@ describe('ContextStudioService & SavedSentenceRepository', () => {
             await fs.rm(tmpDir, { recursive: true, force: true });
         }
     });
+
+    it('saveSentence 与 updateSavedSentence 返回保留 videoPath 以防改标签或笔记后丢原生播放能力', async () => {
+        memoryDb = createMemoryDb();
+        const repo = new SavedSentenceRepositoryImpl(memoryDb.db);
+        const registry = new MediaPathRegistry();
+        const service = new ContextStudioService(repo, memoryDb.db, registry);
+
+        await memoryDb.db.insert(watchHistory).values({
+            id: 'vid-save',
+            base_path: '/media/youtube',
+            file_name: 'harvard-talk.mp4',
+            project_type: 2,
+            srt_file: null,
+        });
+
+        const saved = await service.saveSentence({
+            sentenceKey: 'h-save:1',
+            videoId: 'vid-save',
+            fileHash: 'h-save',
+            sentenceIndex: 1,
+            startTime: 10,
+            endTime: 14,
+            text: 'And you have earned the right to talk about this.',
+        });
+        expect(saved.videoPath).toBe('/media/youtube/harvard-talk.mp4');
+        expect(registry.isAllowed('/media/youtube/harvard-talk.mp4')).toBe(true);
+
+        const updated = await service.updateSavedSentence({
+            sentenceKey: 'h-save:1',
+            tag: 'expression',
+            note: '好表达',
+        });
+        expect(updated?.tag).toBe('expression');
+        expect(updated?.videoPath).toBe('/media/youtube/harvard-talk.mp4');
+    });
+
+    it('listReaderDocuments 纳入媒体库子目录视频（project_type=2）且 srt_file 为空时自动发现旁挂英文字幕', async () => {
+        const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dp-ctx-dir-reader-'));
+        try {
+            const videoName = 'How to Communicate [5yCqhY1D-VE].mp4';
+            const origSrtName = 'How to Communicate [5yCqhY1D-VE].en-orig.srt';
+            const enSrtName = 'How to Communicate [5yCqhY1D-VE].en.srt';
+            await fs.writeFile(path.join(tmpDir, videoName), '', 'utf-8');
+            await fs.writeFile(path.join(tmpDir, origSrtName), '1\n00:00:01,000 --> 00:00:02,000\nhello\n', 'utf-8');
+            await fs.writeFile(path.join(tmpDir, enSrtName), '1\n00:00:01,000 --> 00:00:02,000\nHello.\n', 'utf-8');
+
+            memoryDb = createMemoryDb();
+            const repo = new SavedSentenceRepositoryImpl(memoryDb.db);
+            const registry = new MediaPathRegistry();
+            const service = new ContextStudioService(repo, memoryDb.db, registry);
+
+            await memoryDb.db.insert(watchHistory).values({
+                id: 'yt-dir-video',
+                base_path: tmpDir,
+                file_name: videoName,
+                project_type: 2,
+                srt_file: null,
+            });
+
+            const docs = await service.listReaderDocuments();
+            expect(docs).toHaveLength(1);
+            expect(docs[0]).toMatchObject({
+                videoId: 'yt-dir-video',
+                mediaType: 'video',
+                hasSubtitle: true,
+                srtFile: path.join(tmpDir, enSrtName),
+                videoPath: path.join(tmpDir, videoName),
+            });
+            expect(registry.isAllowed(path.join(tmpDir, videoName))).toBe(true);
+            expect(registry.isAllowed(path.join(tmpDir, enSrtName))).toBe(true);
+        } finally {
+            await fs.rm(tmpDir, { recursive: true, force: true });
+        }
+    });
 });

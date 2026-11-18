@@ -1120,10 +1120,19 @@ export default function ContextStudioPage() {
                                 key={selection.sentence.sentenceKey}
                                 sentence={selection.sentence}
                                 onUpdated={(updated) => {
+                                    const preserved: SavedSentenceVO = {
+                                        ...selection.sentence,
+                                        ...updated,
+                                        videoPath: updated.videoPath ?? selection.sentence.videoPath,
+                                    };
                                     setSentences((prev) =>
-                                        prev.map((s) => (s.sentenceKey === updated.sentenceKey ? updated : s)),
+                                        prev.map((s) => (
+                                            s.sentenceKey === preserved.sentenceKey
+                                                ? { ...s, ...preserved, videoPath: preserved.videoPath ?? s.videoPath }
+                                                : s
+                                        )),
                                     );
-                                    setExplicitSelection({ kind: 'sentence', sentence: updated });
+                                    setExplicitSelection({ kind: 'sentence', sentence: preserved });
                                 }}
                                 onRemoved={(removedKey) => {
                                     setSentences((prev) => prev.filter((s) => s.sentenceKey !== removedKey));

@@ -13,6 +13,7 @@ vi.mock('@/backend/infrastructure/logger', () => ({
 }));
 
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { ChatSessionServiceImpl } from '@/backend/services/ChatSessionService';
 import { InMemoryChatSessionStore } from '@/backend/services/chat/ChatSessionStore';
 import type AiProviderService from '@/backend/services/AiProviderService';
@@ -215,5 +216,63 @@ describe('ChatSessionService 工具降级的会话级记忆', () => {
         await vi.waitFor(() => expect(requestBodies).toHaveLength(1));
 
         expect(requestBodies[0]?.tools).toBeDefined();
+    });
+
+    it('OpenAI 兼容接口返回中文通用 400（如请求参数或格式有误）时自动去掉 tools 重试且不泄漏 store 字段', async () => {
+        const requestBodies: Array<Record<string, unknown>> = [];
+        let callIndex = 0;
+        const mockFetch: typeof fetch = async (_input, init) => {
+            callIndex += 1;
+            const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+            requestBodies.push(body);
+            if (callIndex === 1) {
+                return new Response(
+                    JSON.stringify({
+                        error: {
+                            message: '请求参数或格式有误，请检查输入。 如需协助，请提供错误请求 ID：a4e9aea966914d20a72394f12fd64b03',
+                            type: 'invalid_request',
+                            code: 'invalid_request',
+                        },
+                    }),
+                    { status: 400, headers: { 'Content-Type': 'application/json' } },
+                );
+            }
+            return makeChatSseResponse('核心表达分析完成。');
+        };
+
+        const store = new InMemoryChatSessionStore();
+        const session = store.create({
+            videoId: 'v1',
+            originalTopic: 'Talk goodter.',
+            paragraphLines: ['Talk goodter.'],
+            subtitleFileHash: 'h1',
+            anchorSentenceIndex: 0,
+        });
+
+        const compatModel = createOpenAICompatible({
+            name: 'openai',
+            baseURL: 'https://mock.compat.local/v1',
+            apiKey: 'test-key',
+            fetch: mockFetch,
+        }).chatModel('Index-Translate-35B-A3B');
+        const rendererGateway = {
+            fireAndForget: vi.fn(),
+            call: vi.fn(),
+        } as unknown as RendererGateway;
+        const service = new ChatSessionServiceImpl(
+            { getModel: vi.fn().mockReturnValue(compatModel) } as unknown as AiProviderService,
+            rendererGateway,
+            store,
+            { get: vi.fn().mockReturnValue(null) } as unknown as CacheService,
+        );
+
+        await service.sendMessage({ sessionId: session.id, content: '讲讲这句' });
+        await vi.waitFor(() => expect(callIndex).toBe(2));
+
+        expect(requestBodies[0]?.tools).toBeDefined();
+        expect(requestBodies[0]?.store).toBeUndefined();
+        expect(requestBodies[1]?.tools).toBeUndefined();
+        expect(requestBodies[1]?.store).toBeUndefined();
+        expect(store.isToolsUnsupported(session.id, 'openai.chat:Index-Translate-35B-A3B')).toBe(true);
     });
 });
