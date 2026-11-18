@@ -149,18 +149,6 @@ async function launchManagedSession(
     });
 }
 
-/**
- * 手动启动一次应用会话。多会话/重启场景推荐直接使用 `openSession` fixture，
- * 以便自动纳管进程崩溃检测与运行期证据采集。
- */
-export async function launchAppSession(
-    userDataDir: string,
-    options: LaunchAppOptions = {},
-): Promise<AppSession> {
-    const handle = await launchManagedSession(1, userDataDir, options);
-    return handle.session;
-}
-
 type Fixtures = {
     /** 用例独占的 userData 目录，测试结束后自动删除。 */
     userDataDir: string;
