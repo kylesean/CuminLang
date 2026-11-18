@@ -157,6 +157,7 @@ jobs:
             bash -lc '
               pacman -Syu --noconfirm base-devel zstd &&
               useradd -m builder &&
+              chmod -R a+rX /work/out/CuminLang-linux-x64 &&
               chown -R builder:builder /work/out/make/arch &&
               su - builder -c "cd /work && ./packaging/arch/build-pkg.sh \"${VERSION}\" /work/out/CuminLang-linux-x64 /work/out/make/arch/x86_64"
             '

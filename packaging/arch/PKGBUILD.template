@@ -22,6 +22,7 @@ sha256sums=('SKIP' 'SKIP' 'SKIP')
 package() {
   install -dm755 "${pkgdir}/usr/lib/cuminlang"
   cp -a "${srcdir}/CuminLang-linux-x64/." "${pkgdir}/usr/lib/cuminlang/"
+  chmod -R a+rX "${pkgdir}/usr/lib/cuminlang"
 
   install -dm755 "${pkgdir}/usr/bin"
   cat > "${pkgdir}/usr/bin/cuminlang" <<'EOF'
