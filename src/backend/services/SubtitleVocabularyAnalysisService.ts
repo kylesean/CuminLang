@@ -24,8 +24,8 @@ export type SubtitleVocabularyAnalysisResult = {
  * 字幕生词分析的状态快照。
  */
 export type SubtitleVocabularyAnalysisStatus = {
-    /** 当前状态。 */
-    status: 'idle' | 'analyzing' | 'completed';
+    /** 当前状态：空闲 / 进行中 / 已让位暂停（保留已完成分块，可续跑）/ 已完成。 */
+    status: 'idle' | 'analyzing' | 'paused' | 'completed';
     /** 已完成的分块进度，范围为 0 到 100。 */
     progress: number;
 };
@@ -109,6 +109,11 @@ export interface SubtitleVocabularyAnalysisService {
      * 终止当前正在执行的分析，但保留已经完成的分块缓存。
      */
     cancelActive(): void;
+
+    /**
+     * 注册分析缓存失效回调（词表变更时同步失活视频学习片段等下游缓存）。
+     */
+    onInvalidate?(listener: () => void): () => void;
 }
 
 /**
@@ -117,6 +122,7 @@ export interface SubtitleVocabularyAnalysisService {
 @injectable()
 export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabularyAnalysisService {
     private readonly states = new Map<string, AnalysisState>();
+    private readonly invalidateListeners = new Set<() => void>();
     private readonly scheduler = concurrency.scheduler('default');
     /** 当前全局唯一的字幕分析任务。 */
     private activeAnalysis?: ActiveAnalysis;
@@ -131,6 +137,13 @@ export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabulary
     constructor(
         @inject(TYPES.WordMatchService) private readonly wordMatchService: WordMatchService,
     ) {}
+
+    public onInvalidate(listener: () => void): () => void {
+        this.invalidateListeners.add(listener);
+        return () => {
+            this.invalidateListeners.delete(listener);
+        };
+    }
 
     /**
      * 获取或启动一份字幕的共享分析。
@@ -177,11 +190,12 @@ export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabulary
 
         const chunkSize = 50;
         const totalChunks = Math.ceil(texts.length / chunkSize);
-        const state: AnalysisState = (
+        const canResume = Boolean(
             existingState
             && existingState.vocabularyRevision === vocabularyRevision
-            && existingState.totalChunks === totalChunks
-        )
+            && existingState.totalChunks === totalChunks,
+        );
+        const state: AnalysisState = canResume && existingState
             ? existingState
             : {
                 vocabularyRevision,
@@ -190,7 +204,9 @@ export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabulary
                 progress: 0,
             };
         state.result = undefined;
-        state.progress = 0;
+        state.progress = canResume && state.totalChunks > 0
+            ? Math.min(99, Math.round((state.chunks.size / state.totalChunks) * 100))
+            : 0;
         this.states.set(fileHash, state);
 
         const previousAnalysis = this.activeAnalysis;
@@ -239,7 +255,7 @@ export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabulary
             return { status: 'analyzing', progress: state.progress };
         }
         return {
-            status: state.chunks.size > 0 ? 'analyzing' : 'idle',
+            status: state.chunks.size > 0 ? 'paused' : 'idle',
             progress: state.totalChunks === 0
                 ? 0
                 : Math.min(99, Math.round((state.chunks.size / state.totalChunks) * 100)),
@@ -256,6 +272,9 @@ export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabulary
     public invalidate(): void {
         this.activeAnalysis = undefined;
         this.states.clear();
+        for (const listener of this.invalidateListeners) {
+            listener();
+        }
     }
 
     /**

@@ -90,7 +90,11 @@ export default function ScriptReaderPage() {
     const [selectedVideoId, setSelectedVideoId] = useState<string>(routeVideoId ?? '');
 
     const [sentences, setSentences] = useState<Sentence[]>([]);
-    const [loadedScriptVideoId, setLoadedScriptVideoId] = useState<string | null>(null);
+    const [scriptLoadState, setScriptLoadState] = useState<{
+        videoId: string;
+        status: 'ready' | 'error';
+        errorMessage?: string;
+    } | null>(null);
     const [activeCursor, setActiveCursor] = useState<{ videoId?: string; index: number | null }>({
         videoId: routeVideoId,
         index: null,
@@ -199,7 +203,10 @@ export default function ScriptReaderPage() {
         [documents, effectiveVideoId],
     );
     const activeHasSubtitle = Boolean(activeDoc && activeDoc.srtFile.trim().length > 0);
-    const loadingScript = Boolean(activeDoc && activeHasSubtitle) && loadedScriptVideoId !== activeDoc?.videoId;
+    const loadingScript = Boolean(activeDoc && activeHasSubtitle) && scriptLoadState?.videoId !== activeDoc?.videoId;
+    const scriptLoadError = Boolean(activeDoc && activeHasSubtitle)
+        && scriptLoadState?.videoId === activeDoc?.videoId
+        && scriptLoadState?.status === 'error';
     const activeSentences = useMemo(
         () => (activeDoc && activeHasSubtitle ? sentences : []),
         [activeDoc, activeHasSubtitle, sentences],
@@ -287,9 +294,11 @@ export default function ScriptReaderPage() {
             });
         };
 
+        let succeeded = false;
         void activateDocSubtitle()
             .then((parsed) => {
                 if (cancelled) return;
+                succeeded = true;
                 const parsedSentences = parsed?.sentences ?? [];
                 setSentences(parsedSentences);
 
@@ -330,15 +339,20 @@ export default function ScriptReaderPage() {
                         });
                 }
             })
-            .catch(() => {
+            .catch((error) => {
                 if (!cancelled) {
                     setSentences([]);
+                    setScriptLoadState({
+                        videoId: activeDoc.videoId,
+                        status: 'error',
+                        errorMessage: error instanceof Error ? error.message : undefined,
+                    });
                     toast.error(i18nT('pages:scriptReader.parseFailed', { defaultValue: '解析文稿字幕失败' }));
                 }
             })
             .finally(() => {
-                if (!cancelled) {
-                    setLoadedScriptVideoId(activeDoc.videoId);
+                if (!cancelled && succeeded) {
+                    setScriptLoadState({ videoId: activeDoc.videoId, status: 'ready' });
                 }
             });
 
@@ -805,7 +819,7 @@ export default function ScriptReaderPage() {
             }
             const firstId = createdIds[0];
             const docs = await refreshDocuments(firstId);
-            setLoadedScriptVideoId(null);
+            setScriptLoadState(null);
             setDrawerOpen(false);
             if (routeVideoId !== firstId) {
                 navigate(`/reader/${encodeURIComponent(firstId)}`, { replace: true });
@@ -830,7 +844,7 @@ export default function ScriptReaderPage() {
             if (!srtPath) return;
             await playerApi.attachSubtitleTrack(doc.videoPath, srtPath);
             await refreshDocuments(doc.videoId);
-            setLoadedScriptVideoId(null);
+            setScriptLoadState(null);
             setAsrMissingForVideoId(null);
             setDocReloadToken((v) => v + 1);
             toast.success(t('scriptReader.attachSrtSuccess', { defaultValue: '字幕文稿已挂载' }));
@@ -1074,6 +1088,19 @@ export default function ScriptReaderPage() {
                                     ) : loadingScript ? (
                                         <div className="py-12 text-center text-sm text-secondary">
                                             {t('scriptReader.loadingScript', { defaultValue: '加载文稿中...' })}
+                                        </div>
+                                    ) : scriptLoadError ? (
+                                        <div className="py-12 flex flex-col items-center gap-3 text-center text-sm text-secondary">
+                                            <span>{t('scriptReader.parseFailed', { defaultValue: '解析文稿字幕失败' })}</span>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                label={t('common:retry', { defaultValue: '重新加载' })}
+                                                onClick={() => {
+                                                    setScriptLoadState(null);
+                                                    setDocReloadToken((n) => n + 1);
+                                                }}
+                                            />
                                         </div>
                                     ) : activeSentences.length === 0 ? (
                                         <div className="py-12 text-center text-sm text-secondary">

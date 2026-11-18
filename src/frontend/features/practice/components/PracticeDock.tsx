@@ -234,6 +234,7 @@ export default function PracticeDock() {
 
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const audioDisposeRef = useRef<(() => void) | null>(null);
+    const stopStudioAudioRef = useRef<(() => void) | null>(null);
     const dockRef = useRef<HTMLDivElement | null>(null);
 
     const { data: resourceStatus } = useSWR(
@@ -503,7 +504,12 @@ export default function PracticeDock() {
         }
     }, [activeUnit, mutateFileSummaries, mutateHistory, setDictationRevealed]);
 
+    const handleRegisterStopStudioAudio = useCallback((stopFn: (() => void) | null) => {
+        stopStudioAudioRef.current = stopFn;
+    }, []);
+
     const handlePlayHistoryAudio = useCallback((audioPath: string) => {
+        stopStudioAudioRef.current?.();
         stopHistoryAudio();
         const { audio, dispose } = createBoostedAudio(
             UrlUtil.toUrl(audioPath),
@@ -1108,6 +1114,8 @@ export default function PracticeDock() {
                             onSlowReplay={handleSlowReplay}
                             onNextSentence={advanceShadowingNext}
                             onHasRecordingChange={setHasMineRecording}
+                            onStopExternalAudio={stopHistoryAudio}
+                            onRegisterStopAudio={handleRegisterStopStudioAudio}
                         />
                     ) : dictationStyle === 'slots' ? (
                         <WordSlotDictation

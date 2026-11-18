@@ -192,6 +192,9 @@ export class VideoLearningServiceImpl implements VideoLearningService {
                 this.logger.error('视频学习片段队列消费异常', { error });
             },
         });
+        this.subtitleVocabularyAnalysisService.onInvalidate?.(() => {
+            this.invalidateClipAnalysisCache();
+        });
     }
 
     /**

@@ -897,4 +897,43 @@ describe('ScriptReaderPage - Refactored Book & Inspector Intensive Studio', () =
             expect(screen.getByTestId('script-sentence-row-0').textContent).not.toContain('Doc A edited line.');
         });
     });
+
+    it('字幕解析失败时展示明确错误与重试按钮，而不是误当成空白字幕；点击重试可恢复展示', async () => {
+        mockParseSubtitleToSentences
+            .mockRejectedValueOnce(new Error('corrupted srt'))
+            .mockResolvedValueOnce({
+                filePath: '/videos/stanford.srt',
+                fileHash: 'h-retry',
+                sentences: [{
+                    fileHash: 'h-retry',
+                    index: 0,
+                    start: 1,
+                    end: 3,
+                    adjustedStart: null,
+                    adjustedEnd: null,
+                    text: 'Recovered sentence.',
+                    textZH: '已恢复句子',
+                    key: 'k-r0',
+                    transGroup: 1,
+                    translationKey: 'h-retry:0',
+                    struct: { original: '', blocks: [] },
+                }],
+            });
+
+        render(
+            <MemoryRouter initialEntries={['/reader']}>
+                <ScriptReaderPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('解析文稿字幕失败')).toBeDefined();
+        });
+        expect(screen.queryByText('暂无字幕内容')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: '重试' }));
+        await waitFor(() => {
+            expect(screen.getByTestId('script-sentence-row-0').textContent).toContain('Recovered sentence.');
+        });
+    });
 });

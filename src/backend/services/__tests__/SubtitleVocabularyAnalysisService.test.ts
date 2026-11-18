@@ -56,9 +56,31 @@ describe('字幕生词分析：被取代任务的活跃判定', () => {
         releaseChunk1();
         await Promise.allSettled([first, second]);
 
-        // 旧 isRunning 判定（status==='analyzing'）在此失灵：有分块、无结果、已让位
+        // 旧 isRunning 判定（status==='analyzing'）曾误把让位态标成 analyzing，现显式区分 paused
+        expect(service.getStatus('hash-A').status).toBe('paused');
+        expect(service.getStatus('hash-A').progress).toBe(50);
+
+        // 续跑 hash-A 时保留已完成分块进度，不回退到 0%
+        let releaseResumeChunk: (() => void) | undefined;
+        matchMock.mockImplementationOnce(
+            () => new Promise<MatchedWord[][]>((resolve) => {
+                releaseResumeChunk = () => resolve([]);
+            }),
+        );
+        const resumed = service.analyze('hash-A', new Array(100).fill('line'));
         expect(service.getStatus('hash-A').status).toBe('analyzing');
         expect(service.getStatus('hash-A').progress).toBe(50);
+        await vi.waitFor(() => expect(releaseResumeChunk).toBeTypeOf('function'));
+        releaseResumeChunk?.();
+        await resumed;
+    });
+
+    it('invalidate 时联动通知下游监听器清理派生缓存', () => {
+        const service = makeService(vi.fn().mockResolvedValue([]));
+        const listener = vi.fn();
+        service.onInvalidate(listener);
+        service.invalidate();
+        expect(listener).toHaveBeenCalledTimes(1);
     });
 
     it('初始状态与完成态的 isActive 均为 false', async () => {

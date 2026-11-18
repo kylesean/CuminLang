@@ -55,6 +55,10 @@ interface ShadowingStudioProps {
     onSlowReplay: () => void;
     onNextSentence: () => void;
     onHasRecordingChange?: (hasRecording: boolean) => void;
+    /** 播放独占互斥：通知宿主中止历史录音等外部音频。 */
+    onStopExternalAudio?: () => void;
+    /** 向宿主注册本工作台的音频中止入口，便于播放历史录音前先行静音。 */
+    onRegisterStopAudio?: (stopFn: (() => void) | null) => void;
 }
 
 interface LocalRecordingSnapshot {
@@ -268,6 +272,8 @@ function RecordShadowingView({
     onSlowReplay,
     onNextSentence,
     onHasRecordingChange,
+    onStopExternalAudio,
+    onRegisterStopAudio,
 }: Omit<ShadowingStudioProps, 'style'>) {
     const { t } = useTranslation('practice');
     const autoRecordFlow = usePracticePanel((s) => s.autoRecordFlow);
@@ -322,6 +328,13 @@ function RecordShadowingView({
     }, []);
 
     // 卸载时回收本地录音 ObjectURL、对比计时器、受控原声与回放音轨（换句靠外层 key={unit.key} 重挂载清理）
+    useEffect(() => {
+        onRegisterStopAudio?.(stopContrastAudio);
+        return () => {
+            onRegisterStopAudio?.(null);
+        };
+    }, [onRegisterStopAudio, stopContrastAudio]);
+
     useEffect(() => {
         mountedRef.current = true;
         return () => {
@@ -423,6 +436,7 @@ function RecordShadowingView({
     }, [onHasRecordingChange, playableMineUrl]);
 
     const playMineAudioOnly = useCallback((url: string, onEnd?: () => void) => {
+        onStopExternalAudio?.();
         if (minePlayRafRef.current !== null) {
             cancelAnimationFrame(minePlayRafRef.current);
             minePlayRafRef.current = null;
@@ -472,10 +486,11 @@ function RecordShadowingView({
             stopProgress();
             onEnd?.();
         });
-    }, [t]);
+    }, [onStopExternalAudio, t]);
 
     const triggerABContrast = useCallback(() => {
         if (!playableMineUrl) return;
+        onStopExternalAudio?.();
         if (abPhase !== 'idle') {
             stopContrastAudio();
             usePlayer.getState().pause();
@@ -506,9 +521,10 @@ function RecordShadowingView({
                 }
             },
         });
-    }, [abPhase, playMineAudioOnly, playableMineUrl, stopContrastAudio, unit]);
+    }, [abPhase, onStopExternalAudio, playMineAudioOnly, playableMineUrl, stopContrastAudio, unit]);
 
     const triggerAutoFlow = useCallback(() => {
+        onStopExternalAudio?.();
         stopContrastAudio();
         const runId = ++abRunIdRef.current;
         clipOwnedRef.current = true;
@@ -533,7 +549,7 @@ function RecordShadowingView({
                 }
             },
         });
-    }, [onClipStart, startRecording, stopContrastAudio, unit]);
+    }, [onClipStart, onStopExternalAudio, startRecording, stopContrastAudio, unit]);
 
     // 下一句在「播完自动开麦」开启时自动衔接示范原声 → 开麦
     useEffect(() => {

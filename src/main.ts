@@ -105,8 +105,21 @@ const mainWindowRef = {
     current: null as BrowserWindow | null
 };
 
+type AppPhase =
+    | 'booting'
+    | 'migrating'
+    | 'recovery'
+    | 'starting_services'
+    | 'running'
+    | 'stopping'
+    | 'ready_to_quit';
+
+let appPhase: AppPhase = 'booting';
+let pendingFocusRequested = false;
+
 /**
- * 唤醒并聚焦主窗口；若窗口已销毁且应用就绪则重建主窗口。
+ * 唤醒并聚焦主窗口；若窗口已销毁且已进入可建窗阶段则重建主窗口；
+ * 启动迁移/服务初始化期内收到激活请求时先登记延迟聚焦，防止提前创建空控制器窗口或双窗覆写。
  */
 const showOrCreateMainWindow = (): void => {
     const window = mainWindowRef.current;
@@ -114,8 +127,12 @@ const showOrCreateMainWindow = (): void => {
         showAndFocusWindow(window);
         return;
     }
-    if (app.isReady()) {
+    if (appPhase === 'recovery' || appPhase === 'running') {
         createWindow();
+        return;
+    }
+    if (appPhase === 'booting' || appPhase === 'migrating' || appPhase === 'starting_services') {
+        pendingFocusRequested = true;
     }
 };
 
@@ -302,7 +319,7 @@ const createWindow = () => {
     mainWindow.on('close', (event) => {
         if (shouldHideInsteadOfClose({
             trayActive: isAppTrayActive(),
-            isQuitting: shutdownPhase !== 'idle',
+            isQuitting: appPhase === 'stopping' || appPhase === 'ready_to_quit',
             recoveryMode: getMigrationFailure() !== null,
         })) {
             event.preventDefault();
@@ -314,7 +331,7 @@ const createWindow = () => {
             mainWindowRef.current = null;
         }
         // 无托盘状态下关闭主窗口即准备退出：同步销毁无父窗口的桌面歌词，防止进程常驻无法退出。
-        if (!isAppTrayActive() && shutdownPhase === 'idle') {
+        if (!isAppTrayActive() && appPhase !== 'stopping' && appPhase !== 'ready_to_quit') {
             try {
                 container.get<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow).destroy();
             } catch {
@@ -381,6 +398,7 @@ app.on('ready', async () => {
         container.get<StorageDirectoryProvider>(TYPES.StorageDirectoryProvider),
         container.get<MediaPathRegistry>(TYPES.MediaPathRegistry),
     );
+    appPhase = 'migrating';
     try {
         await runStartupMigrations();
     } catch (error) {
@@ -389,12 +407,18 @@ app.on('ready', async () => {
     if (getMigrationFailure() !== null) {
         // 恢复模式：迁移未完成，业务控制器与后台任务全部不启动（它们依赖数据库），
         // 只注册恢复路由并建窗，由前端 gate 页引导用户重试或重置。
+        appPhase = 'recovery';
         logger.warn('entering migration recovery mode');
         registerHandler(mainWindowRef, { recoveryMode: true });
         createWindow();
+        if (pendingFocusRequested && mainWindowRef.current && !mainWindowRef.current.isDestroyed()) {
+            pendingFocusRequested = false;
+            showAndFocusWindow(mainWindowRef.current);
+        }
         return;
     }
     logStartupPhase('migrations');
+    appPhase = 'starting_services';
     // 数据库迁移完成后再解析控制器，避免服务的 postConstruct 提前访问未建表数据库。
     registerHandler(mainWindowRef);
     logStartupPhase('controllers');
@@ -443,7 +467,12 @@ app.on('ready', async () => {
         onToggleDesktopLyrics: () => lyricsWindow.toggle(),
         onToggleDesktopLyricsLock: (locked) => lyricsWindow.setLocked(locked),
     });
+    appPhase = 'running';
     createWindow();
+    if (pendingFocusRequested && mainWindowRef.current && !mainWindowRef.current.isDestroyed()) {
+        pendingFocusRequested = false;
+        showAndFocusWindow(mainWindowRef.current);
+    }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -455,34 +484,30 @@ app.on('window-all-closed', () => {
         app.quit();
     }
 });
-/** 退出流程所处阶段。 */
-type ShutdownPhase = 'idle' | 'stopping' | 'ready';
-
-let shutdownPhase: ShutdownPhase = 'idle';
 
 /**
  * 退出前释放本地模型进程和手机访问监听，避免后台遗留进程、端口占用和长连接卡住退出。
  *
  * 这段收尾会把退出拦下来（preventDefault），所以这里必须保证最终还能退出：
  * - 收尾期间重复的退出请求（右键 Dock 退出、Cmd+Q 连按、系统注销）直接忽略，
- *   不再重复关闭同一批服务；只有本函数的 app.quit() 会把状态推到 ready 放行；
+ *   不再重复关闭同一批服务；只有本函数的 app.quit() 会把状态推到 ready_to_quit 放行；
  * - 收尾或随后的 Electron/Node 清理一旦卡住，由外部兜底进程硬杀（见 armForceExitWatchdog）。
  */
 app.on('before-quit', (event) => {
-    if (shutdownPhase === 'ready') {
+    if (appPhase === 'ready_to_quit') {
         return;
     }
     // 没拿到单实例锁的进程从未启动任何服务，直接放行退出。
     if (!hasSingleInstanceLock) {
-        shutdownPhase = 'ready';
+        appPhase = 'ready_to_quit';
         return;
     }
     event.preventDefault();
-    if (shutdownPhase === 'stopping') {
+    if (appPhase === 'stopping') {
         logger.info('app quit requested while shutting down');
         return;
     }
-    shutdownPhase = 'stopping';
+    appPhase = 'stopping';
     logger.info('app before quit', { forceExitAfterMs: QUIT_FORCE_EXIT_TIMEOUT_MS });
     armForceExitWatchdog();
     try {
@@ -506,7 +531,7 @@ app.on('before-quit', (event) => {
             } catch (dbError) {
                 logger.error('main database close failed', { error: dbError });
             }
-            shutdownPhase = 'ready';
+            appPhase = 'ready_to_quit';
             app.quit();
         });
     } catch (error) {
@@ -517,7 +542,7 @@ app.on('before-quit', (event) => {
         } catch {
             // 忽略数据库关闭异常
         }
-        shutdownPhase = 'ready';
+        appPhase = 'ready_to_quit';
         app.quit();
     }
 });
