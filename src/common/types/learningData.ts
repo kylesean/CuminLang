@@ -4,6 +4,7 @@ import type {
     ReviewRetentionStats,
 } from '@/common/types/review';
 import type { ProductionPracticeMode, RetellLevel } from '@/common/types/learningRecap';
+import type { SavedSentenceTag } from '@/common/types/contextStudio';
 import type {
     WordEncounterAction,
     WordSource,
@@ -135,13 +136,54 @@ export interface LearningDataRolePlayTurnVO {
 }
 
 /**
+ * 学习数据导出中的收藏金句。
+ *
+ * 与 `dp_saved_sentence` 一一对应。
+ */
+export interface LearningDataSavedSentenceVO {
+    sentenceKey: string;
+    videoId: string;
+    videoTitle: string;
+    fileHash: string;
+    sentenceIndex: number;
+    startTime: number;
+    endTime: number;
+    text: string;
+    textZh: string;
+    note: string;
+    tag: SavedSentenceTag;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * 学习数据导出中的整句学习笔记与 AI 精读历史。
+ *
+ * 与 `dp_sentence_study_note` 一一对应。
+ */
+export interface LearningDataSentenceStudyNoteVO {
+    sentenceKey: string;
+    videoId: string;
+    fileHash: string;
+    sentenceIndex: number;
+    originalText: string;
+    studyCardJson: string | null;
+    noteSummary: string;
+    messagesJson: string;
+    presetId: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
  * 可移植的学习数据 JSON。
  *
  * schemaVersion 1 只含词表 / 事件 / 复习卡 / 推荐；版本 2 起补齐了
- * 跟读、听写与产出型练习；版本 3 起补齐角色扮演轮次，导入时按版本兼容读取。
+ * 跟读、听写与产出型练习；版本 3 起补齐角色扮演轮次；版本 4 起补齐收藏金句与整句学习笔记，
+ * 导入时按版本兼容读取。
  */
 export interface LearningDataExportVO {
-    schemaVersion: 3;
+    schemaVersion: 4;
     exportedAt: string;
     words: LearningDataWordVO[];
     encounters: LearningDataEncounterVO[];
@@ -150,6 +192,8 @@ export interface LearningDataExportVO {
     sentencePractices: LearningDataSentencePracticeVO[];
     productionPractices: LearningDataProductionPracticeVO[];
     rolePlayTurns: LearningDataRolePlayTurnVO[];
+    savedSentences: LearningDataSavedSentenceVO[];
+    sentenceStudyNotes: LearningDataSentenceStudyNoteVO[];
     retention: {
         last7Days: ReviewRetentionStats;
         last30Days: ReviewRetentionStats;
@@ -170,6 +214,8 @@ export interface LearningDataRestoreSnapshot {
     sentencePractices: LearningDataSentencePracticeVO[];
     productionPractices: LearningDataProductionPracticeVO[];
     rolePlayTurns: LearningDataRolePlayTurnVO[];
+    savedSentences: LearningDataSavedSentenceVO[];
+    sentenceStudyNotes: LearningDataSentenceStudyNoteVO[];
 }
 
 /**
@@ -183,6 +229,8 @@ export interface LearningDataRestoreCounts {
     sentencePracticesRestored: number;
     productionPracticesRestored: number;
     rolePlayTurnsRestored: number;
+    savedSentencesRestored: number;
+    sentenceStudyNotesRestored: number;
 }
 
 /**
@@ -222,5 +270,7 @@ export interface LearningDataImportResultVO {
     sentencePracticesRestored?: number;
     productionPracticesRestored?: number;
     rolePlayTurnsRestored?: number;
+    savedSentencesRestored?: number;
+    sentenceStudyNotesRestored?: number;
     error?: string;
 }

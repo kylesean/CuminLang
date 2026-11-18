@@ -65,6 +65,11 @@ export const SettingKeyObj = {
     'mobileAccess.enabled': 'false',
     'mobileAccess.port': '27182',
     /**
+     * 监听范围：'loopback' 仅绑 127.0.0.1（防公共 Wi-Fi 明文嗅探）；
+     * 'lan' 绑定全部网卡供局域网手机直连，需在 UI 显式确认明文 HTTP 风险。
+     */
+    'mobileAccess.bindScope': 'loopback',
+    /**
      * 手机访问令牌：为空表示尚未生成，首次开启手机访问时由主进程生成并落盘。
      * 一旦生成就保持稳定，重新生成需要用户显式触发。
      */

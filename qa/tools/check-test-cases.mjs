@@ -49,6 +49,7 @@ const CASE_LINE_RE = /^\s*-\s*用例：/;
  */
 const TEST_CALL_RE = /^\s*test(?:\.(only|skip|fixme|fail|slow))?\s*\(/;
 const TEST_DECL_TITLE_START_RE = /^\s*test(?:\.(?:only|skip|fixme|fail|slow))?\s*\(\s*['"`]/;
+const DESCRIBE_MODIFIER_RE = /^\s*test\.describe(?:\.[a-zA-Z]+)*\.(only|skip|fixme)\s*\(/;
 
 /**
  * 允许不挂场景 ID 的 spec 文件。
@@ -187,6 +188,10 @@ const scanSpecs = () => {
         const relFile = path.relative(REPO_ROOT, file).split(path.sep).join('/');
         const lines = fs.readFileSync(file, 'utf8').split('\n');
         for (let index = 0; index < lines.length; index += 1) {
+            const describeMatch = lines[index].match(DESCRIBE_MODIFIER_RE);
+            if (describeMatch) {
+                problems.push(`${relFile}:${index + 1} 禁止在分组声明上保留 test.describe.${describeMatch[1]}()，请移除或移入文档缺口记录`);
+            }
             const callMatch = lines[index].match(TEST_CALL_RE);
             if (!callMatch) {
                 continue;

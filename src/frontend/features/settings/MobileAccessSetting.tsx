@@ -5,12 +5,14 @@ import { useTranslation as useI18nTranslation } from 'react-i18next';
 import { toast } from 'react-hot-toast';
 import { Copy, ExternalLink, Smartphone, Wifi } from 'lucide-react';
 
+import { AlertDialog } from '@astryxdesign/core/AlertDialog';
 import { Button } from '@astryxdesign/core/Button';
 import { Divider } from '@astryxdesign/core/Divider';
 import { HStack } from '@astryxdesign/core/HStack';
 import { Icon, type IconType } from '@astryxdesign/core/Icon';
 import { IconButton } from '@astryxdesign/core/IconButton';
 import { NumberInput } from '@astryxdesign/core/NumberInput';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { Switch } from '@astryxdesign/core/Switch';
 import { Text } from '@astryxdesign/core/Text';
@@ -28,10 +30,14 @@ import {
     settingsApi,
 } from '@/frontend/features/settings/settingsApi';
 import { useAutoSaveSettingsForm } from '@/frontend/features/settings/useAutoSaveSettingsForm';
-import type { MobileAccessSettingSaveVO } from '@/common/contracts/mobile-access-setting-vo';
+import type {
+    MobileAccessBindScope,
+    MobileAccessSettingSaveVO,
+} from '@/common/contracts/mobile-access-setting-vo';
 import { SETTING_ITEM_TESTIDS } from '@/common/constants/qa-testids';
 
-type MobileAccessFormValues = MobileAccessSettingSaveVO;
+type MobileAccessFormValues = Required<MobileAccessSettingSaveVO>;
+type PendingLanConfirm = 'enable-lan' | 'switch-lan' | null;
 
 /** 端口输入的合法范围。 */
 const MIN_PORT = 1;
@@ -52,10 +58,11 @@ const MobileAccessSetting: React.FC = () => {
 
     const form = useForm<MobileAccessFormValues>();
     const { setValue } = form;
-    const [enabled, port] = useWatch({
+    const [enabled, port, bindScope] = useWatch({
         control: form.control,
-        name: ['enabled', 'port'],
+        name: ['enabled', 'port', 'bindScope'],
     });
+    const [pendingLanConfirm, setPendingLanConfirm] = React.useState<PendingLanConfirm>(null);
 
     const { ready, error: saveError, initialize } = useAutoSaveSettingsForm<MobileAccessFormValues>({
         form,
@@ -72,6 +79,7 @@ const MobileAccessSetting: React.FC = () => {
         initialize({
             enabled: detail.enabled,
             port: detail.port,
+            bindScope: detail.bindScope ?? 'loopback',
         });
     }, [detail, initialize]);
 
@@ -136,7 +144,7 @@ const MobileAccessSetting: React.FC = () => {
         );
     }
 
-    if (!ready || enabled === undefined || port === undefined || !detail) {
+    if (!ready || enabled === undefined || port === undefined || bindScope === undefined || !detail) {
         return (
             <SettingsLoadingSkeleton
                 title={t('mobile.title')}
@@ -144,6 +152,46 @@ const MobileAccessSetting: React.FC = () => {
             />
         );
     }
+
+    const handleToggleEnabled = (checked: boolean): void => {
+        if (checked && bindScope === 'lan') {
+            setPendingLanConfirm('enable-lan');
+            return;
+        }
+        setValue('enabled', checked, {
+            shouldDirty: true,
+            shouldTouch: true,
+        });
+    };
+
+    const handleScopeChange = (nextScope: MobileAccessBindScope): void => {
+        if (nextScope === bindScope) {
+            return;
+        }
+        if (nextScope === 'lan') {
+            setPendingLanConfirm('switch-lan');
+            return;
+        }
+        setValue('bindScope', 'loopback', {
+            shouldDirty: true,
+            shouldTouch: true,
+        });
+    };
+
+    const confirmLanAccess = (): void => {
+        if (pendingLanConfirm === 'switch-lan') {
+            setValue('bindScope', 'lan', {
+                shouldDirty: true,
+                shouldTouch: true,
+            });
+        } else if (pendingLanConfirm === 'enable-lan') {
+            setValue('enabled', true, {
+                shouldDirty: true,
+                shouldTouch: true,
+            });
+        }
+        setPendingLanConfirm(null);
+    };
 
     const errorText = saveError ?? detail.lastError;
     const statusText = detail.running
@@ -165,11 +213,34 @@ const MobileAccessSetting: React.FC = () => {
             title={t('mobile.title')}
             description={t('mobile.description')}
         >
+            <AlertDialog
+                isOpen={pendingLanConfirm !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPendingLanConfirm(null);
+                    }
+                }}
+                title={t('mobile.lanConfirmTitle')}
+                description={t('mobile.lanConfirmDescription')}
+                actionLabel={t('mobile.lanConfirmOk')}
+                cancelLabel={t('mobile.lanConfirmCancel')}
+                actionVariant="destructive"
+                onAction={confirmLanAccess}
+            />
+
             <VStack gap={6} width="100%">
                 {errorText && (
                     <Banner
                         status="error"
                         title={errorText}
+                    />
+                )}
+
+                {bindScope === 'lan' && (
+                    <Banner
+                        status="warning"
+                        title={t('mobile.plaintextWarningTitle')}
+                        description={t('mobile.plaintextWarning')}
                     />
                 )}
 
@@ -186,13 +257,33 @@ const MobileAccessSetting: React.FC = () => {
                             label={t('mobile.enabledTitle')}
                             isLabelHidden
                             value={Boolean(enabled)}
-                            onChange={(checked) => {
-                                setValue('enabled', checked, {
-                                    shouldDirty: true,
-                                    shouldTouch: true,
-                                });
-                            }}
+                            onChange={handleToggleEnabled}
                         />
+                    </SettingField>
+
+                    <Divider variant="subtle" />
+
+                    <SettingField
+                        title={t('mobile.scopeTitle')}
+                        description={t('mobile.scopeDescription')}
+                    >
+                        <div className="shrink-0">
+                            <SegmentedControl
+                                label={t('mobile.scopeTitle')}
+                                value={bindScope}
+                                onChange={(val) => handleScopeChange(val as MobileAccessBindScope)}
+                                size="sm"
+                            >
+                                <SegmentedControlItem
+                                    value="loopback"
+                                    label={t('mobile.scopeLoopback')}
+                                />
+                                <SegmentedControlItem
+                                    value="lan"
+                                    label={t('mobile.scopeLan')}
+                                />
+                            </SegmentedControl>
+                        </div>
                     </SettingField>
 
                     <Divider variant="subtle" />

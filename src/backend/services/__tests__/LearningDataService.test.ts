@@ -10,7 +10,9 @@ import { productionPracticeRecord } from '@/backend/infrastructure/db/tables/pro
 import { recommendationEvent } from '@/backend/infrastructure/db/tables/recommendationEvent';
 import { reviewCard } from '@/backend/infrastructure/db/tables/reviewCard';
 import { rolePlayTurn } from '@/backend/infrastructure/db/tables/rolePlayTurn';
+import { savedSentence } from '@/backend/infrastructure/db/tables/savedSentence';
 import { sentencePracticeRecord } from '@/backend/infrastructure/db/tables/sentencePracticeRecord';
+import { sentenceStudyNote } from '@/backend/infrastructure/db/tables/sentenceStudyNote';
 import { wordEncounter, type InsertWordEncounter } from '@/backend/infrastructure/db/tables/wordEncounter';
 import { words } from '@/backend/infrastructure/db/tables/words';
 import FileSystemGatewayImpl from '@/backend/infrastructure/storage/FileSystemGatewayImpl';
@@ -275,7 +277,7 @@ describe('LearningDataService 导出与清除', () => {
 
         const exported = await service.buildExport();
 
-        expect(exported.schemaVersion).toBe(3);
+        expect(exported.schemaVersion).toBe(4);
         expect(exported.words.map((word) => word.word)).toEqual(['journey']);
         expect(exported.words[0]).toMatchObject({
             word: 'journey',
@@ -336,7 +338,7 @@ describe('LearningDataService 导出与清除', () => {
 
         const exported = await service.buildExport();
 
-        expect(exported.schemaVersion).toBe(3);
+        expect(exported.schemaVersion).toBe(4);
         expect(exported.sentencePractices).toEqual([{
             fileHash: 'subtitle-1',
             sentenceIndex: 3,
@@ -567,11 +569,37 @@ describe('LearningDataService 导出与清除', () => {
             used_expressions_json: '["go on a journey"]',
             source: 'local',
         });
+        await memoryDb.db.insert(savedSentence).values({
+            sentence_key: 'subtitle-1:4',
+            video_id: 'video-1',
+            video_title: 'Roundtrip Video',
+            file_hash: 'subtitle-1',
+            sentence_index: 4,
+            start_time: 12.5,
+            end_time: 15.8,
+            text: 'The journey changed everything.',
+            text_zh: '这段旅程改变了一切。',
+            note: '值得背诵',
+            tag: 'expression',
+        });
+        await memoryDb.db.insert(sentenceStudyNote).values({
+            sentence_key: 'subtitle-1:4',
+            video_id: 'video-1',
+            file_hash: 'subtitle-1',
+            sentence_index: 4,
+            original_text: 'The journey changed everything.',
+            study_card_json: null,
+            note_summary: '主谓宾完整',
+            messages_json: '[]',
+            preset_id: 'default',
+        });
 
         const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dashplayer-learning-roundtrip-'));
         const filePath = path.join(directory, 'backup.json');
         try {
             const before = await service.buildExport();
+            expect(before.savedSentences).toHaveLength(1);
+            expect(before.sentenceStudyNotes).toHaveLength(1);
             await service.exportToJson(filePath);
             await service.resetLearningData();
 
@@ -581,9 +609,17 @@ describe('LearningDataService 导出与清除', () => {
             expect(cleared.sentencePractices).toHaveLength(0);
             expect(cleared.productionPractices).toHaveLength(0);
             expect(cleared.rolePlayTurns).toHaveLength(0);
+            // 清除学习记录保留收藏金句与整句笔记
+            expect(cleared.savedSentences).toHaveLength(1);
+            expect(cleared.sentenceStudyNotes).toHaveLength(1);
+
+            await memoryDb.db.delete(savedSentence).run();
+            await memoryDb.db.delete(sentenceStudyNote).run();
 
             const imported = await service.importFromJson(filePath);
             expect(imported.success).toBe(true);
+            expect(imported.savedSentencesRestored).toBe(1);
+            expect(imported.sentenceStudyNotesRestored).toBe(1);
 
             const after = await service.buildExport();
             expect(after.words).toEqual(before.words);
@@ -592,6 +628,8 @@ describe('LearningDataService 导出与清除', () => {
             expect(after.sentencePractices).toEqual(before.sentencePractices);
             expect(after.productionPractices).toEqual(before.productionPractices);
             expect(after.rolePlayTurns).toEqual(before.rolePlayTurns);
+            expect(after.savedSentences).toEqual(before.savedSentences);
+            expect(after.sentenceStudyNotes).toEqual(before.sentenceStudyNotes);
             expect(after.retention.last7Days.reviewed).toBe(before.retention.last7Days.reviewed);
         } finally {
             await fs.rm(directory, { recursive: true, force: true });

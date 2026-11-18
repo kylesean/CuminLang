@@ -43,6 +43,7 @@ import type { StorageUsageVO } from '@/common/contracts/storage-usage-vo';
 import { learningDataApi } from '@/frontend/features/learning-data/learningDataApi';
 import { revalidateReviewQueue } from '@/frontend/features/video-learning/reviewQueue';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
+import { useSavedSentences } from '@/frontend/features/context-studio/savedSentencesStore';
 import { contentCompassApi } from '@/frontend/features/content-compass/contentCompassApi';
 import type { ContentCompassStatsVO } from '@/common/types/contentCompass';
 import type { AttributionVO } from '@/common/learning/compassAttribution';
@@ -284,6 +285,10 @@ const StorageSetting: React.FC = () => {
             // 字幕标注来自播放会话的词表匹配结果，不是 SWR 缓存；递增重载令牌
             // 让 usePlayerBridge 重新解析并重新匹配，否则要等下次切视频才生效。
             usePlaybackSession.getState().reloadSubtitles();
+            const loadedVideoId = useSavedSentences.getState().loadedVideoId;
+            if (loadedVideoId) {
+                void useSavedSentences.getState().loadForVideo(loadedVideoId);
+            }
             toast.success(t('storage.learningData.importSuccess', {
                 words: result.wordsRestored ?? 0,
                 events: result.encountersRestored ?? 0,

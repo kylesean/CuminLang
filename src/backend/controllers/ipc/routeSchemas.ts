@@ -203,6 +203,7 @@ export const proxySettingSaveSchema: z.ZodType<ProxySettingSaveVO> = z.object({
 export const mobileAccessSettingSaveSchema: z.ZodType<MobileAccessSettingSaveVO> = z.object({
     enabled: z.boolean(),
     port: z.number().int().min(1).max(65535),
+    bindScope: z.enum(['loopback', 'lan']).optional(),
 });
 
 /** YouTube 导入设置保存请求校验架构。 */

@@ -10,7 +10,9 @@ import {
 import { productionPracticeRecord } from '@/backend/infrastructure/db/tables/productionPracticeRecord';
 import { reviewCard, type ReviewCard } from '@/backend/infrastructure/db/tables/reviewCard';
 import { rolePlayTurn, type RolePlayTurn } from '@/backend/infrastructure/db/tables/rolePlayTurn';
+import { savedSentence, type SavedSentenceRow } from '@/backend/infrastructure/db/tables/savedSentence';
 import { sentencePracticeRecord } from '@/backend/infrastructure/db/tables/sentencePracticeRecord';
+import { sentenceStudyNote, type SentenceStudyNoteRow } from '@/backend/infrastructure/db/tables/sentenceStudyNote';
 import { wordEncounter, type WordEncounter } from '@/backend/infrastructure/db/tables/wordEncounter';
 import { words, type Word } from '@/backend/infrastructure/db/tables/words';
 import TYPES from '@/backend/ioc/types';
@@ -236,6 +238,20 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
             );
     }
 
+    public async listSavedSentences(): Promise<SavedSentenceRow[]> {
+        return this.db
+            .select()
+            .from(savedSentence)
+            .orderBy(asc(savedSentence.created_at), asc(savedSentence.id));
+    }
+
+    public async listSentenceStudyNotes(): Promise<SentenceStudyNoteRow[]> {
+        return this.db
+            .select()
+            .from(sentenceStudyNote)
+            .orderBy(asc(sentenceStudyNote.created_at), asc(sentenceStudyNote.id));
+    }
+
     public async resetLearningData(): Promise<LearningDataResetCounts> {
         const now = new Date().toISOString();
         return this.db.transaction((tx) => {
@@ -286,6 +302,8 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
             tx.delete(sentencePracticeRecord).run();
             tx.delete(productionPracticeRecord).run();
             tx.delete(rolePlayTurn).run();
+            tx.delete(savedSentence).run();
+            tx.delete(sentenceStudyNote).run();
 
             // 只替换用户词表：默认词表是产品资产，不随用户备份进出。
             // 但如果备份里的某个词正好与默认词表同形，必须先让位，否则会撞上 word 唯一约束；
@@ -410,6 +428,42 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
                     }))).run();
                 });
             }
+            if (snapshot.savedSentences.length > 0) {
+                inChunks(snapshot.savedSentences, RESTORE_BATCH_ROWS, (chunk) => {
+                    tx.insert(savedSentence).values(chunk.map((item) => ({
+                        sentence_key: item.sentenceKey,
+                        video_id: item.videoId,
+                        video_title: item.videoTitle,
+                        file_hash: item.fileHash,
+                        sentence_index: item.sentenceIndex,
+                        start_time: item.startTime,
+                        end_time: item.endTime,
+                        text: item.text,
+                        text_zh: item.textZh,
+                        note: item.note,
+                        tag: item.tag,
+                        created_at: item.createdAt,
+                        updated_at: item.updatedAt,
+                    }))).run();
+                });
+            }
+            if (snapshot.sentenceStudyNotes.length > 0) {
+                inChunks(snapshot.sentenceStudyNotes, RESTORE_BATCH_ROWS, (chunk) => {
+                    tx.insert(sentenceStudyNote).values(chunk.map((item) => ({
+                        sentence_key: item.sentenceKey,
+                        video_id: item.videoId,
+                        file_hash: item.fileHash,
+                        sentence_index: item.sentenceIndex,
+                        original_text: item.originalText,
+                        study_card_json: item.studyCardJson,
+                        note_summary: item.noteSummary,
+                        messages_json: item.messagesJson,
+                        preset_id: item.presetId,
+                        created_at: item.createdAt,
+                        updated_at: item.updatedAt,
+                    }))).run();
+                });
+            }
 
             return {
                 wordsRestored: snapshot.words.length,
@@ -419,6 +473,8 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
                 sentencePracticesRestored: snapshot.sentencePractices.length,
                 productionPracticesRestored: snapshot.productionPractices.length,
                 rolePlayTurnsRestored: snapshot.rolePlayTurns.length,
+                savedSentencesRestored: snapshot.savedSentences.length,
+                sentenceStudyNotesRestored: snapshot.sentenceStudyNotes.length,
             };
         });
     }

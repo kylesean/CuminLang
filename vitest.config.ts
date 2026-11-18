@@ -21,22 +21,20 @@ export default defineConfig({
         // 类型与纯常量声明
         'src/**/*.d.ts',
       ],
-      // 覆盖率基线（2026-11 实测，口径为 src 全部源码含未测试文件按 0% 计入：
-      // lines 28.7% / stmts 28.0% / funcs 22.4% / branches 22.3%，各留 1-2 个点余量防环境抖动）。
-      // 只防倒退，不追高；核心服务的编排层测试补齐后同步上调。
+      // 覆盖率基线（2026-11 实测：lines 62.20% / stmts 61.31% / funcs 57.26% / branches 53.07%，
+      // 各留 3–4 个点余量防环境或常规增量抖动）。只防倒退，不虚高卡死常规改动。
       thresholds: {
-        lines: 27,
-        statements: 26,
-        functions: 21,
-        branches: 20,
-        // 控制器层（薄壳 + IPC 边界）单独设更高的防倒退底线。
-        // 2026-11 实测：lines 56.97% / stmts 43.26% / funcs 15.96%（routeContract
-        // 覆盖注册链路、registerRoute 测试覆盖校验与日志语义，handler 体未执行属常态）。
-        // 新增控制器若不接入 routeContract 契约测试，本文件 0% 覆盖会把这里拉到阈值下报红。
+        lines: 58,
+        statements: 57,
+        functions: 53,
+        branches: 49,
+        // 控制器层（薄壳 + IPC 边界）单独设防倒退底线。
+        // 2026-11 实测：lines ~66% / stmts ~54% / funcs ~24%（routeContract 覆盖注册链路、
+        // registerRoute 测试覆盖校验与日志语义）。
         'src/backend/controllers/**': {
-          lines: 55,
-          statements: 40,
-          functions: 14,
+          lines: 60,
+          statements: 48,
+          functions: 22,
         },
       },
     },

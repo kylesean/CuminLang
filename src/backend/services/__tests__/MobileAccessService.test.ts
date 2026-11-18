@@ -115,6 +115,23 @@ describe('MobileAccessService 生命周期串行化', () => {
         expect(instance.tokenHistory[instance.tokenHistory.length - 1]).toBe(newToken);
     });
 
+    it('默认仅绑定 127.0.0.1，显式切换为 lan 时绑定全部网卡并支持热切换', async () => {
+        await service.startFromSettings();
+        expect(serverInstances).toHaveLength(1);
+        expect(serverInstances[0].start).toHaveBeenCalledWith(27182, '127.0.0.1');
+        expect(service.getDetail().bindScope).toBe('loopback');
+        expect(service.getDetail().lanUrls).toEqual([
+            'http://127.0.0.1:27182/?t=initial_token_at_least_32_characters_long',
+        ]);
+
+        await service.saveSettings({ enabled: true, port: 27182, bindScope: 'lan' });
+        expect(serverInstances).toHaveLength(2);
+        expect(serverInstances[0].stop).toHaveBeenCalledTimes(1);
+        expect(serverInstances[1].start).toHaveBeenCalledWith(27182, undefined);
+        expect(service.getDetail().bindScope).toBe('lan');
+        expect(settingsMap.get('mobileAccess.bindScope')).toBe('lan');
+    });
+
     it('观看记录或视频文件不存在时 getWatchDetail / resolveVideoFile / getThumbnail 均应抛出 404 ClientRequestError', async () => {
         const notFoundService = new MobileAccessServiceImpl(
             {

@@ -10,6 +10,7 @@ import MobileWebServer, { ClientRequestError } from '@/backend/infrastructure/mo
 import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
 import MediaUtil from '@/common/utils/MediaUtil';
 import type {
+    MobileAccessBindScope,
     MobileAccessSettingDetailVO,
     MobileAccessSettingSaveVO,
 } from '@/common/contracts/mobile-access-setting-vo';
@@ -134,6 +135,8 @@ export class MobileAccessServiceImpl implements MobileAccessService {
     private server: MobileWebServer | null = null;
     /** 当前实际监听的端口；服务未运行时为 null。 */
     private serverPort: number | null = null;
+    /** 当前实际监听的网络范围；服务未运行时为 null。 */
+    private serverBindScope: MobileAccessBindScope | null = null;
     /** 最近一次启动失败的原因，供设置页展示。 */
     private lastError: string | null = null;
     /** 串行化启停/改端口/关闭生命周期，防止并发 await 泄漏已启动但未登记的 HTTP 服务。 */
@@ -176,12 +179,21 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         const runningPort = this.server !== null ? this.serverPort : null;
         const running = runningPort !== null;
         const port = runningPort ?? settings.port;
+        const bindScope = running && this.serverBindScope !== null
+            ? this.serverBindScope
+            : settings.bindScope;
         const token = this.getOrCreateToken();
+        const lanUrls = running
+            ? (bindScope === 'lan'
+                ? collectLanUrls(port, token)
+                : [`http://127.0.0.1:${port}/?t=${encodeURIComponent(token)}`])
+            : [];
         return {
             enabled: settings.enabled,
             port,
+            bindScope: settings.bindScope,
             running,
-            lanUrls: running ? collectLanUrls(port, token) : [],
+            lanUrls,
             accessToken: token,
             lastError: this.lastError ?? settings.error,
         };
@@ -221,6 +233,7 @@ export class MobileAccessServiceImpl implements MobileAccessService {
             if (this.disposed) {
                 return;
             }
+            const nextBindScope: MobileAccessBindScope = settings.bindScope ?? this.readSettings().bindScope;
             if (!settings.enabled) {
                 // 关闭优先：端口填错了也不该拦着用户停服务。
                 await this.stopServer();
@@ -228,17 +241,25 @@ export class MobileAccessServiceImpl implements MobileAccessService {
                 if (isValidPort(settings.port)) {
                     this.settingsStore.set('mobileAccess.port', String(settings.port));
                 }
+                if (settings.bindScope !== undefined) {
+                    this.settingsStore.set('mobileAccess.bindScope', nextBindScope);
+                }
                 this.lastError = null;
                 return;
             }
 
             assertValidPort(settings.port);
-            if (this.server === null || this.serverPort !== settings.port) {
-                await this.restartServer(settings.port);
+            if (
+                this.server === null
+                || this.serverPort !== settings.port
+                || this.serverBindScope !== nextBindScope
+            ) {
+                await this.restartServer(settings.port, nextBindScope);
             }
 
             this.settingsStore.set('mobileAccess.enabled', 'true');
             this.settingsStore.set('mobileAccess.port', String(settings.port));
+            this.settingsStore.set('mobileAccess.bindScope', nextBindScope);
             this.lastError = null;
         });
     }
@@ -260,13 +281,17 @@ export class MobileAccessServiceImpl implements MobileAccessService {
             }
 
             try {
-                await this.startServer(settings.port);
+                await this.startServer(settings.port, settings.bindScope);
                 this.lastError = null;
-                this.logger.info('mobile access started from settings', { port: settings.port });
+                this.logger.info('mobile access started from settings', {
+                    port: settings.port,
+                    bindScope: settings.bindScope,
+                });
             } catch (error) {
                 this.lastError = error instanceof Error ? error.message : String(error);
                 this.logger.error('failed to start mobile access', {
                     port: settings.port,
+                    bindScope: settings.bindScope,
                     error: this.lastError,
                 });
             }
@@ -298,9 +323,15 @@ export class MobileAccessServiceImpl implements MobileAccessService {
      *
      * @returns 设置值与配置问题。
      */
-    private readSettings(): { enabled: boolean; port: number; error: string | null } {
+    private readSettings(): {
+        enabled: boolean;
+        port: number;
+        bindScope: MobileAccessBindScope;
+        error: string | null;
+    } {
         const rawEnabled = this.settingsStore.get('mobileAccess.enabled');
         const rawPort = this.settingsStore.get('mobileAccess.port');
+        const rawScope = this.settingsStore.get('mobileAccess.bindScope');
 
         let error: string | null = null;
         if (rawEnabled !== 'true' && rawEnabled !== 'false') {
@@ -313,9 +344,17 @@ export class MobileAccessServiceImpl implements MobileAccessService {
             error = `手机访问端口配置非法：${rawPort}`;
         }
 
+        let bindScope: MobileAccessBindScope = 'loopback';
+        if (rawScope === 'lan' || rawScope === 'loopback') {
+            bindScope = rawScope;
+        } else if (rawScope !== undefined && rawScope !== '') {
+            error = `手机访问网络范围配置非法：${rawScope}`;
+        }
+
         return {
             enabled: rawEnabled === 'true',
             port: portValid ? parsedPort : 0,
+            bindScope,
             error,
         };
     }
@@ -324,8 +363,9 @@ export class MobileAccessServiceImpl implements MobileAccessService {
      * 创建并启动服务实例。
      *
      * @param port 监听端口。
+     * @param bindScope 网络绑定范围。
      */
-    private async startServer(port: number): Promise<void> {
+    private async startServer(port: number, bindScope: MobileAccessBindScope): Promise<void> {
         const staticDirectory = getRuntimeResourcePath('resources', 'mobile');
         // 构建产物缺失是打包/安装问题，直接失败让设置页显式报错，不要起一个打不开的服务。
         const indexFile = path.join(staticDirectory, 'index.html');
@@ -341,7 +381,8 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         if (this.disposed) {
             return;
         }
-        await server.start(port);
+        const host = bindScope === 'loopback' ? '127.0.0.1' : undefined;
+        await server.start(port, host);
         if (this.disposed) {
             // 启动期间收到关闭信号时立刻停掉刚刚绑定好的端口，不留孤儿监听。
             await server.stop();
@@ -351,6 +392,7 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         server.setToken(this.getOrCreateToken());
         this.server = server;
         this.serverPort = port;
+        this.serverBindScope = bindScope;
     }
 
     /**
@@ -360,34 +402,38 @@ export class MobileAccessServiceImpl implements MobileAccessService {
         const server = this.server;
         this.server = null;
         this.serverPort = null;
+        this.serverBindScope = null;
         if (server !== null) {
             await server.stop();
         }
     }
 
     /**
-     * 切换监听端口。
+     * 切换监听端口或绑定范围。
      *
      * 新端口起不来时尝试把旧端口恢复回来，避免一次改错让手机页整体不可用；
      * 无论恢复是否成功都会把新端口的失败原因抛给设置页。
      *
      * @param port 目标端口。
+     * @param bindScope 目标网络绑定范围。
      */
-    private async restartServer(port: number): Promise<void> {
+    private async restartServer(port: number, bindScope: MobileAccessBindScope): Promise<void> {
         const previousPort = this.serverPort;
+        const previousBindScope = this.serverBindScope;
         await this.stopServer();
         try {
-            await this.startServer(port);
+            await this.startServer(port, bindScope);
             this.lastError = null;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             this.lastError = message;
-            if (previousPort !== null) {
+            if (previousPort !== null && previousBindScope !== null) {
                 try {
-                    await this.startServer(previousPort);
+                    await this.startServer(previousPort, previousBindScope);
                 } catch (restoreError) {
-                    this.logger.error('failed to restore previous mobile access port', {
+                    this.logger.error('failed to restore previous mobile access listener', {
                         port: previousPort,
+                        bindScope: previousBindScope,
                         error: restoreError,
                     });
                 }

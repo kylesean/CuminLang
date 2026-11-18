@@ -391,12 +391,10 @@ export default class MobileWebServer {
     /**
      * 在指定端口启动监听。
      *
-     * 不指定 host，由 Node 按双栈监听所有网卡，同时覆盖局域网直连和
-     * IPv4/IPv6 回环，方便配合异地组网工具使用。
-     *
      * @param port 监听端口，调用方需提前校验范围。
+     * @param host 可选监听地址（例如 `'127.0.0.1'`）；省略时由 Node 按双栈监听所有网卡。
      */
-    public async start(port: number): Promise<void> {
+    public async start(port: number, host?: string): Promise<void> {
         if (this.server !== null) {
             throw new Error('手机访问服务已经在运行');
         }
@@ -420,11 +418,15 @@ export default class MobileWebServer {
             };
             server.once('error', onError);
             server.once('listening', onListening);
-            server.listen(port);
+            if (host) {
+                server.listen(port, host);
+            } else {
+                server.listen(port);
+            }
         });
 
         this.server = server;
-        this.logger.info('mobile web server started', { port });
+        this.logger.info('mobile web server started', { port, host: host ?? 'all' });
     }
 
     /**

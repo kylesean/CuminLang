@@ -100,11 +100,30 @@ async function fetchServiceWithLoopbackFallback(rawUrl: string): Promise<Respons
 }
 
 test.describe('手机访问设置', () => {
-    test('[SET-MOB-01] 开启后访问地址带令牌，没有令牌的请求被拒绝', async ({ session, userDataDir }) => {
+    test('[SET-MOB-01] 开启后默认仅本机回环，切到局域网需确认明文 HTTP 风险且无令牌请求被拒绝', async ({ session, userDataDir }) => {
         const page = session.page;
         await openMobileAccess(page);
         await enableMobileAccess(page, userDataDir);
         await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.enabled')).toBe('true');
+        await expect(page.getByRole('radio', { name: '仅本机' })).toBeChecked();
+        // storeSet 在值等于 schema 默认值 'loopback' 时不额外写盘，因此磁盘键可为 undefined 或 'loopback'
+        expect(['loopback', undefined]).toContain(readConfigValue(userDataDir, 'mobileAccess.bindScope'));
+
+        // 默认绑定仅本机回环，不向局域网暴露明文 HTTP
+        const loopbackUrl = await readAccessUrl(page);
+        expect(loopbackUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/\?t=/);
+
+        // 切到局域网模式必须先确认明文 HTTP 风险弹窗；取消时不改变绑定范围
+        await page.getByRole('radio', { name: '局域网' }).click();
+        await expect(page.getByRole('alertdialog')).toBeVisible();
+        await page.getByRole('button', { name: '保持仅本机' }).click();
+        await expect(page.getByRole('radio', { name: '仅本机' })).toBeChecked();
+        expect(['loopback', undefined]).toContain(readConfigValue(userDataDir, 'mobileAccess.bindScope'));
+
+        await page.getByRole('radio', { name: '局域网' }).click();
+        await page.getByRole('button', { name: '确认使用局域网' }).click();
+        await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.bindScope')).toBe('lan');
+        await expect(page.getByText('局域网模式使用明文 HTTP')).toBeVisible();
 
         const accessUrl = await readAccessUrl(page);
         expect(accessUrl).toContain('?t=');

@@ -54,7 +54,7 @@ describe('parseLearningDataExport', () => {
     });
 
     it('拒绝高于当前支持的版本', () => {
-        expect(() => parseLearningDataExport({ ...baseSnapshot, schemaVersion: 3 }))
+        expect(() => parseLearningDataExport({ ...baseSnapshot, schemaVersion: 5 }))
             .toThrow(LearningDataSnapshotError);
     });
 
@@ -150,5 +150,63 @@ describe('parseLearningDataExport', () => {
         // 'default' 标记的词会被 listUserWords / 导出 / 会话摘要全部排除，
         // 成为恢复成功却永远不可见、下次导出静默丢失的幽灵词。
         expect(snapshot.words[0].source).toBe('manual');
+    });
+
+    it('schemaVersion 4 解析收藏金句与整句笔记，并拒绝重复 sentenceKey', () => {
+        const savedSentenceItem = {
+            sentenceKey: 'hash-1:0',
+            videoId: 'video-1',
+            videoTitle: 'Sample Video',
+            fileHash: 'hash-1',
+            sentenceIndex: 0,
+            startTime: 1.5,
+            endTime: 4.2,
+            text: 'Keep moving forward.',
+            textZh: '继续前行。',
+            note: '鼓励表达',
+            tag: 'expression',
+            createdAt: NOW,
+            updatedAt: NOW,
+        };
+        const studyNoteItem = {
+            sentenceKey: 'hash-1:0',
+            videoId: 'video-1',
+            fileHash: 'hash-1',
+            sentenceIndex: 0,
+            originalText: 'Keep moving forward.',
+            studyCardJson: null,
+            noteSummary: '核心句式',
+            messagesJson: '[]',
+            presetId: null,
+            createdAt: NOW,
+            updatedAt: NOW,
+        };
+
+        const snapshot = parseLearningDataExport({
+            ...baseSnapshot,
+            schemaVersion: 4,
+            rolePlayTurns: [],
+            savedSentences: [savedSentenceItem],
+            sentenceStudyNotes: [studyNoteItem],
+        });
+
+        expect(snapshot.savedSentences).toEqual([savedSentenceItem]);
+        expect(snapshot.sentenceStudyNotes).toEqual([studyNoteItem]);
+
+        expect(() => parseLearningDataExport({
+            ...baseSnapshot,
+            schemaVersion: 4,
+            rolePlayTurns: [],
+            savedSentences: [savedSentenceItem, savedSentenceItem],
+            sentenceStudyNotes: [],
+        })).toThrow('重复收藏金句');
+
+        expect(() => parseLearningDataExport({
+            ...baseSnapshot,
+            schemaVersion: 4,
+            rolePlayTurns: [],
+            savedSentences: [],
+            sentenceStudyNotes: [studyNoteItem, studyNoteItem],
+        })).toThrow('重复整句笔记');
     });
 });

@@ -14,7 +14,9 @@ import type {
 import type { ReviewCard } from '@/backend/infrastructure/db/tables/reviewCard';
 import type { ProductionPracticeRecord } from '@/backend/infrastructure/db/tables/productionPracticeRecord';
 import type { RolePlayTurn } from '@/backend/infrastructure/db/tables/rolePlayTurn';
+import type { SavedSentenceRow } from '@/backend/infrastructure/db/tables/savedSentence';
 import type { SentencePracticeRecord } from '@/backend/infrastructure/db/tables/sentencePracticeRecord';
+import type { SentenceStudyNoteRow } from '@/backend/infrastructure/db/tables/sentenceStudyNote';
 
 /**
  * 会话摘要需要的事件查询条件。
@@ -104,6 +106,12 @@ export default interface LearningDataRepository {
 
     /** 读取全部角色扮演轮次，用于可移植导出。 */
     listRolePlayTurns(): Promise<RolePlayTurn[]>;
+
+    /** 读取全部收藏金句，用于可移植导出。 */
+    listSavedSentences(): Promise<SavedSentenceRow[]>;
+
+    /** 读取全部整句学习笔记与对话缓存，用于可移植导出。 */
+    listSentenceStudyNotes(): Promise<SentenceStudyNoteRow[]>;
 
     /** 读取被练习记录引用的录音相对路径，供清除后定向清理。 */
     listPracticeAudioFiles(): Promise<string[]>;

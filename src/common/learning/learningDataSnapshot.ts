@@ -2,6 +2,7 @@ import {
     CONTENT_COMPASS_ACTIONS,
     CONTENT_COMPASS_REASONS,
 } from '@/common/types/contentCompass';
+import { SAVED_SENTENCE_TAGS } from '@/common/types/contextStudio';
 import type {
     LearningDataEncounterVO,
     LearningDataProductionPracticeVO,
@@ -9,7 +10,9 @@ import type {
     LearningDataRestoreSnapshot,
     LearningDataReviewCardVO,
     LearningDataRolePlayTurnVO,
+    LearningDataSavedSentenceVO,
     LearningDataSentencePracticeVO,
+    LearningDataSentenceStudyNoteVO,
     LearningDataWordVO,
 } from '@/common/types/learningData';
 import type { ProductionPracticeMode, RetellLevel } from '@/common/types/learningRecap';
@@ -21,7 +24,7 @@ import {
 } from '@/common/types/vocabulary';
 
 /** 导入支持的最高 schema 版本。 */
-export const LEARNING_DATA_SCHEMA_VERSION = 3;
+export const LEARNING_DATA_SCHEMA_VERSION = 4;
 
 /** 产出型练习模式。 */
 const PRODUCTION_PRACTICE_MODES: readonly ProductionPracticeMode[] = ['retell', 'roleplay'];
@@ -285,11 +288,55 @@ const parseRolePlayTurn = (value: unknown, path: string): LearningDataRolePlayTu
     };
 };
 
+const parseSavedSentence = (value: unknown, path: string): LearningDataSavedSentenceVO => {
+    const raw = record(value, path);
+    const sentenceKey = str(raw.sentenceKey, `${path}.sentenceKey`).trim();
+    if (sentenceKey.length === 0) {
+        return fail(`${path}.sentenceKey`, '非空字符串');
+    }
+    return {
+        sentenceKey,
+        videoId: str(raw.videoId, `${path}.videoId`),
+        videoTitle: str(raw.videoTitle ?? '', `${path}.videoTitle`),
+        fileHash: str(raw.fileHash, `${path}.fileHash`),
+        sentenceIndex: int(raw.sentenceIndex, `${path}.sentenceIndex`),
+        startTime: num(raw.startTime ?? 0, `${path}.startTime`),
+        endTime: num(raw.endTime ?? 0, `${path}.endTime`),
+        text: str(raw.text, `${path}.text`),
+        textZh: str(raw.textZh ?? '', `${path}.textZh`),
+        note: str(raw.note ?? '', `${path}.note`),
+        tag: oneOf(raw.tag ?? 'general', SAVED_SENTENCE_TAGS, `${path}.tag`),
+        createdAt: dateStr(raw.createdAt, `${path}.createdAt`),
+        updatedAt: dateStr(raw.updatedAt, `${path}.updatedAt`),
+    };
+};
+
+const parseSentenceStudyNote = (value: unknown, path: string): LearningDataSentenceStudyNoteVO => {
+    const raw = record(value, path);
+    const sentenceKey = str(raw.sentenceKey, `${path}.sentenceKey`).trim();
+    if (sentenceKey.length === 0) {
+        return fail(`${path}.sentenceKey`, '非空字符串');
+    }
+    return {
+        sentenceKey,
+        videoId: str(raw.videoId, `${path}.videoId`),
+        fileHash: str(raw.fileHash, `${path}.fileHash`),
+        sentenceIndex: int(raw.sentenceIndex, `${path}.sentenceIndex`),
+        originalText: str(raw.originalText, `${path}.originalText`),
+        studyCardJson: nullableStr(raw.studyCardJson, `${path}.studyCardJson`),
+        noteSummary: str(raw.noteSummary ?? '', `${path}.noteSummary`),
+        messagesJson: str(raw.messagesJson ?? '[]', `${path}.messagesJson`),
+        presetId: nullableStr(raw.presetId, `${path}.presetId`),
+        createdAt: dateStr(raw.createdAt, `${path}.createdAt`),
+        updatedAt: dateStr(raw.updatedAt, `${path}.updatedAt`),
+    };
+};
+
 /**
  * 解析并校验一份学习数据备份。
  *
- * 兼容 schemaVersion 1/2：旧备份没有角色扮演轮次，按空数组处理；版本 3 起
- * 必须携带 `rolePlayTurns`。更高版本直接拒绝，避免用旧代码写入它并不理解的字段。
+ * 兼容 schemaVersion 1/2/3：旧备份缺少新增字段按空数组处理；版本 4 起
+ * 携带 `savedSentences` 与 `sentenceStudyNotes`。更高版本直接拒绝，避免用旧代码写入它并不理解的字段。
  *
  * @param value 已 JSON.parse 的未知值。
  * @returns 可直接写库的快照。
@@ -326,6 +373,30 @@ export function parseLearningDataExport(value: unknown): LearningDataRestoreSnap
         seenCards.add(card.word);
     }
 
+    const savedSentences = version >= 4
+        ? array(root.savedSentences ?? [], '$.savedSentences')
+            .map((item, index) => parseSavedSentence(item, `$.savedSentences[${index}]`))
+        : [];
+    const seenSavedSentences = new Set<string>();
+    for (const item of savedSentences) {
+        if (seenSavedSentences.has(item.sentenceKey)) {
+            throw new LearningDataSnapshotError(`备份文件包含重复收藏金句：${item.sentenceKey}`);
+        }
+        seenSavedSentences.add(item.sentenceKey);
+    }
+
+    const sentenceStudyNotes = version >= 4
+        ? array(root.sentenceStudyNotes ?? [], '$.sentenceStudyNotes')
+            .map((item, index) => parseSentenceStudyNote(item, `$.sentenceStudyNotes[${index}]`))
+        : [];
+    const seenStudyNotes = new Set<string>();
+    for (const item of sentenceStudyNotes) {
+        if (seenStudyNotes.has(item.sentenceKey)) {
+            throw new LearningDataSnapshotError(`备份文件包含重复整句笔记：${item.sentenceKey}`);
+        }
+        seenStudyNotes.add(item.sentenceKey);
+    }
+
     return {
         words,
         encounters: array(root.encounters ?? [], '$.encounters')
@@ -345,5 +416,7 @@ export function parseLearningDataExport(value: unknown): LearningDataRestoreSnap
             ? array(root.rolePlayTurns, '$.rolePlayTurns')
                 .map((item, index) => parseRolePlayTurn(item, `$.rolePlayTurns[${index}]`))
             : [],
+        savedSentences,
+        sentenceStudyNotes,
     };
 }
