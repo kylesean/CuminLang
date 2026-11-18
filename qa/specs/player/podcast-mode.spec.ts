@@ -1,6 +1,5 @@
 import { expect } from '@playwright/test';
 import { test } from '../../support/fixtures';
-import { navigateToFixturePlayer } from '../../support/player-entry';
 import { PLAYER_UI_TESTIDS } from '../../../src/common/constants/qa-testids';
 import { SENTENCE_CARD_TESTID } from '../../../src/common/constants/player-scroll-protocol';
 
@@ -10,11 +9,11 @@ import { SENTENCE_CARD_TESTID } from '../../../src/common/constants/player-scrol
  * 再次点击播客模式入口按钮退出后回到常规视频布局。
  */
 test.describe('播客沉浸模式', () => {
-    test('[SET-POD-01] 播放页切换播客模式后默认收起文稿并支持展开文稿与切换盲听模式', async ({ session }) => {
+    test('播放页切换播客模式后默认收起文稿并支持展开文稿与切换盲听模式', async ({ session, playerPage }) => {
         const { page } = session;
         await page.setViewportSize({ width: 1440, height: 900 });
 
-        await navigateToFixturePlayer(page);
+        await playerPage.openFixture();
 
         await expect(page.getByTestId(SENTENCE_CARD_TESTID).first()).toBeVisible({ timeout: 30_000 });
 

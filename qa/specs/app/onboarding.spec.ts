@@ -12,7 +12,7 @@ import { APP_SHELL_TESTIDS, NAV_TESTIDS } from '../../../src/common/constants/qa
  * 否则引导页的按钮、状态机与完成标记写入都没有端到端覆盖。
  */
 test.describe('首次使用引导', () => {
-    test('[SET-ONB-01] 从真实引导页完成跳过并进入主界面，重启后不再展示引导 @smoke', async ({ openSession }) => {
+    test('从真实引导页完成跳过并进入主界面，重启后不再展示引导 @smoke', async ({ openSession }) => {
         const first = await openSession({ skipOnboarding: false });
         const { page } = first;
         await expect(page.getByTestId(APP_SHELL_TESTIDS.onboardingView)).toBeVisible();

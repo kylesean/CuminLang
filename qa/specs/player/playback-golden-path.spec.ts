@@ -9,7 +9,7 @@ import { test } from '../../support/fixtures';
  * 不伪造数据库；之后回到真实首页验证列表与播放器跨页衔接。
  */
 test.describe('播放核心链路', () => {
-    test('[SET-PLY-01] 入库后从最近观看进入播放页，视频可播放推进且字幕与侧栏译文可用 @smoke', async ({
+    test('入库后从最近观看进入播放页，视频可播放推进且字幕与侧栏译文可用 @smoke', async ({
         session,
         playerPage,
     }) => {

@@ -17,7 +17,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 import { test } from '../../support/fixtures';
-import { navigateToFixturePlayer } from '../../support/player-entry';
+import { PlayerPage } from '../../pages/PlayerPage';
 import {
     CONVERGE_EPSILON_PX,
     FLING_TO_END_WHEEL_DELTA,
@@ -328,9 +328,14 @@ async function openPlayer(page: Page): Promise<void> {
     await page.evaluate((policy) => {
         (window as { __dpPolicy?: string }).__dpPolicy = policy;
     }, POLICY);
-    await navigateToFixturePlayer(page);
+    const playerPage = new PlayerPage(page);
+    await playerPage.openFixture();
     await expect(page.getByTestId(SENTENCE_CARD_TESTID).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId(SCROLLER_TESTID)).toBeVisible({ timeout: 30_000 });
+    await playerPage.waitUntilVideoReady();
+    if (!(await playerPage.readPlaybackState()).paused) {
+        await playerPage.clickTransportButton('pause');
+    }
     // 等调试面挂上（main 进程的 devMode 查询是一次异步 IPC）。
     // 这里不吞异常：埋点是这套差分用例的判定依据，等不到就该在开跑前失败，
     // 而不是让后面的断言静默降级成「只验了页面能滚」。

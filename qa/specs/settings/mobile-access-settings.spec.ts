@@ -1,7 +1,7 @@
 import net from 'node:net';
 import { expect, type Page } from '@playwright/test';
+import type { SettingsPage } from '../../pages/SettingsPage';
 import { readConfigValue, test } from '../../support/fixtures';
-import { openSettingsSection, reloadSettingsPage } from '../../support/settings-page';
 import { SETTING_ITEM_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /**
@@ -18,13 +18,12 @@ const SECTION_NAME = 'mobile' as const;
 /** 启用开关的无障碍名。 */
 const ENABLE_SWITCH_NAME = '启用手机访问';
 
-/**
- * 进入手机访问设置页。
- *
- * @param page 应用主窗口页面。
- */
-async function openMobileAccess(page: Page): Promise<void> {
-    await openSettingsSection(page, SECTION_NAME, page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
+/** 进入手机访问设置页。 */
+async function openMobileAccess(settingsPage: SettingsPage): Promise<void> {
+    await settingsPage.openSection(
+        SECTION_NAME,
+        settingsPage.page.getByRole('switch', { name: ENABLE_SWITCH_NAME }),
+    );
 }
 
 /** 默认监听端口；若本机已有桌面端占用则自动退让到临时空闲端口。 */
@@ -100,9 +99,13 @@ async function fetchServiceWithLoopbackFallback(rawUrl: string): Promise<Respons
 }
 
 test.describe('手机访问设置', () => {
-    test('[SET-MOB-01] 开启后默认仅本机回环，切到局域网需确认明文 HTTP 风险且无令牌请求被拒绝', async ({ session, userDataDir }) => {
+    test('开启后默认仅本机回环，切到局域网需确认明文 HTTP 风险且无令牌请求被拒绝', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
-        await openMobileAccess(page);
+        await openMobileAccess(settingsPage);
         await enableMobileAccess(page, userDataDir);
         await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.enabled')).toBe('true');
         await expect(page.getByRole('radio', { name: '仅本机' })).toBeChecked();
@@ -131,26 +134,25 @@ test.describe('手机访问设置', () => {
         expect(token).toBeTruthy();
         expect((token ?? '').length).toBeGreaterThanOrEqual(32);
 
-        // 同一个地址去掉令牌就该进不去：这是这个功能的安全边界，
-        // 只断言「地址里有令牌」证明不了服务真的在校验。
+        // 同一个地址去掉令牌就该进不去：这是这个功能的安全边界
         const withoutToken = new URL(accessUrl);
         withoutToken.searchParams.delete('t');
         const anonymous = await fetchServiceWithLoopbackFallback(withoutToken.toString());
         expect(anonymous.status).toBe(401);
 
-        // 带令牌的地址则要能正常打开手机页。
+        // 带令牌的地址则要能正常打开手机页
         const authorized = await fetchServiceWithLoopbackFallback(accessUrl);
         expect(authorized.status).toBe(200);
 
         // 重进页面：启用状态与访问地址来自后端回读
-        await reloadSettingsPage(page, page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
+        await settingsPage.reload(page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
         await expect(page.getByRole('switch', { name: ENABLE_SWITCH_NAME })).toBeChecked();
         await expect(page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl).first()).toBeVisible();
     });
 
-    test('[SET-MOB-02] 重新生成令牌后旧地址立刻失效，新地址可用', async ({ session, userDataDir }) => {
+    test('重新生成令牌后旧地址立刻失效，新地址可用', async ({ session, settingsPage, userDataDir }) => {
         const page = session.page;
-        await openMobileAccess(page);
+        await openMobileAccess(settingsPage);
         await enableMobileAccess(page, userDataDir);
 
         const oldUrl = await readAccessUrl(page);
@@ -175,9 +177,9 @@ test.describe('手机访问设置', () => {
         expect(fresh.status).toBe(200);
     });
 
-    test('[SET-MOB-03] 关闭后不再展示访问地址', async ({ session, userDataDir }) => {
+    test('关闭后不再展示访问地址', async ({ session, settingsPage, userDataDir }) => {
         const page = session.page;
-        await openMobileAccess(page);
+        await openMobileAccess(settingsPage);
         await enableMobileAccess(page, userDataDir);
         await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.enabled')).toBe('true');
 
@@ -189,7 +191,7 @@ test.describe('手机访问设置', () => {
         await expect(page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl)).toHaveCount(0);
 
         // 重进页面仍保持关闭态
-        await reloadSettingsPage(page, page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
+        await settingsPage.reload(page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
         await expect(page.getByRole('switch', { name: ENABLE_SWITCH_NAME })).not.toBeChecked();
         await expect(page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl)).toHaveCount(0);
     });

@@ -3,7 +3,6 @@ import path from 'node:path';
 import { expect } from '@playwright/test';
 import { readPackagedConfigValue, test } from '../../support/packaged-fixtures';
 import { SENTENCE_CARD_TESTID } from '../../../src/common/constants/player-scroll-protocol';
-import { openSettingsSection, reloadSettingsPage, switchSettingsSection } from '../../support/settings-page';
 
 /** 媒体夹具：用来验证打包态忽略 `?file=` dev 入口。 */
 const FIXTURE_VIDEO = path.resolve(__dirname, '..', '..', 'fixtures', 'media', 'qa-bilingual.mp4');
@@ -16,7 +15,11 @@ const FIXTURE_VIDEO = path.resolve(__dirname, '..', '..', 'fixtures', 'media', '
  * 其余安全配置与发布包一致。
  */
 test.describe('打包产物', () => {
-    test('[SET-PKG-01] 打包应用在 NODE_ENV=development 下仍按生产态启动，ASAR/资源/设置链路可用', async ({ session, userDataDir }) => {
+    test('打包应用在 NODE_ENV=development 下仍按生产态启动，ASAR/资源/设置链路可用', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const { app, page } = session;
         const runtime = await app.evaluate(({ app: electronApp }) => ({
             isPackaged: electronApp.isPackaged,
@@ -63,21 +66,19 @@ test.describe('打包产物', () => {
         await page.getByRole('button', { name: '返回媒体库' }).click();
 
         // 验证打包态真实读写 config.json（不靠预置文件蒙混过关）
-        await openSettingsSection(
-            page,
+        await settingsPage.openSection(
             'appearance',
             page.getByRole('radiogroup', { name: '色彩模式' }).getByRole('radio', { name: '深色' }),
         );
         await page.getByRole('radiogroup', { name: '色彩模式' }).getByRole('radio', { name: '深色' }).click();
         await expect.poll(() => readPackagedConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
-        await reloadSettingsPage(
-            page,
+        await settingsPage.reload(
             page.getByRole('radiogroup', { name: '色彩模式' }).getByRole('radio', { name: '深色' }),
         );
         await expect(page.getByRole('radiogroup', { name: '色彩模式' }).getByRole('radio', { name: '深色' })).toBeChecked();
 
         // 关于页与版本号链路可用（ASAR 内 renderer、preload、原生数据库模块均正常）
-        await switchSettingsSection(page, 'about', page.getByRole('heading', { name: '关于与更新' }));
+        await settingsPage.switchSection('about', page.getByRole('heading', { name: '关于与更新' }));
         await expect(page.getByRole('main').getByText(/^v\d+\.\d+\.\d+/).first()).toBeVisible();
     });
 });

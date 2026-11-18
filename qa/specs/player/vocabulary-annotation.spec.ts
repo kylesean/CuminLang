@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import { test } from '../../support/fixtures';
-import { navigateToFixturePlayer } from '../../support/player-entry';
+import type { PlayerPage } from '../../pages/PlayerPage';
 import { PLAYER_UI_TESTIDS, VOCAB_ANNOTATION_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /**
@@ -17,9 +17,9 @@ function mainSubtitleContent(page: Page): Locator {
 }
 
 /** 打开播放器并等待第一句字幕及其词表匹配完成。 */
-async function openFixture(page: Page): Promise<void> {
-    await navigateToFixturePlayer(page);
-    const content = mainSubtitleContent(page);
+async function openFixture(playerPage: PlayerPage): Promise<void> {
+    await playerPage.openFixture();
+    const content = mainSubtitleContent(playerPage.page);
     await expect(content.getByText('The player keeps').first()).toBeVisible({ timeout: 30_000 });
     // 必须等到 matchSubtitleVocabulary IPC 返回并同步进 vocabularyStore，避免在 store 尚未填充时假通过
     await expect(content).toHaveAttribute('data-vocab-ready', 'true', { timeout: 30_000 });
@@ -34,17 +34,17 @@ function annotationOf(page: Page): Locator {
 }
 
 test.describe('词汇注释状态投影', () => {
-    test('[SET-VOC-01] 新用户不会因默认词表出现下划线', async ({ session }) => {
+    test('新用户不会因默认词表出现下划线', async ({ session, playerPage }) => {
         const { page } = session;
-        await openFixture(page);
+        await openFixture(playerPage);
 
         // steady 属于默认词表，播种状态是 ignored；词表匹配就绪后主字幕仍不应出现任何 learning 注释。
         await expect(mainSubtitleContent(page).getByTestId(VOCAB_ANNOTATION_TESTIDS.learning)).toHaveCount(0);
     });
 
-    test('[SET-VOC-02] 状态切换实时反映到主字幕下划线', async ({ session }) => {
+    test('状态切换实时反映到主字幕下划线', async ({ session, playerPage }) => {
         const { page } = session;
-        await openFixture(page);
+        await openFixture(playerPage);
 
         const content = mainSubtitleContent(page);
         const wordButton = content.getByRole('button', { name: TARGET_WORD, exact: true }).first();

@@ -9,7 +9,7 @@ import { APP_SHELL_TESTIDS, NAV_TESTIDS } from '../../../src/common/constants/qa
  * 且后退/前进后真实视图内容正常渲染（不能只变 hash URL）。
  */
 test.describe('全局历史导航', () => {
-    test('[SET-NAV-01] 跨模块跳转后可通过标题栏后退返回上一页，并支持前进恢复', async ({ session }) => {
+    test('跨模块跳转后可通过标题栏后退返回上一页，并支持前进恢复', async ({ session }) => {
         const { page } = session;
 
         await page.getByTestId(NAV_TESTIDS.settings).click();

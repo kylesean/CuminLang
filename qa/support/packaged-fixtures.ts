@@ -14,6 +14,7 @@ import {
     type ManagedSessionHandle,
 } from './electron-session';
 import { readPackagedApp } from './packaged-app';
+import { SettingsPage } from '../pages/SettingsPage';
 
 /** 打包态配置文件：app.isPackaged=true 时没有 .dev 后缀。 */
 const CONFIG_FILE_NAME = 'config.json';
@@ -88,6 +89,7 @@ export async function launchPackagedSession(userDataDir: string): Promise<Packag
 type Fixtures = {
     userDataDir: string;
     session: PackagedSession;
+    settingsPage: SettingsPage;
 };
 
 export const test = base.extend<Fixtures>({
@@ -114,5 +116,8 @@ export const test = base.extend<Fixtures>({
             useError,
             warningPrefix: '[qa] 打包冒烟出现非致命错误/进程退出：',
         });
+    },
+    settingsPage: async ({ session }, use) => {
+        await use(new SettingsPage(session.page));
     },
 });

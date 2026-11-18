@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page } from '@playwright/test';
+import type { SettingsPage } from '../../pages/SettingsPage';
 import { readConfigValue, test } from '../../support/fixtures';
-import { openSettingsSection, reloadSettingsPage, switchSettingsSection } from '../../support/settings-page';
 
 /** 进入存储管理设置页。 */
-async function openStorageSetting(page: Page): Promise<void> {
-    await openSettingsSection(page, 'storage', page.getByRole('heading', { name: '存储管理' }));
+async function openStorageSetting(settingsPage: SettingsPage): Promise<void> {
+    await settingsPage.openSection('storage', settingsPage.page.getByRole('heading', { name: '存储管理' }));
 }
 
 function libraryPathInput(page: Page) {
@@ -14,9 +14,9 @@ function libraryPathInput(page: Page) {
 }
 
 test.describe('存储设置', () => {
-    test('[SET-STO-01] 改完媒体库路径后落盘，重进页面仍回显', async ({ session, userDataDir }) => {
+    test('改完媒体库路径后落盘，重进页面仍回显', async ({ session, settingsPage, userDataDir }) => {
         const page = session.page;
-        await openStorageSetting(page);
+        await openStorageSetting(settingsPage);
 
         const libraryInput = libraryPathInput(page);
         // 用例独占目录里的媒体库路径由 fixture 预置，先确认界面回显的就是它
@@ -32,18 +32,22 @@ test.describe('存储设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'storage.path')).toBe(nextPath);
 
         // 重进页面：路径来自后端回读，而不是页面里残留的输入
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '存储管理' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '存储管理' }));
         await expect(libraryPathInput(page)).toHaveValue(nextPath);
     });
 
-    test('[SET-STO-02] 填了没有写权限的目录会显式报错，不落盘也不在页面上假装已保存', async ({ session, userDataDir }) => {
+    test('填了没有写权限的目录会显式报错，不落盘也不在页面上假装已保存', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const isRootUser = typeof process.getuid === 'function' && process.getuid() === 0;
         test.skip(
             process.platform === 'win32' || isRootUser,
             'Windows 与 Linux root（CAP_DAC_OVERRIDE）下 chmod 0o500 无法阻断目录写入',
         );
         const page = session.page;
-        await openStorageSetting(page);
+        await openStorageSetting(settingsPage);
 
         const libraryInput = libraryPathInput(page);
         const initialPath = path.join(userDataDir, 'library');
@@ -55,21 +59,24 @@ test.describe('存储设置', () => {
         fs.chmodSync(readOnlyParent, 0o500);
         await libraryInput.fill(path.join(readOnlyParent, 'library'));
 
-        // 保存失败必须让用户看见原因，否则就是「页面上填了、实际没保存」的静默失败；
-        // 限定到 main 内以避免命中全局 @astryxdesign/core 隐藏的 live-region alert。
-        const saveError = page.getByRole('main').getByRole('alert');
+        // 保存失败必须让用户看见原因
+        const saveError = settingsPage.mainAlert();
         await expect(saveError).toBeVisible();
         await expect(saveError).toContainText('当前存储目录暂时无法访问');
         expect(readConfigValue(userDataDir, 'storage.path')).toBe(initialPath);
 
         // 重进页面：界面回显的是真正存下来的旧路径，而不是刚才那段无效输入
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '存储管理' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '存储管理' }));
         await expect(libraryPathInput(page)).toHaveValue(initialPath);
     });
 
-    test('[SET-STO-05] 改完媒体库路径立刻切到别的栏目，改动仍会落盘并在切回后回显', async ({ session, userDataDir }) => {
+    test('改完媒体库路径立刻切到别的栏目，改动仍会落盘并在切回后回显', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
-        await openStorageSetting(page);
+        await openStorageSetting(settingsPage);
 
         const libraryInput = libraryPathInput(page);
         await expect(libraryInput).toHaveValue(path.join(userDataDir, 'library'));
@@ -78,11 +85,11 @@ test.describe('存储设置', () => {
         fs.mkdirSync(nextPath, { recursive: true });
         await libraryInput.fill(nextPath);
 
-        // 本页的保存还带着「读取新目录状态」的附加动作，卸载时同样不能把挂起的路径丢掉
-        await switchSettingsSection(page, 'appearance', page.getByRole('radio', { name: '深色' }));
+        // 卸载时自动提交挂起改动
+        await settingsPage.switchSection('appearance', page.getByRole('radio', { name: '深色' }));
         await expect.poll(() => readConfigValue(userDataDir, 'storage.path')).toBe(nextPath);
 
-        await switchSettingsSection(page, 'storage', page.getByRole('heading', { name: '存储管理' }));
+        await settingsPage.switchSection('storage', page.getByRole('heading', { name: '存储管理' }));
         await expect(libraryPathInput(page)).toHaveValue(nextPath);
     });
 });

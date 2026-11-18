@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { SettingsPage } from '../../pages/SettingsPage';
 import { isProviderSecretPersisted, readConfigValue, readProviderProfile, test } from '../../support/fixtures';
-import { openSettingsSection, reloadSettingsPage, switchSettingsSection, chooseInRow, selectInRow } from '../../support/settings-page';
 import {
     SETTING_ITEM_TESTIDS,
     modelRowTestId,
@@ -8,8 +8,10 @@ import {
 } from '../../../src/common/constants/qa-testids';
 
 /** 进入服务与资源设置页。 */
-async function openResourcesSetting(page: Page): Promise<void> {
-    await openSettingsSection(page, 'resources', page.getByRole('heading', { name: '服务与资源' }));
+async function openResourcesSetting(page: Page): Promise<SettingsPage> {
+    const settingsPage = new SettingsPage(page);
+    await settingsPage.openSection('resources', page.getByRole('heading', { name: '服务与资源' }));
+    return settingsPage;
 }
 
 /** 切到服务与资源页的页内分区。 */
@@ -68,7 +70,11 @@ async function deleteModelRow(page: Page, row: Locator): Promise<void> {
 }
 
 test.describe('服务与资源设置', () => {
-    test('[SET-SVC-01] 云端服务填写的密钥、接口地址与模型清单会落盘，重进页面仍回显 @smoke', async ({ session, userDataDir }) => {
+    test('云端服务填写的密钥、接口地址与模型清单会落盘，重进页面仍回显 @smoke', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -89,7 +95,7 @@ test.describe('服务与资源设置', () => {
         expect(readConfigValue(userDataDir, 'models.openai.available')).toBeUndefined();
 
         // 重进页面：密钥不再明文下发，只展示脱敏提示；地址与模型清单仍来自后端回读
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
         const savedKeyInput = apiKeyInput(page);
         await expect(savedKeyInput).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
@@ -105,7 +111,7 @@ test.describe('服务与资源设置', () => {
         await expect.poll(() => isProviderSecretPersisted(userDataDir, 'deepseek', API_KEY)).toBe(true);
 
         // 再重进一次：密钥仍是「已保存」的脱敏态，说明留空保存没有把旧 key 当成清空
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
         await expect(apiKeyInput(page)).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
         await expect(apiKeyInput(page)).toHaveValue('');
@@ -113,11 +119,15 @@ test.describe('服务与资源设置', () => {
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toBeVisible();
     });
 
-    test('[SET-SVC-02] 识别方式与词典补充方式改动会落盘，重进页面仍回显', async ({ session, userDataDir }) => {
+    test('识别方式与词典补充方式改动会落盘，重进页面仍回显', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
 
-        await chooseInRow(page, 'transcription', '兼容模式');
+        await settingsPage.chooseInRow('transcription', '兼容模式');
         await expect.poll(() => readConfigValue(userDataDir, 'transcription.engine')).toBe('sherpa-onnx');
 
         // 先添加云端模型并切到该模型，再切回「不补充」，确认下拉改动真实写盘
@@ -127,35 +137,43 @@ test.describe('服务与资源设置', () => {
         await expect.poll(() => readProviderProfile(userDataDir)?.models).toContain(NEW_MODEL);
 
         await openResourcesTab(page, '本地资源');
-        await chooseInRow(page, 'dictionary', NEW_MODEL);
+        await settingsPage.chooseInRow('dictionary', NEW_MODEL);
         await expect.poll(() => readConfigValue(userDataDir, 'providers.dictionary')).toBe('openai');
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.dictionary')).toBe(NEW_MODEL);
 
-        await chooseInRow(page, 'dictionary', '仅用本地词典');
+        await settingsPage.chooseInRow('dictionary', '仅用本地词典');
         await expect.poll(() => readConfigValue(userDataDir, 'providers.dictionary')).toBe('none');
 
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(selectInRow(page, 'transcription')).toHaveText('兼容模式');
-        await expect(selectInRow(page, 'dictionary')).toHaveText('仅用本地词典');
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
+        await expect(settingsPage.selectInRow('transcription')).toHaveText('兼容模式');
+        await expect(settingsPage.selectInRow('dictionary')).toHaveText('仅用本地词典');
     });
 
-    test('[SET-SVC-03] 识别方式在兼容模式与硬件加速之间往返切换都落盘，重进页面回显最后一次选择', async ({ session, userDataDir }) => {
+    test('识别方式在兼容模式与硬件加速之间往返切换都落盘，重进页面回显最后一次选择', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
 
         // 默认是硬件加速，先切到兼容模式，确认同一个下拉换回来也能写回配置
-        await expect(selectInRow(page, 'transcription')).toHaveText('硬件加速（推荐）');
-        await chooseInRow(page, 'transcription', '兼容模式');
+        await expect(settingsPage.selectInRow('transcription')).toHaveText('硬件加速（推荐）');
+        await settingsPage.chooseInRow('transcription', '兼容模式');
         await expect.poll(() => readConfigValue(userDataDir, 'transcription.engine')).toBe('sherpa-onnx');
 
-        await chooseInRow(page, 'transcription', '硬件加速（推荐）');
+        await settingsPage.chooseInRow('transcription', '硬件加速（推荐）');
         await expect.poll(() => readConfigValue(userDataDir, 'transcription.engine')).toBe('whisper-cpp');
 
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(selectInRow(page, 'transcription')).toHaveText('硬件加速（推荐）');
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
+        await expect(settingsPage.selectInRow('transcription')).toHaveText('硬件加速（推荐）');
     });
 
-    test('[SET-SVC-04] 使用厂商预设会回填接口地址与 API 类型并落盘，重进页面仍回显', async ({ session, userDataDir }) => {
+    test('使用厂商预设会回填接口地址与 API 类型并落盘，重进页面仍回显', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -178,15 +196,15 @@ test.describe('服务与资源设置', () => {
 
         // 当前页面即时回显
         await expect(apiUrlInput(page)).toHaveValue(presetEndpoint);
-        await expect(selectInRow(page, 'apiFormat')).toHaveText(presetFormatLabel);
+        await expect(settingsPage.selectInRow('apiFormat')).toHaveText(presetFormatLabel);
 
         // 重进页面：地址与类型来自后端回读
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
         await expect(apiUrlInput(page)).toHaveValue(presetEndpoint);
-        await expect(selectInRow(page, 'apiFormat')).toHaveText(presetFormatLabel);
+        await expect(settingsPage.selectInRow('apiFormat')).toHaveText(presetFormatLabel);
     });
 
-    test('[SET-SVC-05] 模型可自由启用/关闭与删除', async ({ session, userDataDir }) => {
+    test('模型可自由启用/关闭与删除', async ({ session, settingsPage, userDataDir }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -223,13 +241,17 @@ test.describe('服务与资源设置', () => {
         // 删除同样要写回配置，且重进页面后不会复现
         await expect.poll(() => readProviderProfile(userDataDir)?.models).not.toContain(temporaryModel);
         await expect(page.getByTestId(modelRowTestId(temporaryModel))).toHaveCount(0);
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toBeVisible();
         await expect(page.getByTestId(modelRowTestId(temporaryModel))).toHaveCount(0);
     });
 
-    test('[SET-SVC-06] 把字幕翻译指到新增的云端模型后，模型槽位落盘并回显', async ({ session, userDataDir }) => {
+    test('把字幕翻译指到新增的云端模型后，模型槽位落盘并回显', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -240,16 +262,20 @@ test.describe('服务与资源设置', () => {
 
         // 功能下拉里的模型清单来自详情缓存，保存成功后缓存会立刻刷新，新模型无需重进页面即可选中
         await openResourcesTab(page, '本地资源');
-        await chooseInRow(page, 'subtitleTranslation', NEW_MODEL);
+        await settingsPage.chooseInRow('subtitleTranslation', NEW_MODEL);
 
         await expect.poll(() => readConfigValue(userDataDir, 'providers.subtitleTranslation')).toBe('openai');
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.subtitleTranslation')).toBe(NEW_MODEL);
 
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(selectInRow(page, 'subtitleTranslation')).toHaveText(NEW_MODEL);
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
+        await expect(settingsPage.selectInRow('subtitleTranslation')).toHaveText(NEW_MODEL);
     });
 
-    test('[SET-SVC-07] 字幕翻译下拉不再提供已下线的本地轻量引擎，切到关闭后引擎落盘并回显', async ({ session, userDataDir }) => {
+    test('字幕翻译下拉不再提供已下线的本地轻量引擎，切到关闭后引擎落盘并回显', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -258,13 +284,13 @@ test.describe('服务与资源设置', () => {
         await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await openResourcesTab(page, '本地资源');
-        await chooseInRow(page, 'subtitleTranslation', NEW_MODEL);
+        await settingsPage.chooseInRow('subtitleTranslation', NEW_MODEL);
         await expect.poll(() => readConfigValue(userDataDir, 'providers.subtitleTranslation')).toBe('openai');
 
-        // OPUS-MT 轻量管线已移除：下拉里不能再出现「本地基础资源包」，
-        // 否则用户选了它，实际却走别的引擎，提示与真实能力不符。
-        await selectInRow(page, 'subtitleTranslation').scrollIntoViewIfNeeded();
-        await selectInRow(page, 'subtitleTranslation').click();
+        // OPUS-MT 轻量管线已移除：下拉里不能再出现「本地基础资源包」
+        const translationSelect = settingsPage.selectInRow('subtitleTranslation');
+        await translationSelect.scrollIntoViewIfNeeded();
+        await translationSelect.click();
         await expect(page.getByRole('option', { name: '关闭' })).toBeVisible();
         await expect(page.getByRole('option', { name: '本地基础资源包' })).toHaveCount(0);
         await expect(page.getByText('轻量翻译只支持中文')).toHaveCount(0);
@@ -272,11 +298,15 @@ test.describe('服务与资源设置', () => {
 
         await expect.poll(() => readConfigValue(userDataDir, 'providers.subtitleTranslation')).toBe('none');
 
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(selectInRow(page, 'subtitleTranslation')).toHaveText('关闭');
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
+        await expect(settingsPage.selectInRow('subtitleTranslation')).toHaveText('关闭');
     });
 
-    test('[SET-SVC-08] 词典查询切到云端模型后引擎与槽位落盘，本地资源区展示英英释义增强包入口', async ({ session, userDataDir }) => {
+    test('词典查询切到云端模型后引擎与槽位落盘，本地资源区展示英英释义增强包入口', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -286,21 +316,25 @@ test.describe('服务与资源设置', () => {
 
         await openResourcesTab(page, '本地资源');
         await expect(page.getByText('英英释义增强包', { exact: true })).toBeVisible();
-        await chooseInRow(page, 'dictionary', NEW_MODEL);
+        await settingsPage.chooseInRow('dictionary', NEW_MODEL);
 
         await expect.poll(() => readConfigValue(userDataDir, 'providers.dictionary')).toBe('openai');
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.dictionary')).toBe(NEW_MODEL);
 
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(selectInRow(page, 'dictionary')).toHaveText(NEW_MODEL);
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
+        await expect(settingsPage.selectInRow('dictionary')).toHaveText(NEW_MODEL);
     });
 
-    test('[SET-SVC-09] 整句讲解启用后切到禁用，开关落盘为关闭并重进回显', async ({ session, userDataDir }) => {
+    test('整句讲解启用后切到禁用，开关落盘为关闭并重进回显', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
 
         // 未配置模型时默认处于禁用态
-        await expect(selectInRow(page, 'sentenceLearning')).toHaveText('禁用');
+        await expect(settingsPage.selectInRow('sentenceLearning')).toHaveText('禁用');
 
         // 添加云端模型并开启整句讲解，再切回禁用验证持久化
         await openResourcesTab(page, '云端服务');
@@ -308,17 +342,21 @@ test.describe('服务与资源设置', () => {
         await page.getByRole('button', { name: '添加', exact: true }).click();
 
         await openResourcesTab(page, '本地资源');
-        await chooseInRow(page, 'sentenceLearning', NEW_MODEL);
+        await settingsPage.chooseInRow('sentenceLearning', NEW_MODEL);
         await expect.poll(() => readConfigValue(userDataDir, 'features.openai.enableSentenceLearning')).toBe('true');
 
-        await chooseInRow(page, 'sentenceLearning', '禁用');
+        await settingsPage.chooseInRow('sentenceLearning', '禁用');
         await expect.poll(() => readConfigValue(userDataDir, 'features.openai.enableSentenceLearning')).toBe('false');
 
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(selectInRow(page, 'sentenceLearning')).toHaveText('禁用');
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
+        await expect(settingsPage.selectInRow('sentenceLearning')).toHaveText('禁用');
     });
 
-    test('[SET-SVC-10] 已绑定功能的云端模型也可直接删除，删除后列表与配置不再保留该模型', async ({ session, userDataDir }) => {
+    test('已绑定功能的云端模型也可直接删除，删除后列表与配置不再保留该模型', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -327,7 +365,7 @@ test.describe('服务与资源设置', () => {
         await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await openResourcesTab(page, '本地资源');
-        await chooseInRow(page, 'subtitleTranslation', NEW_MODEL);
+        await settingsPage.chooseInRow('subtitleTranslation', NEW_MODEL);
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.subtitleTranslation')).toBe(NEW_MODEL);
 
         await openResourcesTab(page, '云端服务');
@@ -338,12 +376,12 @@ test.describe('服务与资源设置', () => {
         await expect.poll(() => readProviderProfile(userDataDir)?.models).not.toContain(NEW_MODEL);
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
 
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
     });
 
-    test('[SET-SVC-11] 关掉应用再打开，云端密钥仍原样回读', async ({ openSession, userDataDir }) => {
+    test('关掉应用再打开，云端密钥仍原样回读', async ({ openSession, userDataDir }) => {
         const first = await openSession();
         await openResourcesSetting(first.page);
         await openResourcesTab(first.page, '云端服务');
@@ -362,7 +400,11 @@ test.describe('服务与资源设置', () => {
         await expect(savedKeyInput).not.toHaveAttribute('placeholder', new RegExp(API_KEY));
     });
 
-    test('[SET-SVC-13] 把云端模型清单删空后清单保持为空，此时改动偏好仍会正常落盘', async ({ session, userDataDir }) => {
+    test('把云端模型清单删空后清单保持为空，此时改动偏好仍会正常落盘', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -376,18 +418,21 @@ test.describe('服务与资源设置', () => {
         // 清空就是清空：清单在磁盘上留空，不会又被兜底模型塞回来
         await expect.poll(() => readProviderProfile(userDataDir)?.models).toEqual([]);
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
-        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await settingsPage.reload(page.getByRole('heading', { name: '服务与资源' }));
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
 
         // 清单为空只影响云端模型可选范围，不该连带把无关偏好一起拒绝保存
         await openResourcesTab(page, '本地资源');
-        await chooseInRow(page, 'transcription', '兼容模式');
+        await settingsPage.chooseInRow('transcription', '兼容模式');
         await expect.poll(() => readConfigValue(userDataDir, 'transcription.engine')).toBe('sherpa-onnx');
-        // 限定 main，排除 @astryxdesign/core 根节点的全局 live-region alert。
-        await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
+        await expect(settingsPage.mainAlert()).toHaveCount(0);
     });
 
-    test('[SET-SVC-17] 填完接口地址立刻切到别的设置栏目，改动仍会落盘并在重进后回显', async ({ session, userDataDir }) => {
+    test('填完接口地址立刻切到别的设置栏目，改动仍会落盘并在重进后回显', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
@@ -395,12 +440,12 @@ test.describe('服务与资源设置', () => {
         await apiUrlInput(page).fill(ENDPOINT);
 
         // 关键：填完立刻离开，不给 600ms 防抖留时间，验证离开栏目时自动保存冲刷不丢配置
-        await switchSettingsSection(page, 'appearance', page.getByRole('radio', { name: '深色' }));
+        await settingsPage.switchSection('appearance', page.getByRole('radio', { name: '深色' }));
 
         await expect.poll(() => readProviderProfile(userDataDir)?.endpoint).toBe(ENDPOINT);
 
         // 回到该页：接口地址来自后端回读
-        await switchSettingsSection(page, 'resources', page.getByRole('heading', { name: '服务与资源' }));
+        await settingsPage.switchSection('resources', page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
         await expect(apiUrlInput(page)).toHaveValue(ENDPOINT);
     });

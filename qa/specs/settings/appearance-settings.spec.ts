@@ -1,19 +1,15 @@
 import { expect, type Page, type Locator } from '@playwright/test';
+import { SettingsPage } from '../../pages/SettingsPage';
 import { readConfigValue, test } from '../../support/fixtures';
-import { chooseInRow, openSettingsSection, reloadSettingsPage, selectInRow, switchSettingsSection } from '../../support/settings-page';
 import { APP_SHELL_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /** 主题按钮文案到根节点 `data-theme` 值的映射。 */
 const THEME_VALUE = { 深色: 'dark', 浅色: 'light' } as const;
 type ThemeLabel = keyof typeof THEME_VALUE;
 
-/**
- * 进入外观设置页：首页「设置中心」→ 设置页侧边栏「外观」。
- *
- * @param page 应用主窗口页面。
- */
+/** 进入外观设置页：首页「设置中心」→ 设置页侧边栏「外观」。 */
 async function openAppearanceSetting(page: Page): Promise<void> {
-    await openSettingsSection(page, 'appearance', colorModeRadio(page, '深色'));
+    await new SettingsPage(page).openSection('appearance', colorModeRadio(page, '深色'));
 }
 
 /** 色彩模式分段控件（SegmentedControl 渲染为 radiogroup）。 */
@@ -53,7 +49,7 @@ function fontSizeButton(page: Page, label: string): Locator {
 }
 
 test.describe('外观设置', () => {
-    test('[SET-APP-01] 切换主题后界面立即生效并写入配置 @smoke', async ({ session, userDataDir }) => {
+    test('切换主题后界面立即生效并写入配置 @smoke', async ({ session, userDataDir }) => {
         await openAppearanceSetting(session.page);
 
         // 全新配置的默认主题是浅色
@@ -65,7 +61,7 @@ test.describe('外观设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
     });
 
-    test('[SET-APP-02] 重启应用后沿用上次选择的主题', async ({ openSession, userDataDir }) => {
+    test('重启应用后沿用上次选择的主题', async ({ openSession, userDataDir }) => {
         const first = await openSession();
         await openAppearanceSetting(first.page);
         await switchTheme(first.page, '深色');
@@ -76,17 +72,16 @@ test.describe('外观设置', () => {
         // 重启后不做任何操作，界面主题直接来自持久化配置
         await expect(restarted.page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', 'dark');
 
-        // 再进外观页确认选中项回显为深色：选中态来自后端读回的设置，
-        // 能排除「只是启动兜底类名恰好是深色」的假通过
+        // 再进外观页确认选中项回显为深色
         await openAppearanceSetting(restarted.page);
         await expect(colorModeRadio(restarted.page, '深色')).toBeChecked();
     });
 
-    test('[SET-APP-03] 切换界面字号后写入配置，重进页面仍回显所选档位', async ({ session, userDataDir }) => {
+    test('切换界面字号后写入配置，重进页面仍回显所选档位', async ({ session, settingsPage, userDataDir }) => {
         const page = session.page;
         await openAppearanceSetting(page);
 
-        // 全新配置的默认字号是「大」，选中态体现在按钮的 ring 上
+        // 全新配置的默认字号是「大」
         await expect(fontSizeButton(page, '大')).toBeChecked();
 
         await fontSizeButton(page, '小').click();
@@ -94,25 +89,25 @@ test.describe('外观设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'appearance.fontSize')).toBe('fontSizeSmall');
 
         // 重进页面：选中档位来自后端回读，而不是页面里的临时 state
-        await reloadSettingsPage(page, colorModeRadio(page, '深色'));
+        await settingsPage.reload(colorModeRadio(page, '深色'));
         await expect(fontSizeButton(page, '小')).toBeChecked();
         await expect(fontSizeButton(page, '大')).not.toBeChecked();
     });
 
-    test('[SET-APP-04] 切换界面语言后写入配置，重进页面按所选语言渲染', async ({ session, userDataDir }) => {
+    test('切换界面语言后写入配置，重进页面按所选语言渲染', async ({ session, settingsPage, userDataDir }) => {
         const page = session.page;
         await openAppearanceSetting(page);
 
-        await chooseInRow(page, 'language', 'English');
+        await settingsPage.chooseInRow('language', 'English');
 
         await expect.poll(() => readConfigValue(userDataDir, 'i18n.language')).toBe('en-US');
 
         // 重进页面：整个界面按持久化的语言设置渲染成英文，语言下拉也停在 English
-        await reloadSettingsPage(page, page.getByRole('heading', { name: 'Appearance' }));
-        await expect(selectInRow(page, 'language')).toHaveText('English');
+        await settingsPage.reload(page.getByRole('heading', { name: 'Appearance' }));
+        await expect(settingsPage.selectInRow('language')).toHaveText('English');
     });
 
-    test('[SET-APP-05] 主题从深色切回浅色同样落盘，重启后不回弹到深色', async ({ openSession, userDataDir }) => {
+    test('主题从深色切回浅色同样落盘，重启后不回弹到深色', async ({ openSession, userDataDir }) => {
         const first = await openSession();
         await openAppearanceSetting(first.page);
 
@@ -120,40 +115,39 @@ test.describe('外观设置', () => {
         await switchTheme(first.page, '深色');
         await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
 
-        // 再切回浅色。浅色是 schema 默认值，反向路径才是关口：
-        // 若「写回默认值」被当成「没改动」而跳过，界面会显示浅色、配置文件却还是深色，
-        // 用户下次启动就会看到主题弹回深色。
+        // 再切回浅色，验证「写回默认值」同样真实覆盖配置文件
         await switchTheme(first.page, '浅色');
         await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('light');
         await first.close();
 
         const restarted = await openSession();
-        // 重启后是浅色。这一步单独看说明不了问题（默认值恰好也是浅色），
-        // 上面的写盘断言才是证明「真的覆盖了」的那一半，两者一起才闭合。
         await expect(restarted.page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', 'light');
         await openAppearanceSetting(restarted.page);
         await expect(colorModeRadio(restarted.page, '浅色')).toBeChecked();
     });
 
-    test('[SET-APP-09] 选完主题立刻切到别的设置栏目，主题仍会落盘并在重进后回显选中', async ({ session, userDataDir }) => {
+    test('选完主题立刻切到别的设置栏目，主题仍会落盘并在重进后回显选中', async ({
+        session,
+        settingsPage,
+        userDataDir,
+    }) => {
         const page = session.page;
         await openAppearanceSetting(page);
 
         await colorModeRadio(page, '深色').click();
         await expect(page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', 'dark');
 
-        // 关键：点完立刻离开，不给 600ms 防抖留时间。主题是立即可见的界面状态，
-        // 用户很容易「点完就走」，此时若丢值，重进页面选中项会退回浅色。
-        await switchSettingsSection(page, 'proxy', page.getByRole('heading', { name: '网络代理' }));
+        // 关键：点完立刻离开，不给 600ms 防抖留时间。
+        await settingsPage.switchSection('proxy', page.getByRole('heading', { name: '网络代理' }));
 
         await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
 
-        // 回到该页：选中态来自后端回读，而不是页面里残留的 state
-        await switchSettingsSection(page, 'appearance', colorModeRadio(page, '深色'));
+        // 回到该页：选中态来自后端回读
+        await settingsPage.switchSection('appearance', colorModeRadio(page, '深色'));
         await expect(colorModeRadio(page, '深色')).toBeChecked();
     });
 
-    test('[SET-APP-10] 切换高间距主题后标题栏保持 32px，窗口控件不被裁切', async ({ session }) => {
+    test('切换高间距主题后标题栏保持 32px，窗口控件不被裁切', async ({ session }) => {
         const page = session.page;
         await openAppearanceSetting(page);
 

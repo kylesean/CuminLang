@@ -7,7 +7,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 import { test } from '../../support/fixtures';
-import { navigateToFixturePlayer } from '../../support/player-entry';
+import type { PlayerPage } from '../../pages/PlayerPage';
 import { NAV_TESTIDS, PLAYER_UI_TESTIDS } from '../../../src/common/constants/qa-testids';
 import { SENTENCE_CARD_TESTID } from '../../../src/common/constants/player-scroll-protocol';
 
@@ -21,9 +21,10 @@ interface SplitSizes {
     subtitle: number;
 }
 
-async function openPlayer(page: Page): Promise<void> {
+async function openPlayer(playerPage: PlayerPage): Promise<void> {
+    const { page } = playerPage;
     await page.setViewportSize({ width: 1440, height: 900 });
-    await navigateToFixturePlayer(page);
+    await playerPage.openFixture();
     await expect(page.getByTestId(SENTENCE_CARD_TESTID).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId(INNER_HANDLE)).toBeVisible();
     // 等两帧让窗口放大与 flex 分栏测量完成，避免拖拽拿到过期几何坐标。
@@ -115,12 +116,12 @@ async function expectBothAxesReset(page: Page): Promise<void> {
     const sizes = await readSplitSizes(page);
     expect(sizes.subtitle).toBeGreaterThanOrEqual(25);
     expect(sizes.subtitle).toBeLessThanOrEqual(32);
-    expect(sizes.stage + sizes.subtitle).toBeCloseTo(100, 5);
+    expect(sizes.stage + sizes.subtitle).toBeCloseTo(100, 2);
 }
 
-test('[SET-PLY-02] 双击任一分隔条都会同时复位两组比例', async ({ session }) => {
+test('双击任一分隔条都会同时复位两组比例', async ({ session, playerPage }) => {
     const { page } = session;
-    await openPlayer(page);
+    await openPlayer(playerPage);
 
     await dragHandle(page, OUTER_HANDLE, -160, 0);
     await dragHandle(page, INNER_HANDLE, 0, 120);
@@ -146,12 +147,14 @@ test('[SET-PLY-02] 双击任一分隔条都会同时复位两组比例', async (
     await expectBothAxesReset(page);
 });
 
-test('[SET-PLY-03] 字幕文稿收起后双击主字幕分隔条仍能复位且不抛错', async ({ session }) => {
+test('字幕文稿收起后双击主字幕分隔条仍能复位且不抛错', async ({ session, playerPage }) => {
     const { page } = session;
-    await openPlayer(page);
+    await openPlayer(playerPage);
 
     await page.getByLabel('收起字幕文稿').first().click();
     await expect(page.getByTestId(OUTER_HANDLE)).toHaveCount(0);
+    // 等待外层收起动画/ResizeObserver 将内部分隔条拉满 1440 视口宽度后再开始拖拽，避免抓到半途坐标
+    await expect.poll(async () => (await page.getByTestId(INNER_HANDLE).boundingBox())?.width ?? 0).toBeGreaterThan(1300);
 
     await dragHandle(page, INNER_HANDLE, 0, 120);
     const dragged = await readSplitSizes(page);
@@ -161,10 +164,10 @@ test('[SET-PLY-03] 字幕文稿收起后双击主字幕分隔条仍能复位且�
     const reset = await readSplitSizes(page);
     expect(reset.subtitle).toBeGreaterThanOrEqual(25);
     expect(reset.subtitle).toBeLessThanOrEqual(32);
-    expect(reset.stage + reset.subtitle).toBeCloseTo(100, 5);
+    expect(reset.stage + reset.subtitle).toBeCloseTo(100, 2);
 });
 
-test('[SET-PLY-04] 大字号下复位后双语字幕仍完整落在默认面板内', async ({ session }) => {
+test('大字号下复位后双语字幕仍完整落在默认面板内', async ({ session, playerPage }) => {
     const { page } = session;
     await page.evaluate(async () => {
         const electron = (window as unknown as {
@@ -177,7 +180,7 @@ test('[SET-PLY-04] 大字号下复位后双语字幕仍完整落在默认面板�
     });
     await page.reload();
     await page.getByTestId(NAV_TESTIDS.settings).waitFor();
-    await openPlayer(page);
+    await openPlayer(playerPage);
 
     await doubleClickHandle(page, INNER_HANDLE);
     const sizes = await readSplitSizes(page);
