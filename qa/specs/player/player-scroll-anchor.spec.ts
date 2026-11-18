@@ -436,21 +436,16 @@ async function runRound(
     if (params.flingWheelDelta === null) {
         await clickSideTranslationWithoutPointer(page);
     } else {
-        // 「先切换、立刻甩走」：切换的点击在应用侧同步捕获锚点（store 订阅，早于重渲染），
-        // 紧接着用真实滚轮把列表甩到深处，等它去重测时锚点行已被虚拟列表回收。
-        //
-        // 甩动同样必须走滚轮而不是写 scrollTop：写 scrollTop 会让容器进入
-        // 「应用以为位置是自己设的」状态，实测随后被首屏跟随拉回顶部，
-        // 锚点行反而一直留在渲染范围里——那样这一轮测的就不是 fail closed 了。
-        await clickSideTranslationWithoutPointer(page);
         const box = await page.getByTestId(SCROLLER_TESTID).boundingBox();
         if (!box) {
             throw new Error('侧栏滚动容器不可见，无法构造甩动');
         }
         await page.mouse.move(box.x + 8, box.y + box.height / 2);
-        // 滚轮位移与 scrollTop 近似 1:1（实测 900 + 3000 → 3900）。
-        // 这里直接给一个远超内容高度的位移，等价于「甩到底部」——锚点在第 1 行时
-        // 必然被虚拟列表回收，且结论不依赖行高与总句数（见协议常量里的说明）。
+        // 「先切换、立刻甩走」：预先定位指针后再立即派发点击与滚轮，
+        // 避免点击后去查 boundingBox() 的 IPC 延迟让 waitForLayoutStable 提前放行。
+        // 甩动同样必须走滚轮而不是写 scrollTop：写 scrollTop 会让容器进入
+        // 「应用以为位置是自己设的」状态，实测随后被首屏跟随拉回顶部。
+        await clickSideTranslationWithoutPointer(page);
         await page.mouse.wheel(0, params.flingWheelDelta);
     }
 

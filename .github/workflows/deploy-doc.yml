@@ -2,7 +2,10 @@ name: Build documentation
 
 on:
     push:
-        tags: ['v*']
+        branches: [main]
+        paths:
+            - 'Writerside/**'
+            - '.github/workflows/deploy-doc.yml'
     workflow_dispatch:
 
 permissions:

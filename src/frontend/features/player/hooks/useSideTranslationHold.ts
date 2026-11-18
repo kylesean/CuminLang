@@ -79,99 +79,115 @@ const runHold = async (scroller: HTMLElement, before: BeforeSnapshot): Promise<v
         });
     };
 
-    const stability = await waitForLayoutStable(scroller, anchor.index);
-    if (stability === 'missing') {
-        // 锚定行已经被虚拟列表回收：量不到它就不可能把它钉回原处
-        finish({ outcome: 'anchor-missing' });
-        return;
-    }
-    if (stability === 'timeout') {
-        // 布局一直没静下来：此时写入等于和重排抢位置，按 fail closed 处理
-        finish({ outcome: 'not-converged' });
-        return;
-    }
+    let interruptedByUser = false;
+    const onUserScrollInput = (): void => {
+        interruptedByUser = true;
+    };
+    scroller.addEventListener('wheel', onUserScrollInput, { passive: true });
+    scroller.addEventListener('touchmove', onUserScrollInput, { passive: true });
 
-    if (policy === 'b') {
-        // 对照策略：只测量、不补偿
-        const settledTop = measureAnchorTop(scroller, anchor.index);
-        finish({
-            outcome: 'no-compensation',
-            anchorTopAfter: settledTop,
-            residual: settledTop === null ? null : Math.abs(settledTop - anchor.top),
-        });
-        return;
-    }
-
-    // hold 期间暂停自动跟随，避免「保持位置」与「拉回当前句」两个写入方互相拉扯
-    useSubtitleScroll.getState().setHoldActive(true);
     try {
-        let rounds = 0;
-        let previousResidual: number | null = null;
-        let residual: number | null = null;
-
-        while (rounds < MAX_ROUNDS) {
-            rounds += 1;
-
-            const currentTop = measureAnchorTop(scroller, anchor.index);
-            if (currentTop === null) {
-                finish({ outcome: 'anchor-missing', rounds, residual });
-                return;
-            }
-            residual = Math.abs(currentTop - anchor.top);
-            if (residual < CONVERGE_EPSILON_PX) {
-                finish({ outcome: 'converged', rounds, anchorTopAfter: currentTop, residual });
-                return;
-            }
-
-            // 每轮都用「原始锚点位置 + 当前实测」重新算位移，绝不累加上一轮的 delta；
-            // 但基准取当前 scrollTop（不是切换前的快照值）——重测期间 Virtuoso 自己会漂，
-            // 以快照值为基准会把那段漂移重复补偿一次，循环因此发散。详见 scrollTarget.ts。
-            const target = computeScrollTarget(
-                {
-                    before: { scrollTop: before.scrollTop, anchor },
-                    after: { scrollTop: scroller.scrollTop, anchor: { index: anchor.index, top: currentTop } },
-                },
-                { maxStepPx: MAX_STEP_PX },
-            );
-            if (!target) {
-                finish({ outcome: 'anchor-missing', rounds, residual });
-                return;
-            }
-
-            const from = scroller.scrollTop;
-            scroller.scrollTop = target.scrollTop;
-            recordScrollWrite({
-                source: HOLD_WRITE_SOURCE,
-                from,
-                to: scroller.scrollTop,
-                kind: 'write',
-            });
-
-            await waitFrames(SETTLE_FRAMES);
-
-            const settledTop = measureAnchorTop(scroller, anchor.index);
-            if (settledTop === null) {
-                finish({ outcome: 'anchor-missing', rounds, residual });
-                return;
-            }
-            residual = Math.abs(settledTop - anchor.top);
-            if (residual < CONVERGE_EPSILON_PX) {
-                finish({ outcome: 'converged', rounds, anchorTopAfter: settledTop, residual });
-                return;
-            }
-            // 残差不再变化说明已经推到能推的极限（写入被别的东西抵消），再算也是同一个数
-            if (previousResidual !== null
-                && Math.abs(residual - previousResidual) < CONVERGE_EPSILON_PX) {
-                finish({ outcome: 'not-converged', rounds, anchorTopAfter: settledTop, residual });
-                return;
-            }
-            previousResidual = residual;
+        const stability = await waitForLayoutStable(scroller, anchor.index);
+        if (stability === 'missing' || interruptedByUser) {
+            // 锚定行已被虚拟列表回收，或用户已接管滚动：量不到或不再打扰用户，fail closed
+            finish({ outcome: 'anchor-missing' });
+            return;
+        }
+        if (stability === 'timeout') {
+            // 布局一直没静下来：此时写入等于和重排抢位置，按 fail closed 处理
+            finish({ outcome: 'not-converged' });
+            return;
         }
 
-        const settledTop = measureAnchorTop(scroller, anchor.index);
-        finish({ outcome: 'not-converged', rounds, anchorTopAfter: settledTop, residual });
+        if (policy === 'b') {
+            // 对照策略：只测量、不补偿
+            const settledTop = measureAnchorTop(scroller, anchor.index);
+            finish({
+                outcome: 'no-compensation',
+                anchorTopAfter: settledTop,
+                residual: settledTop === null ? null : Math.abs(settledTop - anchor.top),
+            });
+            return;
+        }
+
+        // hold 期间暂停自动跟随，避免「保持位置」与「拉回当前句」两个写入方互相拉扯
+        useSubtitleScroll.getState().setHoldActive(true);
+        try {
+            let rounds = 0;
+            let previousResidual: number | null = null;
+            let residual: number | null = null;
+
+            while (rounds < MAX_ROUNDS) {
+                if (interruptedByUser) {
+                    finish({ outcome: 'anchor-missing', rounds, residual });
+                    return;
+                }
+                rounds += 1;
+
+                const currentTop = measureAnchorTop(scroller, anchor.index);
+                if (currentTop === null || interruptedByUser) {
+                    finish({ outcome: 'anchor-missing', rounds: rounds - 1, residual });
+                    return;
+                }
+                residual = Math.abs(currentTop - anchor.top);
+                if (residual < CONVERGE_EPSILON_PX) {
+                    finish({ outcome: 'converged', rounds, anchorTopAfter: currentTop, residual });
+                    return;
+                }
+
+                // 每轮都用「原始锚点位置 + 当前实测」重新算位移，绝不累加上一轮的 delta；
+                // 但基准取当前 scrollTop（不是切换前的快照值）——重测期间 Virtuoso 自己会漂，
+                // 以快照值为基准会把那段漂移重复补偿一次，循环因此发散。详见 scrollTarget.ts。
+                const target = computeScrollTarget(
+                    {
+                        before: { scrollTop: before.scrollTop, anchor },
+                        after: { scrollTop: scroller.scrollTop, anchor: { index: anchor.index, top: currentTop } },
+                    },
+                    { maxStepPx: MAX_STEP_PX },
+                );
+                if (!target || interruptedByUser) {
+                    finish({ outcome: 'anchor-missing', rounds: rounds - 1, residual });
+                    return;
+                }
+
+                const from = scroller.scrollTop;
+                scroller.scrollTop = target.scrollTop;
+                recordScrollWrite({
+                    source: HOLD_WRITE_SOURCE,
+                    from,
+                    to: scroller.scrollTop,
+                    kind: 'write',
+                });
+
+                await waitFrames(SETTLE_FRAMES);
+
+                const settledTop = measureAnchorTop(scroller, anchor.index);
+                if (settledTop === null) {
+                    finish({ outcome: 'anchor-missing', rounds, residual });
+                    return;
+                }
+                residual = Math.abs(settledTop - anchor.top);
+                if (residual < CONVERGE_EPSILON_PX) {
+                    finish({ outcome: 'converged', rounds, anchorTopAfter: settledTop, residual });
+                    return;
+                }
+                // 残差不再变化说明已经推到能推的极限（写入被别的东西抵消），再算也是同一个数
+                if (previousResidual !== null
+                    && Math.abs(residual - previousResidual) < CONVERGE_EPSILON_PX) {
+                    finish({ outcome: 'not-converged', rounds, anchorTopAfter: settledTop, residual });
+                    return;
+                }
+                previousResidual = residual;
+            }
+
+            const settledTop = measureAnchorTop(scroller, anchor.index);
+            finish({ outcome: 'not-converged', rounds, anchorTopAfter: settledTop, residual });
+        } finally {
+            useSubtitleScroll.getState().setHoldActive(false);
+        }
     } finally {
-        useSubtitleScroll.getState().setHoldActive(false);
+        scroller.removeEventListener('wheel', onUserScrollInput);
+        scroller.removeEventListener('touchmove', onUserScrollInput);
     }
 };
 

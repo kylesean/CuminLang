@@ -2,6 +2,9 @@
 
 > 既有自动化的可执行规格即 `qa/specs/**/*.spec.ts`（可用 `pnpm exec playwright test -c qa/playwright.config.ts --list` 实时查看）。
 > 本文件仅记录**尚未自动化**或**依赖外部真机/网络的人工验证项**，不重复抄写已自动化用例。
+>
+> 计划中的功能改进（含上游适配、YouTube 导入体验优化）见 [docs/UPSTREAM-ADAPTATION.md](../docs/UPSTREAM-ADAPTATION.md)；
+> 那些条目落地后，需要的人工验证项请补回本文件。
 
 ## 待定 / 未自动化场景
 

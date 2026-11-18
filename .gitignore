@@ -110,4 +110,5 @@ playwright-report/
 .local/
 worktrees/
 .claude/
+.codegraph/
 
