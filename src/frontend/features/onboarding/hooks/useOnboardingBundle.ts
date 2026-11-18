@@ -180,6 +180,7 @@ export function useOnboardingBundle() {
     const [downloadingBundle, setDownloadingBundle] = React.useState(false);
     const [cancellingBundle, setCancellingBundle] = React.useState(false);
     const downloadingBundleRef = React.useRef(false);
+    const cancellingBundleRef = React.useRef(false);
     const finishingRef = React.useRef(false);
     const choosingStorageRef = React.useRef(false);
     const [activeItem, setActiveItem] = React.useState<BundleItemKey | null>(null);
@@ -714,6 +715,7 @@ export function useOnboardingBundle() {
         try {
             let doneBytes = 0;
             for (const entry of queue) {
+                if (cancelRequestedRef.current) break;
                 activeItemRef.current = entry.key;
                 setActiveItem(entry.key);
                 setActivePhase(null);
@@ -738,6 +740,8 @@ export function useOnboardingBundle() {
         } finally {
             activeItemRef.current = null;
             downloadingBundleRef.current = false;
+            cancellingBundleRef.current = false;
+            cancelRequestedRef.current = false;
             setActiveItem(null);
             setActivePhase(null);
             setCancellingBundle(false);
@@ -753,14 +757,16 @@ export function useOnboardingBundle() {
     };
 
     const cancelBundleDownload = async () => {
-        if (cancellingBundle) return;
+        if (cancellingBundleRef.current || !downloadingBundleRef.current) return;
         cancelRequestedRef.current = true;
-        const currentKey = activeItemRef.current ?? activeItem;
+        const currentKey = activeItemRef.current;
         if (!currentKey) return;
+        cancellingBundleRef.current = true;
         setCancellingBundle(true);
         try {
             await cancelBundleEntry(currentKey);
         } catch (error) {
+            cancellingBundleRef.current = false;
             setCancellingBundle(false);
             toast.error(error instanceof Error ? error.message : String(error));
         }

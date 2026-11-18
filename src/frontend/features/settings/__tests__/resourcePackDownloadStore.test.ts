@@ -110,6 +110,7 @@ describe('resourcePackDownloadStore', () => {
 
         await cancelPackDownload('pack-b');
         expect(cancelFirst).toHaveBeenCalledTimes(1);
+        expect(getPackDownloadState('pack-b').cancelling).toBe(true);
 
         releaseFirst();
         await runPromise;
@@ -117,5 +118,6 @@ describe('resourcePackDownloadStore', () => {
         expect(entry2.download).not.toHaveBeenCalled();
         expect(onComplete).not.toHaveBeenCalled();
         expect(getPackDownloadState('pack-b').downloading).toBe(false);
+        expect(getPackDownloadState('pack-b').cancelling).toBe(false);
     });
 });

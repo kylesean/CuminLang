@@ -33,6 +33,7 @@ export interface PackDownloadEntry {
 
 export interface PackDownloadState {
     downloading: boolean;
+    cancelling: boolean;
     activeItemKey: string | null;
     queuedKeys: string[];
     activePhase: ModelDownloadPhase | null;
@@ -43,6 +44,7 @@ export interface PackDownloadState {
 
 export const INITIAL_PACK_DOWNLOAD_STATE: PackDownloadState = {
     downloading: false,
+    cancelling: false,
     activeItemKey: null,
     queuedKeys: [],
     activePhase: null,
@@ -187,6 +189,7 @@ export async function startPackDownload(options: {
 
     setPackState(packId, () => ({
         downloading: true,
+        cancelling: false,
         activeItemKey: null,
         queuedKeys: entries.map((entry) => entry.key),
         activePhase: null,
@@ -232,6 +235,7 @@ export async function startPackDownload(options: {
             setPackState(packId, (prev) => ({
                 ...prev,
                 downloading: false,
+                cancelling: false,
                 activeItemKey: null,
                 queuedKeys: [],
                 activePhase: null,
@@ -253,6 +257,7 @@ export async function cancelPackDownload(packId: string): Promise<void> {
     const runtime = packRuntimes.get(packId);
     if (!runtime) return;
     runtime.cancelRequested = true;
+    setPackState(packId, (prev) => ({ ...prev, cancelling: true }));
     const entry = runtime.activeEntry;
     if (!entry) return;
     try {

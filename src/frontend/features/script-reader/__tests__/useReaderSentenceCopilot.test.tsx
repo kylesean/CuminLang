@@ -109,4 +109,30 @@ describe('useReaderSentenceCopilot', () => {
         });
         unmount();
     });
+
+    it('会话初始化失败时暴露 sessionError，并支持 retrySessionInit 重试恢复', async () => {
+        vi.mocked(chatApi.getStudyNote).mockResolvedValueOnce(null);
+        vi.mocked(chatApi.createSession)
+            .mockRejectedValueOnce(new Error('backend busy'))
+            .mockResolvedValueOnce({ sessionId: 'sess-recovered' } as never);
+
+        const { result, unmount } = renderHook(() => useReaderSentenceCopilot({
+            videoId: 'vid-err',
+            activeSentence: sampleSentence,
+            focusedText: sampleSentence.text,
+            allSentences: [sampleSentence],
+        }));
+
+        await waitFor(() => {
+            expect(result.current.sessionError).toBe('backend busy');
+            expect(result.current.sessionReady).toBe(false);
+        });
+
+        result.current.retrySessionInit();
+        await waitFor(() => {
+            expect(result.current.sessionReady).toBe(true);
+            expect(result.current.sessionError).toBeNull();
+        });
+        unmount();
+    });
 });

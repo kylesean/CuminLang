@@ -68,6 +68,8 @@ export class ModelArchiveInstaller {
     private readonly logger = getMainLogger('ModelArchiveInstaller');
 
     private activeDownload: Promise<{ success: boolean; message: string }> | null = null;
+    /** 当前下载是否已收到取消指令、仍在收尾清理。 */
+    private cancelling = false;
     /** 当前下载的取消控制器；下载结束后置空。 */
     private activeAbortController: AbortController | null = null;
     /** 当前下载阶段；无下载任务时为 null。 */
@@ -112,7 +114,11 @@ export class ModelArchiveInstaller {
      * @returns 下载操作结果。
      */
     public async download(): Promise<{ success: boolean; message: string }> {
+        if (this.activeDownload && this.cancelling) {
+            await this.activeDownload.catch(() => undefined);
+        }
         if (this.activeDownload) return this.activeDownload;
+        this.cancelling = false;
         this.activeAbortController = new AbortController();
         this.currentPercent = 0;
         this.currentPhase = 'downloading';
@@ -122,6 +128,7 @@ export class ModelArchiveInstaller {
             return await this.activeDownload;
         } finally {
             this.activeDownload = null;
+            this.cancelling = false;
             this.activeAbortController = null;
             this.currentPhase = null;
             this.currentPercent = 0;
@@ -145,6 +152,7 @@ export class ModelArchiveInstaller {
         if (!controller || activeDownload === null) {
             return { cancelled: false };
         }
+        this.cancelling = true;
         controller.abort();
         this.logger.warn('model download cancel requested', { model: this.options.modelDisplayName });
         await activeDownload.catch(() => undefined);

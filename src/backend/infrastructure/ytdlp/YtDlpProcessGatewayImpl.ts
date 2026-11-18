@@ -1,9 +1,8 @@
-import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { injectable } from 'inversify';
 import { getMainLogger } from '@/backend/infrastructure/logger';
-import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
+import { startCancelableCliProcess } from '@/backend/infrastructure/media/runCancelableCliProcess';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import { OutputTail } from '@/backend/utils/output-tail';
 import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
@@ -53,12 +52,7 @@ export class YtDlpProcessGatewayImpl implements YtDlpGateway {
      * - 代理通过进程环境变量继承（HTTP(S)_PROXY 已由 ProxyService 写入）。
      */
     public download(request: YtDlpDownloadRequest): YtDlpRunningTask {
-        const startedAt = Date.now();
         const stderrTail = new OutputTail();
-        let cancelRequested = false;
-        let processRef: ChildProcess | null = null;
-        let processExited = false;
-        let sigkillTimer: NodeJS.Timeout | undefined;
 
         // 下载落盘的二进制可能丢失执行位，启动前显式补齐（Windows 上为无害操作）。
         if (process.platform !== 'win32') {
@@ -94,55 +88,34 @@ export class YtDlpProcessGatewayImpl implements YtDlpGateway {
             request.url,
         ];
 
-        const result = new Promise<YtDlpDownloadResult>((resolve, reject) => {
-            const child = spawn(request.ytDlpBinaryPath, args, {
-                stdio: ['ignore', 'pipe', 'pipe'],
+        const producedPaths: string[] = [];
+
+        return startCancelableCliProcess<YtDlpDownloadResult>(
+            {
+                executablePath: request.ytDlpBinaryPath,
+                args,
                 env: { ...process.env },
-            });
-            processRef = child;
-            trackActiveChildProcess(child);
-
-            const producedPaths: string[] = [];
-
-            child.stdout?.on('data', (chunk) => {
-                for (const line of chunk.toString('utf8').split(/\r?\n/).filter(Boolean)) {
-                    const progress = this.tryParseProgress(line);
-                    if (progress !== null) {
-                        request.onProgress?.(progress, line);
-                        continue;
+                onStdoutChunk: (text) => {
+                    for (const line of text.split(/\r?\n/).filter(Boolean)) {
+                        const progress = this.tryParseProgress(line);
+                        if (progress !== null) {
+                            request.onProgress?.(progress, line);
+                            continue;
+                        }
+                        // 非方括号日志、非进度行即 `--print` 输出的产物绝对路径。
+                        const trimmed = line.trim();
+                        if (trimmed && !trimmed.startsWith('[') && !trimmed.includes('%')) {
+                            producedPaths.push(trimmed);
+                        }
                     }
-                    // 非方括号日志、非进度行即 `--print` 输出的产物绝对路径。
-                    const trimmed = line.trim();
-                    if (trimmed && !trimmed.startsWith('[') && !trimmed.includes('%')) {
-                        producedPaths.push(trimmed);
-                    }
-                }
-            });
-
-            child.stderr.on('data', (chunk) => {
-                stderrTail.push(chunk.toString('utf8'));
-            });
-
-            child.on('error', (error) => {
-                processExited = true;
-                processRef = null;
-                if (sigkillTimer) {
-                    clearTimeout(sigkillTimer);
-                    sigkillTimer = undefined;
-                }
-                reject(error);
-            });
-
-            child.on('close', (code) => {
-                processExited = true;
-                processRef = null;
-                if (sigkillTimer) {
-                    clearTimeout(sigkillTimer);
-                    sigkillTimer = undefined;
-                }
-                const durationMs = Date.now() - startedAt;
+                },
+                onStderrChunk: (text) => {
+                    stderrTail.push(text);
+                },
+            },
+            ({ code, durationMs, cancelled }, resolve, reject) => {
                 // 取消优先判定：无论退出码是否碰巧为 0，只要用户已请求取消，就绝不能把部分产物当成功提交。
-                if (cancelRequested) {
+                if (cancelled) {
                     reject(new CancelByUserError(`yt-dlp 已取消（退出码 ${code}）`));
                     return;
                 }
@@ -162,21 +135,8 @@ export class YtDlpProcessGatewayImpl implements YtDlpGateway {
                     `yt-dlp 下载失败（退出码 ${code}，耗时 ${(durationMs / 1000).toFixed(1)}s）：`
                     + stderrTail.logTail().join(' '),
                 ));
-            });
-        });
-
-        const cancel = () => {
-            cancelRequested = true;
-            // 不能看 processRef.killed：child.kill('SIGTERM') 会立即把它置成 true，导致 SIGKILL 定时器成为死代码。
-            if (!processRef || processExited) return;
-            processRef.kill('SIGTERM');
-            sigkillTimer = setTimeout(() => {
-                if (!processRef || processExited) return;
-                processRef.kill('SIGKILL');
-            }, 1200);
-        };
-
-        return { result, cancel };
+            },
+        );
     }
 
     /**

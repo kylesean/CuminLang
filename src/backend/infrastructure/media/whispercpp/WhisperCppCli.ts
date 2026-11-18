@@ -231,7 +231,6 @@ export class WhisperCppCli {
                 });
                 runningChild = child;
                 trackActiveChildProcess(child);
-                const processKey = request.job ?? '';
                 const procSet = this.activeProcesses.get(processKey) ?? new Set<ChildProcess>();
                 procSet.add(child);
                 this.activeProcesses.set(processKey, procSet);

@@ -7,6 +7,7 @@ import type {
 } from '@/common/contracts/desktop-lyrics';
 import type { YoutubeImportSettingDetailVO, YoutubeImportSettingSaveVO, YoutubeImportStartResult } from '@/common/contracts/youtube-import';
 import type { LocalEmbeddingStatus } from '@/common/contracts/local-ai';
+import type { ModelDownloadPhase } from '@/common/contracts/model-download-phase';
 import type { ResourceStatusSnapshot } from '@/common/contracts/resource-status';
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
 import type { GpuAcceleration } from '@/common/contracts/system-info';
@@ -476,6 +477,10 @@ interface SpeakerDiarizationModelDef {
             ready: boolean;
             segmentationUrls: string[];
             embeddingUrls: string[];
+            downloading?: boolean;
+            phase?: ModelDownloadPhase | null;
+            percent?: number;
+            targetPath?: string;
         };
     };
     'speaker-diarization/models/download': { params: void, return: { success: boolean; message: string } };

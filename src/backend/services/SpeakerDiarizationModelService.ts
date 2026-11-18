@@ -149,6 +149,9 @@ export class SpeakerDiarizationModelServiceImpl implements SpeakerDiarizationMod
     }
 
     public async download(): Promise<{ success: boolean; message: string }> {
+        if (this.activeDownload && this.downloadCancelled) {
+            await this.activeDownload.catch(() => undefined);
+        }
         if (this.activeDownload) {
             return this.activeDownload;
         }
@@ -165,6 +168,7 @@ export class SpeakerDiarizationModelServiceImpl implements SpeakerDiarizationMod
         })().finally(() => {
             if (this.activeDownload === run) {
                 this.activeDownload = null;
+                this.downloadCancelled = false;
             }
         });
         this.activeDownload = run;

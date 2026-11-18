@@ -1,6 +1,5 @@
-import { ChildProcess, spawn } from 'child_process';
-import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { FfmpegExecutionError } from '@/backend/services/gateways/media/FfmpegGateway';
+import { startCancelableCliProcess } from '@/backend/infrastructure/media/runCancelableCliProcess';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import { OutputTail } from '@/backend/utils/output-tail';
 import { timeTextToSeconds } from '@/common/utils/subtitle';
@@ -77,63 +76,32 @@ export class FfmpegProcessRunner {
      * 启动一个可取消的 FFmpeg 任务。
      */
     public start(request: FfmpegRunRequest, hooks: FfmpegRunHooks = {}): FfmpegRunningTask {
-        const startedAt = Date.now();
         const stderrTail = new OutputTail();
-        /** 上层是否已发起取消；置位后子进程非零退出按预期取消处理。 */
-        let cancelRequested = false;
+        let stdoutText = '';
 
-        /** 用于跟踪当前子进程，便于取消时发送信号。 */
-        let processRef: ChildProcess | null = null;
-        let processExited = false;
-        /** SIGKILL 升级定时器；进程退出后必须清理，避免残留句柄。 */
-        let sigkillTimer: NodeJS.Timeout | undefined;
-
-        const result = new Promise<FfmpegRunResult>((resolve, reject) => {
-            const child = spawn(request.ffmpegPath, request.args, {
+        return startCancelableCliProcess<FfmpegRunResult>(
+            {
+                executablePath: request.ffmpegPath,
+                args: request.args,
                 cwd: request.cwd,
-                stdio: ['ignore', 'pipe', 'pipe'],
-            });
-            processRef = child;
-            trackActiveChildProcess(child);
-
-            let stdoutText = '';
-            child.stdout?.on('data', (chunk) => {
-                stdoutText += chunk.toString('utf8');
-            });
-
-            hooks.onStart?.(this.composeCommandLine(request.ffmpegPath, request.args), child.pid);
-
-            child.stderr.on('data', (chunk) => {
-                const text = chunk.toString('utf8');
-                stderrTail.push(text);
-                for (const line of text.split(/\r?\n/).filter(Boolean)) {
-                    hooks.onStderrLine?.(line);
-                    const progress = this.tryParseProgress(line, request.inputDurationSecond);
-                    if (progress) {
-                        hooks.onProgress?.(progress);
+                onSpawn: (child) => {
+                    hooks.onStart?.(this.composeCommandLine(request.ffmpegPath, request.args), child.pid);
+                },
+                onStdoutChunk: (text) => {
+                    stdoutText += text;
+                },
+                onStderrChunk: (text) => {
+                    stderrTail.push(text);
+                    for (const line of text.split(/\r?\n/).filter(Boolean)) {
+                        hooks.onStderrLine?.(line);
+                        const progress = this.tryParseProgress(line, request.inputDurationSecond);
+                        if (progress) {
+                            hooks.onProgress?.(progress);
+                        }
                     }
-                }
-            });
-
-            child.on('error', (error) => {
-                processExited = true;
-                processRef = null;
-                if (sigkillTimer) {
-                    clearTimeout(sigkillTimer);
-                    sigkillTimer = undefined;
-                }
-                reject(error);
-            });
-
-            child.on('close', (code) => {
-                processExited = true;
-                processRef = null;
-                if (sigkillTimer) {
-                    clearTimeout(sigkillTimer);
-                    sigkillTimer = undefined;
-                }
-                const exitCode = code ?? -1;
-                const durationMs = Date.now() - startedAt;
+                },
+            },
+            ({ exitCode, durationMs, cancelled, pid }, resolve, reject) => {
                 if (exitCode === 0) {
                     resolve({
                         exitCode,
@@ -145,7 +113,7 @@ export class FfmpegProcessRunner {
                 }
 
                 // 取消导致的退出属于预期行为，用显式类型区分，上层无需再靠消息文本猜测。
-                if (cancelRequested) {
+                if (cancelled) {
                     reject(new CancelByUserError(`FFmpeg 已取消（退出码 ${exitCode}）`));
                     return;
                 }
@@ -156,22 +124,10 @@ export class FfmpegProcessRunner {
                     stderrTail: stderrTail.logTail(),
                     durationMs,
                     job: request.job,
-                    pid: child.pid,
+                    pid,
                 }));
-            });
-        });
-
-        const cancel = () => {
-            cancelRequested = true;
-            if (!processRef || processExited) return;
-            processRef.kill('SIGTERM');
-            sigkillTimer = setTimeout(() => {
-                if (!processRef || processExited) return;
-                processRef.kill('SIGKILL');
-            }, 1200);
-        };
-
-        return { result, cancel };
+            },
+        );
     }
 
     /**

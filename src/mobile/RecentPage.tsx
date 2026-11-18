@@ -105,78 +105,50 @@ const RecentPage = () => {
     };
 
     /**
-     * 响应用户主动下拉或切回前台的静默刷新。
+     * 统一的数据拉取状态机（首次加载 / 手动重试 / 后台静默刷新共用，杜绝双套并发与状态漂移）。
      *
-     * @param silent 是否静默拉取。为 true 时保持当前列表，不切骨架屏。
+     * @param silent 是否静默拉取；为 true 时做 3 秒节流并保持当前列表不切骨架屏。
      */
-    const fetchList = React.useCallback(async (silent = false): Promise<void> => {
+    const fetchList = React.useCallback((silent = false): Promise<void> => {
         const now = Date.now();
-        // 静默刷新做 3 秒节流，防止频繁切换窗口反复请求
         if (silent && (isFetchingRef.current || now - lastFetchedTimeRef.current < 3000)) {
-            return;
+            return Promise.resolve();
         }
         const epoch = ++requestEpochRef.current;
         isFetchingRef.current = true;
 
-        try {
-            const next = await mobileApi.listRecent();
-            if (!mountedRef.current || epoch !== requestEpochRef.current) {
-                return;
-            }
-            setItems(next);
-            setError(null);
-            lastFetchedTimeRef.current = Date.now();
-        } catch (reason: unknown) {
-            if (!mountedRef.current || epoch !== requestEpochRef.current) {
-                return;
-            }
-            const message = reason instanceof Error ? reason.message : String(reason);
-            // 只有当前页面还没有数据时才展示全屏错误，已有列表时静默保留旧列表
-            if (!silent || itemsRef.current === null) {
-                setError(message);
-            }
-        } finally {
-            if (epoch === requestEpochRef.current) {
-                isFetchingRef.current = false;
-                if (mountedRef.current) {
-                    setIsInitialLoading(false);
-                }
-            }
-        }
-    }, []);
-
-    /**
-     * 首次挂载与重试触发数据拉取（与后台静默刷新共享 requestEpochRef，避免乱序覆盖）。
-     */
-    React.useEffect(() => {
-        const epoch = ++requestEpochRef.current;
-        isFetchingRef.current = true;
-        mobileApi.listRecent()
+        return mobileApi.listRecent()
             .then((next) => {
                 if (!mountedRef.current || epoch !== requestEpochRef.current) {
                     return;
                 }
                 setItems(next);
                 setError(null);
-                setIsInitialLoading(false);
                 lastFetchedTimeRef.current = Date.now();
             })
             .catch((reason: unknown) => {
                 if (!mountedRef.current || epoch !== requestEpochRef.current) {
                     return;
                 }
-                setIsInitialLoading(false);
                 const message = reason instanceof Error ? reason.message : String(reason);
-                if (itemsRef.current === null) {
+                // 只有当前页面还没有数据时才展示全屏错误，已有列表时静默保留旧列表
+                if (!silent || itemsRef.current === null) {
                     setError(message);
                 }
             })
             .finally(() => {
                 if (epoch === requestEpochRef.current) {
                     isFetchingRef.current = false;
+                    if (mountedRef.current) {
+                        setIsInitialLoading(false);
+                    }
                 }
             });
-    }, [reloadToken]);
+    }, []);
+
+    React.useEffect(() => {
+        void fetchList(false);
+    }, [fetchList, reloadToken]);
 
     /**
      * 加载失败时手动重试。

@@ -39,6 +39,7 @@ export function useReaderSentenceCopilot({
         restoredMessages: NonNullable<Awaited<ReturnType<typeof chatApi.getStudyNote>>>['messages'];
     }>({ key: '', id: '', restoredMessages: [] });
     const [cloudAvailable, setCloudAvailable] = useState(false);
+    const [sessionInitError, setSessionInitError] = useState<{ key: string; message: string } | null>(null);
     const [input, setInput] = useState('');
     const [attachedFocusExpr, setAttachedFocusExpr] = useState<string | null>(null);
     const [resetNonce, setResetNonce] = useState(0);
@@ -148,14 +149,20 @@ export function useReaderSentenceCopilot({
 
                 if (created?.sessionId) {
                     sessionIdRef.current = created.sessionId;
+                    setSessionInitError(null);
                     setSessionState({
                         key: activeKey,
                         id: created.sessionId,
                         restoredMessages,
                     });
                 }
-            } catch {
-                // 会话初始化失败保持静默离线降级，不阻塞左侧文本精读
+            } catch (error) {
+                if (epochRef.current === epoch) {
+                    setSessionInitError({
+                        key: activeKey,
+                        message: error instanceof Error ? error.message : String(error),
+                    });
+                }
             }
         };
 
@@ -210,8 +217,15 @@ export function useReaderSentenceCopilot({
         [messages, isBusy],
     );
 
+    const retrySessionInit = useCallback(() => {
+        setSessionInitError(null);
+        setResetNonce((prev) => prev + 1);
+    }, []);
+
     return {
         sessionReady: Boolean(activeSessionId && sentenceFileHash),
+        sessionError: sessionInitError?.key === activeKey ? sessionInitError.message : null,
+        retrySessionInit,
         cloudAvailable,
         messageViews,
         isBusy,
