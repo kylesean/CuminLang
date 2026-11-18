@@ -179,4 +179,21 @@ describe('chatStore 同句判重的跨视频边界', () => {
             expect(useChatPanel.getState().chatSessionId).toBe('sess-fresh');
         });
     });
+
+    it('resetConversationView 重建会话失败时写入错误态，不永久停留在 resolving', async () => {
+        playerState.sentences = [
+            { text: 'Hello world.', textZH: '你好。', index: 0, fileHash: 'h1', start: 0, end: 1.5 },
+        ];
+        vi.mocked(chatApi.createSession)
+            .mockResolvedValueOnce({ sessionId: 'sess-old' })
+            .mockRejectedValueOnce(new Error('network unavailable'));
+
+        await useChatPanel.getState().openSentenceSession(playerState.sentences[0] as never);
+        useChatPanel.getState().resetConversationView();
+
+        await vi.waitFor(() => {
+            expect(useChatPanel.getState().sentenceResolveError).toBe('network unavailable');
+        });
+        expect(useChatPanel.getState().chatSessionId).toBe('');
+    });
 });

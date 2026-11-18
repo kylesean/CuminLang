@@ -158,4 +158,49 @@ describe('MultiFileModelService 下载并发与流错误处理', () => {
         expect(deleteResult.success).toBe(true);
         expect(fetchMock).not.toHaveBeenCalled();
     });
+
+    it('cancelDownload() 后旧任务收尾前立即再次 download() 会等待清理并成功重下，同时 getStatus 上报真实进度', async () => {
+        const { service } = await setupService();
+        let finishFirstStream!: () => void;
+        let firstCall = true;
+        const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+            if (firstCall) {
+                firstCall = false;
+                const body = new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.enqueue(new Uint8Array(5));
+                        init?.signal?.addEventListener('abort', () => {
+                            finishFirstStream = () => controller.error(new Error('aborted'));
+                        }, { once: true });
+                    },
+                });
+                return new Response(body, { status: 200, headers: { 'content-length': '10' } });
+            }
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+                    controller.close();
+                },
+            });
+            return new Response(body, { status: 200, headers: { 'content-length': '4' } });
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const firstDownload = service.download();
+        await vi.waitFor(async () => {
+            const st = await service.getStatus();
+            expect(st.downloading).toBe(true);
+            expect(st.percent).toBeGreaterThan(0);
+        });
+
+        await expect(service.cancelDownload()).resolves.toEqual({ cancelled: true });
+        await vi.waitFor(() => expect(finishFirstStream).toBeTypeOf('function'));
+
+        const retryDownload = service.download();
+        finishFirstStream();
+
+        const [firstResult, retryResult] = await Promise.all([firstDownload, retryDownload]);
+        expect(firstResult.success).toBe(false);
+        expect(retryResult.success).toBe(true);
+    });
 });

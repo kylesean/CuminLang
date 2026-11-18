@@ -635,15 +635,30 @@ const useChatPanel = create(
                     if (
                         sessionCreationToken !== creationToken
                         || learningRequestEpoch !== resetEpoch
+                        || learningCloseRequested
                         || latest.anchorIndex !== snapshot.anchorIndex
                         || latest.anchorFileHash !== snapshot.anchorFileHash
                     ) {
                         chatApi.closeSession?.(sessionId).catch(() => undefined);
                         return;
                     }
-                    set({ chatSessionId: sessionId });
+                    applyLearningTransition({
+                        chatSessionId: sessionId,
+                        sentenceResolveError: null,
+                    });
                 }).catch((error) => {
                     chatLogger.warn('failed to recreate clean chat session', { error });
+                    const latest = get();
+                    if (
+                        sessionCreationToken !== creationToken
+                        || learningRequestEpoch !== resetEpoch
+                        || latest.anchorIndex !== snapshot.anchorIndex
+                        || latest.anchorFileHash !== snapshot.anchorFileHash
+                    ) {
+                        return;
+                    }
+                    const message = error instanceof Error ? error.message : String(error);
+                    applyLearningTransition({ sentenceResolveError: message || 'failed to create session' });
                 });
             }
         },

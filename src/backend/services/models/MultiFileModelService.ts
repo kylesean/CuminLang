@@ -37,6 +37,11 @@ export interface MultiFileModelSpec {
     primaryFileName: string;
 }
 
+type DownloadLifecycle =
+    | { kind: 'idle' }
+    | { kind: 'downloading'; task: Promise<{ success: boolean; message: string }>; abort: AbortController; percent: number }
+    | { kind: 'cancelling'; task: Promise<{ success: boolean; message: string }> };
+
 /**
  * 多文件直接下载型本地模型基类（无 tar 归档解压步骤）。
  *
@@ -45,8 +50,7 @@ export interface MultiFileModelSpec {
  */
 export default abstract class MultiFileModelService implements LocalModelService {
     private readonly logger = getMainLogger('MultiFileModelService');
-    private activeAbort: AbortController | null = null;
-    private downloading: Promise<{ success: boolean; message: string }> | null = null;
+    private lifecycle: DownloadLifecycle = { kind: 'idle' };
 
     protected constructor(
         private readonly spec: MultiFileModelSpec,
@@ -64,24 +68,27 @@ export default abstract class MultiFileModelService implements LocalModelService
                 missingFiles.push(item.fileName);
             }
         }
+        const active = this.lifecycle.kind !== 'idle';
         return {
             ready: missingFiles.length === 0,
             modelPath,
             missingFiles,
-            downloading: this.downloading !== null,
-            phase: this.downloading ? 'downloading' : null,
-            percent: 0,
+            downloading: active,
+            phase: this.lifecycle.kind === 'downloading' ? 'downloading' : null,
+            percent: this.lifecycle.kind === 'downloading' ? this.lifecycle.percent : 0,
             downloadUrls: [...this.spec.primaryDownloadUrls],
             archivePath: path.join(modelPath, this.spec.primaryFileName),
         };
     }
 
     public async download(): Promise<{ success: boolean; message: string }> {
-        if (this.downloading) {
-            return this.downloading;
+        if (this.lifecycle.kind === 'cancelling') {
+            await this.lifecycle.task.catch(() => undefined);
+        }
+        if (this.lifecycle.kind === 'downloading') {
+            return this.lifecycle.task;
         }
         const abortController = new AbortController();
-        this.activeAbort = abortController;
         const task = (async () => {
             const status = await this.getStatus();
             if (abortController.signal.aborted) {
@@ -92,24 +99,29 @@ export default abstract class MultiFileModelService implements LocalModelService
             }
             return this.runDownload(abortController);
         })().finally(() => {
-            this.downloading = null;
-            this.activeAbort = null;
+            if (this.lifecycle.kind !== 'idle' && this.lifecycle.task === task) {
+                this.lifecycle = { kind: 'idle' };
+            }
         });
-        this.downloading = task;
+        this.lifecycle = { kind: 'downloading', task, abort: abortController, percent: 0 };
         return task;
     }
 
     public async cancelDownload(): Promise<{ cancelled: boolean }> {
-        if (!this.activeAbort) {
-            return { cancelled: false };
+        if (this.lifecycle.kind === 'downloading') {
+            const { task, abort } = this.lifecycle;
+            this.lifecycle = { kind: 'cancelling', task };
+            abort.abort();
+            return { cancelled: true };
         }
-        this.activeAbort.abort();
-        this.activeAbort = null;
-        return { cancelled: true };
+        if (this.lifecycle.kind === 'cancelling') {
+            return { cancelled: true };
+        }
+        return { cancelled: false };
     }
 
     public async deleteModel(): Promise<{ success: boolean; message: string }> {
-        const inflight = this.downloading;
+        const inflight = this.lifecycle.kind === 'idle' ? null : this.lifecycle.task;
         await this.cancelDownload();
         if (inflight) {
             await inflight.catch(() => undefined);
@@ -210,6 +222,9 @@ export default abstract class MultiFileModelService implements LocalModelService
         total: number,
         phase: ModelDownloadPhase,
     ): void {
+        if (this.lifecycle.kind === 'downloading') {
+            this.lifecycle.percent = percent;
+        }
         this.rendererGateway.fireAndForget(this.spec.progressEventName, {
             percent,
             downloaded,

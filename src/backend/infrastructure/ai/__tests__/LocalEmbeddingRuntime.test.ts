@@ -114,6 +114,8 @@ describe('LocalEmbeddingRuntime', () => {
         expect(status.multimodalReady).toBe(true);
         expect(status.bytes).toBe(LOCAL_EMBEDDING_MODEL.bytes);
         expect(status.multimodalBytes).toBe(LOCAL_EMBEDDING_MMPROJ.bytes);
+        expect(status.activeTarget).toBeNull();
+        expect(status.multimodalModelPath).toBe(path.join(mmprojDir, LOCAL_EMBEDDING_MMPROJ.file));
     });
 
     it('读取状态时清理已废弃的 bge-small 模型目录', async () => {

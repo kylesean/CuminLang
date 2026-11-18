@@ -153,4 +153,49 @@ describe('EnglishDictionaryService', () => {
             vi.unstubAllGlobals();
         }
     });
+
+    it('dpTaskService.create 尚未返回时并发调用 install() 同步拒绝第二次请求', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-wordnet-race-'));
+        tempRoots.push(root);
+        mockAppStateRoot.current = root;
+
+        let resolveCreate!: (id: number) => void;
+        let rejectFetch!: (reason?: unknown) => void;
+        const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+            rejectFetch = reject;
+            init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const dpTaskService = {
+            create: vi.fn(() => new Promise<number>((resolve) => {
+                resolveCreate = resolve;
+            })),
+            registerTask: vi.fn(),
+            process: vi.fn(),
+            checkCancel: vi.fn(),
+            finish: vi.fn(),
+            fail: vi.fn(),
+            update: vi.fn(),
+            cancel: vi.fn(),
+        } as unknown as DpTaskService;
+
+        const service = new EnglishDictionaryService(dpTaskService);
+        try {
+            const first = service.install();
+            await vi.waitFor(() => expect(resolveCreate).toBeTypeOf('function'));
+            await expect(service.install()).rejects.toThrow('英英释义包正在下载');
+
+            resolveCreate(99);
+            await expect(first).resolves.toBe(99);
+            expect(dpTaskService.create).toHaveBeenCalledTimes(1);
+            await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+            const removePromise = Promise.resolve(service.remove());
+            rejectFetch?.(new Error('aborted'));
+            await removePromise;
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
 });

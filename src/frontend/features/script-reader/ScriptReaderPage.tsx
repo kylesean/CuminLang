@@ -30,6 +30,10 @@ import {
     replaceSentenceRangeText,
 } from '@/frontend/features/player/lib/transcript-edit-ops';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
+import {
+    canCancelSubtitleGeneration,
+    deriveSubtitleGenerationState,
+} from '@/frontend/features/player/lib/subtitle-generation-phase';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import { useSubtitleGenerationStore } from '@/frontend/features/player/subtitleGenerationStore';
 import {
@@ -903,13 +907,17 @@ export default function ScriptReaderPage() {
     }, [activeSentences, savedKeys]);
 
     // 当前待转写纯音频文档的任务状态
-    const activeTaskId = activeDoc ? taskIdsByVideo[activeDoc.videoId] : undefined;
-    const activeStarting = activeDoc ? Boolean(startingVideos[activeDoc.videoId]) : false;
-    const activeCancelling = activeDoc ? Boolean(cancellingVideos[activeDoc.videoId]) : false;
+    const {
+        phase: activeGenerationPhase,
+        taskId: activeTaskId,
+        running: isTranscribingActive,
+    } = deriveSubtitleGenerationState(
+        { taskIdsByVideo, startingVideos, cancellingVideos },
+        activeDoc?.videoId,
+    );
     const activeTask = activeTaskId !== undefined ? tasks.get(activeTaskId) : undefined;
     const activeProgress = activeTask && activeTask !== 'init' ? activeTask.progress : null;
     const activePercent = activeTask && activeTask !== 'init' ? activeTask.progressMeta?.percent : undefined;
-    const isTranscribingActive = activeStarting || activeTaskId !== undefined;
 
     const editingSentenceKey = activeDoc && editingState?.videoId === activeDoc.videoId
         ? editingState.key
@@ -998,7 +1006,7 @@ export default function ScriptReaderPage() {
                                                     <Button
                                                         size="sm"
                                                         variant="secondary"
-                                                        isDisabled={activeCancelling || activeTaskId === undefined}
+                                                        isDisabled={!canCancelSubtitleGeneration(activeGenerationPhase)}
                                                         label={t('scriptReader.cancelTranscribe', { defaultValue: '取消转写' })}
                                                         onClick={() => void cancelGeneration(
                                                             activeDoc.videoId,

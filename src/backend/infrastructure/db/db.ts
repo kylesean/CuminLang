@@ -27,20 +27,26 @@ type DbHandle = ReturnType<typeof createDb>;
  * 改成惰性后：开库失败会写进恢复状态并进入恢复模式，由 gate 页引导重试或重置。
  * 恢复模式只注册 MigrationFailureController，它不依赖数据库，因此不会被这里拖住。
  */
+type DbLifecycle = 'unopened' | 'open' | 'open_failed' | 'closed';
+
 let handle: DbHandle | null = null;
 let openError: Error | null = null;
+let dbLifecycle: DbLifecycle = 'unopened';
 
 /**
  * 打开数据库；重复调用返回同一实例。
  *
  * @returns 已打开的数据库句柄。
- * @throws 开库失败时抛出原始错误（同时已写入迁移失败状态）。
+ * @throws 开库失败或已显式关闭后访问时抛出错误（开库失败同时已写入迁移失败状态）。
  */
 const openHandle = (): DbHandle => {
-    if (handle) {
+    if (dbLifecycle === 'open' && handle) {
         return handle;
     }
-    if (openError) {
+    if (dbLifecycle === 'closed') {
+        throw new Error('database is closed');
+    }
+    if (dbLifecycle === 'open_failed' && openError) {
         throw openError;
     }
     try {
@@ -48,8 +54,10 @@ const openHandle = (): DbHandle => {
             logger: isDevelopmentMode() && enableDbLog,
             onSlowQuery: (sqlText, ms) => slowQueryLogger.warn('slow query', { sql: sqlText, ms }),
         });
+        dbLifecycle = 'open';
     } catch (error) {
         openError = error instanceof Error ? error : new Error(String(error));
+        dbLifecycle = 'open_failed';
         // 开库失败等价于 drizzle 阶段失败：让启动流程进入恢复模式而不是直接崩溃。
         setMigrationFailure({
             phase: 'drizzle',
@@ -142,6 +150,7 @@ export default dbProxy;
  * 显式关闭主进程 SQLite 连接（应用退出前调用以完成 WAL checkpoint）。
  */
 export function closeMainDatabase(): void {
+    dbLifecycle = 'closed';
     handle?.close();
     handle = null;
 }
@@ -149,6 +158,7 @@ export function closeMainDatabase(): void {
 export async function resetDatabaseFile(): Promise<void> {
     closeMainDatabase();
     openError = null;
+    dbLifecycle = 'unopened';
     for (const suffix of ['', '-wal', '-shm']) {
         fs.rmSync(`${file}${suffix}`, { force: true });
     }

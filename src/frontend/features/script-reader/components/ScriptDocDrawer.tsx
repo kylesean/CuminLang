@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@astryxdesign/core/Button';
 import type { ReaderDocumentSummary } from '@/common/types/contextStudio';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
+import { deriveSubtitleGenerationState } from '@/frontend/features/player/lib/subtitle-generation-phase';
 import { useSubtitleGenerationStore } from '@/frontend/features/player/subtitleGenerationStore';
 import { cn } from '@/frontend/lib/utils';
 import { getSavedReaderProgress } from '../lib/readerProgress';
@@ -42,6 +43,7 @@ export function ScriptDocDrawer({
     const { t } = useTranslation('pages');
     const taskIdsByVideo = useSubtitleGenerationStore((s) => s.taskIdsByVideo);
     const startingVideos = useSubtitleGenerationStore((s) => s.startingVideos);
+    const cancellingVideos = useSubtitleGenerationStore((s) => s.cancellingVideos);
     const tasks = useDpTaskCenter((s) => s.tasks);
     const hasSearchQuery = docQuery.trim().length > 0;
 
@@ -146,11 +148,12 @@ export function ScriptDocDrawer({
                             const savedIndex = getSavedReaderProgress(doc.videoId);
                             const isAudio = doc.mediaType === 'audio';
                             const hasSubtitle = doc.hasSubtitle ?? Boolean(doc.srtFile);
-                            const taskId = taskIdsByVideo[doc.videoId];
-                            const starting = Boolean(startingVideos[doc.videoId]);
+                            const { taskId, running: transcribing } = deriveSubtitleGenerationState(
+                                { taskIdsByVideo, startingVideos, cancellingVideos },
+                                doc.videoId,
+                            );
                             const task = taskId !== undefined ? tasks.get(taskId) : undefined;
                             const taskProgress = task && task !== 'init' ? task.progress : null;
-                            const transcribing = starting || taskId !== undefined;
 
                             let subline: string | null = null;
                             if (transcribing) {

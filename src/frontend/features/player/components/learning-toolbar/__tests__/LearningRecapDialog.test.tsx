@@ -482,4 +482,38 @@ describe('LearningRecapContent', () => {
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toContain('rolePlayFailed');
     });
+
+    it('提交复述评测在途期间修改草稿会推进代次，过期反馈绝不会挂到新草稿下', async () => {
+        let resolveEvaluate!: (vo: RetellEvaluationVO) => void;
+        vi.mocked(learningDataApi.getRecap).mockResolvedValue(aiRecap);
+        vi.mocked(learningDataApi.evaluateRetell).mockImplementationOnce(
+            () => new Promise<RetellEvaluationVO>((resolve) => {
+                resolveEvaluate = resolve;
+            }),
+        );
+        renderContent('video-retell-draft-epoch');
+
+        const input = await screen.findByTestId('learning-retell-input');
+        fireEvent.change(input, { target: { value: 'Old draft' } });
+        fireEvent.click(screen.getByTestId('learning-retell-submit'));
+        await waitFor(() => expect(resolveEvaluate).toBeTypeOf('function'));
+
+        fireEvent.change(input, { target: { value: 'New edited draft' } });
+        resolveEvaluate({
+            level: 'good',
+            feedback: '过期点评不应出现',
+            improved: 'Improved line',
+            coverage: 0.8,
+            matchedKeywords: 2,
+            totalKeywords: 3,
+            missingWords: [],
+            source: 'ai',
+            cached: false,
+        });
+
+        await waitFor(() => {
+            expect((screen.getByTestId('learning-retell-input') as HTMLTextAreaElement).value).toBe('New edited draft');
+        });
+        expect(screen.queryByTestId('learning-retell-feedback')).toBeNull();
+    });
 });

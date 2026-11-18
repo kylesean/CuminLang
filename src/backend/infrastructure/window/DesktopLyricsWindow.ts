@@ -20,6 +20,8 @@ const MIN_LYRICS_WIDTH = 460;
 const LYRICS_WINDOW_HEIGHT = 176;
 const SCREEN_BOTTOM_MARGIN = 52;
 
+type LyricsWindowLifecycle = 'closed' | 'opening' | 'open' | 'closing';
+
 /**
  * 桌面整句字幕浮窗管理器。
  *
@@ -29,7 +31,7 @@ const SCREEN_BOTTOM_MARGIN = 52;
 @injectable()
 export class DesktopLyricsWindowManager {
     private window: BrowserWindow | null = null;
-    private open = false;
+    private lifecycle: LyricsWindowLifecycle = 'closed';
     private locked = false;
     private lastPosition: [number, number] | null = null;
     private snapshot: DesktopLyricsSnapshot = createEmptyDesktopLyricsSnapshot();
@@ -66,10 +68,13 @@ export class DesktopLyricsWindowManager {
 
     /** 读取当前浮窗与句子快照。 */
     public getState(): DesktopLyricsStatePayload {
+        const isOpen = (this.lifecycle === 'opening' || this.lifecycle === 'open')
+            && this.window !== null
+            && !this.window.isDestroyed();
         return {
             windowState: {
-                open: this.open && this.window !== null && !this.window.isDestroyed(),
-                locked: this.locked,
+                open: isOpen,
+                locked: isOpen ? this.locked : false,
             },
             snapshot: this.snapshot,
         };
@@ -77,7 +82,8 @@ export class DesktopLyricsWindowManager {
 
     /** 切换或显式设置桌面浮窗显示状态。 */
     public toggle(targetOpen?: boolean): DesktopLyricsWindowState {
-        const nextOpen = targetOpen ?? !this.open;
+        const isOpen = this.lifecycle === 'opening' || this.lifecycle === 'open';
+        const nextOpen = targetOpen ?? !isOpen;
         if (nextOpen) {
             this.openWindow();
         } else {
@@ -129,16 +135,18 @@ export class DesktopLyricsWindowManager {
 
     /** 退出应用前彻底销毁辅助窗口。 */
     public destroy(): void {
-        this.open = false;
-        if (this.window && !this.window.isDestroyed()) {
-            this.window.destroy();
-        }
+        this.lifecycle = 'closed';
+        this.locked = false;
+        const win = this.window;
         this.window = null;
+        if (win && !win.isDestroyed()) {
+            win.destroy();
+        }
     }
 
     private openWindow(): void {
         if (this.window && !this.window.isDestroyed()) {
-            this.open = true;
+            this.lifecycle = 'open';
             this.window.showInactive();
             this.applyAlwaysOnTop(this.window);
             this.applyIgnoreMouseEvents(this.window, this.locked);
@@ -184,7 +192,7 @@ export class DesktopLyricsWindowManager {
         });
 
         this.window = win;
-        this.open = true;
+        this.lifecycle = 'opening';
         this.applyAlwaysOnTop(win);
         this.applyIgnoreMouseEvents(win, this.locked);
 
@@ -194,7 +202,8 @@ export class DesktopLyricsWindowManager {
         });
 
         win.once('ready-to-show', () => {
-            if (!win.isDestroyed() && this.open) {
+            if (this.window === win && !win.isDestroyed() && (this.lifecycle === 'opening' || this.lifecycle === 'open')) {
+                this.lifecycle = 'open';
                 win.showInactive();
                 this.applyAlwaysOnTop(win);
                 win.webContents.send('desktop-lyrics-sync', this.getState());
@@ -209,10 +218,12 @@ export class DesktopLyricsWindowManager {
         });
 
         win.on('closed', () => {
-            this.window = null;
-            this.open = false;
-            this.locked = false;
-            this.broadcastState();
+            if (this.window === win) {
+                this.window = null;
+                this.lifecycle = 'closed';
+                this.locked = false;
+                this.broadcastState();
+            }
             logger.info('desktop lyrics window closed');
         });
 
@@ -221,8 +232,13 @@ export class DesktopLyricsWindowManager {
             void win.loadURL(`${devUrl}/#/desktop-lyrics`);
         } else if (this.rendererEntry.htmlPath) {
             void win.loadFile(this.rendererEntry.htmlPath, { hash: 'desktop-lyrics' });
-        } else if (app.isReady()) {
-            logger.warn('desktop lyrics window missing renderer entry path');
+        } else {
+            if (app.isReady()) {
+                logger.warn('desktop lyrics window missing renderer entry path');
+            }
+            this.destroy();
+            this.broadcastState();
+            return;
         }
 
         this.broadcastState();
@@ -230,10 +246,14 @@ export class DesktopLyricsWindowManager {
     }
 
     private closeWindow(): void {
-        this.open = false;
+        this.lifecycle = 'closing';
         this.locked = false;
-        if (this.window && !this.window.isDestroyed()) {
-            this.window.close();
+        const win = this.window;
+        if (win && !win.isDestroyed()) {
+            win.close();
+        } else {
+            this.window = null;
+            this.lifecycle = 'closed';
         }
         this.broadcastState();
     }

@@ -1,8 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import type { SubtitleTrackOrigin } from '@/common/contracts/subtitle-resolution';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
+import {
+    canCancelSubtitleGeneration,
+    deriveSubtitleGenerationState,
+} from '@/frontend/features/player/lib/subtitle-generation-phase';
 import { syncSubtitleTrackMutation } from '@/frontend/features/player/lib/syncSubtitleTrackMutation';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { playerApi } from '@/frontend/features/player/playerApi';
@@ -36,19 +41,11 @@ export function useSubtitleTrackActions() {
         Boolean(s.videoId && s.dismissedOriginHintVideos[s.videoId]),
     );
 
-    const taskId = useSubtitleGenerationStore((s) => (videoId ? s.taskIdsByVideo[videoId] : undefined));
-    const starting = useSubtitleGenerationStore((s) => (videoId ? Boolean(s.startingVideos[videoId]) : false));
-    const cancelling = useSubtitleGenerationStore((s) => (videoId ? Boolean(s.cancellingVideos[videoId]) : false));
+    const { phase: generationPhase, taskId, running: isGenerating } = useSubtitleGenerationStore(
+        useShallow((s) => deriveSubtitleGenerationState(s, videoId)),
+    );
+    const cancelling = generationPhase === 'cancelling';
     const task = useDpTaskCenter((s) => (taskId !== undefined ? s.tasks.get(taskId) : undefined));
-
-    const generationPhase = cancelling
-        ? 'cancelling'
-        : taskId !== undefined
-            ? 'running'
-            : starting
-                ? 'starting'
-                : 'idle';
-    const isGenerating = generationPhase !== 'idle';
     const generationProgress = task && task !== 'init' ? task.progress ?? null : null;
 
     const localAsrTrack = useMemo(
@@ -109,14 +106,14 @@ export function useSubtitleTrackActions() {
     }, [isGenerating, t, videoId]);
 
     const cancelGeneration = useCallback(async () => {
-        if (!videoId || taskId === undefined || cancelling) {
+        if (!videoId || !canCancelSubtitleGeneration(generationPhase)) {
             return;
         }
         await useSubtitleGenerationStore.getState().cancel(
             videoId,
             (message) => t('subtitleGeneration.failed', { message }),
         );
-    }, [cancelling, t, taskId, videoId]);
+    }, [generationPhase, t, videoId]);
 
     const dismissOriginHint = useCallback(() => {
         if (!videoId) return;

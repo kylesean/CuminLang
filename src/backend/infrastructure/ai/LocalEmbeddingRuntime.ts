@@ -150,11 +150,13 @@ export class LocalEmbeddingRuntime {
     public async getStatus(): Promise<LocalEmbeddingStatus> {
         // 顺带清理旧模型：用户打开设置页或推荐页时就完成迁移，不必等到下次安装。
         void this.cleanupLegacyModel();
-        const [ready, multimodalReady, modelFilePath] = await Promise.all([
+        const [ready, multimodalReady, modelFilePath, multimodalFilePath] = await Promise.all([
             this.isReady(),
             this.isMultimodalReady(),
             this.modelPath(),
+            this.mmprojPath(),
         ]);
+        const activelyDownloading = this.downloadTask !== null && !this.downloadCancelled;
         return {
             ready,
             name: LOCAL_EMBEDDING_MODEL.name,
@@ -163,11 +165,13 @@ export class LocalEmbeddingRuntime {
             multimodalReady,
             multimodalBytes: LOCAL_EMBEDDING_MMPROJ.bytes,
             downloading: this.downloadTask !== null,
-            phase: this.downloadTask !== null ? this.downloadPhase : 'idle',
-            downloaded: this.downloadTask !== null ? this.downloadedBytes : 0,
-            total: this.downloadTask !== null ? this.totalBytes : LOCAL_EMBEDDING_MODEL.bytes,
+            activeTarget: this.downloadTask !== null ? this.activeDownloadTarget : null,
+            phase: activelyDownloading ? this.downloadPhase : 'idle',
+            downloaded: activelyDownloading ? this.downloadedBytes : 0,
+            total: activelyDownloading ? this.totalBytes : LOCAL_EMBEDDING_MODEL.bytes,
             error: this.lastError,
             modelPath: modelFilePath,
+            multimodalModelPath: multimodalFilePath,
             downloadUrls: [...LOCAL_EMBEDDING_MODEL.urls],
             multimodalDownloadUrls: [...LOCAL_EMBEDDING_MMPROJ.urls],
         };
@@ -176,9 +180,9 @@ export class LocalEmbeddingRuntime {
     /** 主动取消当前进行中的语义模型下载，并立即清理状态快照。 */
     public cancelDownload(): { cancelled: boolean } {
         const hasActive = this.downloadTask !== null || this.downloadController !== null;
-        this.downloadCancelled = true;
-        this.downloadController?.abort();
         if (hasActive) {
+            this.downloadCancelled = true;
+            this.downloadController?.abort();
             this.downloadPhase = 'idle';
             this.downloadedBytes = 0;
             this.totalBytes = LOCAL_EMBEDDING_MODEL.bytes;
@@ -297,14 +301,24 @@ export class LocalEmbeddingRuntime {
         ));
     }
 
-    /** 串行执行下载任务；进行中再发起直接拒绝。 */
+    private hasActiveDownload(): boolean {
+        return this.downloadTask !== null;
+    }
+
+    /** 串行执行下载任务；若上一轮正在取消收尾则等待后再启动，仍在正常下载则直接拒绝。 */
     private async runExclusiveDownload(
         target: 'base' | 'multimodal',
         expectedBytes: number,
         task: (signal: AbortSignal) => Promise<void>,
     ): Promise<void> {
         if (this.downloadTask) {
-            throw new Error('语义模型正在下载，请等待完成后再试');
+            if (!this.downloadCancelled) {
+                throw new Error('语义模型正在下载，请等待完成后再试');
+            }
+            await this.downloadTask.catch(() => undefined);
+            if (this.hasActiveDownload()) {
+                throw new Error('语义模型正在下载，请等待完成后再试');
+            }
         }
         const controller = new AbortController();
         this.downloadController = controller;

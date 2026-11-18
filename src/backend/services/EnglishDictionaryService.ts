@@ -53,10 +53,12 @@ interface SenseRow {
  * 数据源为 Princeton WordNet 3.1（WordNet License），仅在用户主动下载后
  * 解压并构建为本地 SQLite；不随主安装包分发。查询结果附加到单词卡。
  */
+type DictionaryInstallPhase = 'idle' | 'starting' | 'downloading' | 'extracting' | 'building' | 'cancelling';
+
 @injectable()
 export default class EnglishDictionaryService {
     private readonly logger = getMainLogger('EnglishDictionaryService');
-    private downloading = false;
+    private installPhase: DictionaryInstallPhase = 'idle';
     private downloadedBytes = 0;
     private lastError: string | null = null;
     private activeAbort: AbortController | null = null;
@@ -76,7 +78,7 @@ export default class EnglishDictionaryService {
     public status(): EnglishDictionaryStatusVO {
         return {
             installed: this.isInstalled(),
-            downloading: this.downloading,
+            downloading: this.installPhase !== 'idle',
             downloadedBytes: this.downloadedBytes,
             totalBytes: SOURCE_BYTES,
             error: this.lastError,
@@ -93,17 +95,25 @@ export default class EnglishDictionaryService {
         if (this.isInstalled()) {
             throw new Error('英英释义包已安装');
         }
-        if (this.downloading) {
+        if (this.installPhase !== 'idle') {
             throw new Error('英英释义包正在下载');
         }
-        const taskId = await this.dpTaskService.create();
-        this.downloading = true;
+        // 在首个 await 前同步占位 `'starting'`，关闭并发 install() 双入窗口。
+        this.installPhase = 'starting';
         this.downloadedBytes = 0;
         this.lastError = null;
+        let taskId: number;
+        try {
+            taskId = await this.dpTaskService.create();
+        } catch (error) {
+            this.installPhase = 'idle';
+            throw error;
+        }
         this.activeTaskId = taskId;
         this.dpTaskService.registerTask(taskId, {
             cancel: () => {
                 if (this.activeTaskId === taskId) {
+                    this.installPhase = 'cancelling';
                     this.cancelledTasks.add(taskId);
                     this.abortActiveRequest(new CancelByUserError('任务已取消'));
                 }
@@ -122,6 +132,7 @@ export default class EnglishDictionaryService {
         if (this.activeTaskId !== taskId) {
             return;
         }
+        this.installPhase = 'cancelling';
         this.cancelledTasks.add(taskId);
         this.dpTaskService.cancel(taskId);
         this.abortActiveRequest(new CancelByUserError('任务已取消'));
@@ -210,6 +221,7 @@ export default class EnglishDictionaryService {
         try {
             fs.mkdirSync(tempDir, { recursive: true });
             const archivePath = path.join(tempDir, 'wordnet.tar.gz');
+            this.installPhase = 'downloading';
             this.dpTaskService.process(taskId, { progress: '下载 WordNet 3.1…' });
             await this.download(taskId, archivePath);
             this.dpTaskService.checkCancel(taskId);
@@ -219,6 +231,7 @@ export default class EnglishDictionaryService {
                 throw new Error(`WordNet 归档 sha256 不匹配：${actualSha256}`);
             }
 
+            this.installPhase = 'extracting';
             this.dpTaskService.process(taskId, { progress: '解压 WordNet 数据…' });
             const extractDir = path.join(tempDir, 'extract');
             fs.mkdirSync(extractDir, { recursive: true });
@@ -237,6 +250,7 @@ export default class EnglishDictionaryService {
             const targetDir = path.join(this.installRoot(), INSTALL_DIRECTORY);
             fs.mkdirSync(targetDir, { recursive: true });
             const dbPath = path.join(targetDir, DB_FILE);
+            this.installPhase = 'building';
             this.dpTaskService.process(taskId, { progress: '构建本地词典…' });
             await this.buildDatabaseInWorker(taskId, dictDir, dbPath);
             fs.writeFileSync(path.join(targetDir, MARKER_FILE), new Date().toISOString(), 'utf8');
@@ -253,7 +267,7 @@ export default class EnglishDictionaryService {
             this.logger.error('english dictionary install failed', { taskId, error: message });
             this.dpTaskService.fail(taskId, { progress: '英英释义包安装失败', result: message });
         } finally {
-            this.downloading = false;
+            this.installPhase = 'idle';
             this.activeAbort = null;
             this.activeRunPromise = null;
             this.activeTaskId = null;

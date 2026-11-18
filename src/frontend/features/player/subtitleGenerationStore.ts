@@ -2,6 +2,10 @@ import { toast } from 'react-hot-toast';
 import { create } from 'zustand';
 import { type DpTask, DpTaskState, isTerminalDpTaskState } from '@/common/contracts/dp-task';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
+import {
+    deriveSubtitleGenerationState,
+    type SubtitleGenerationMapsSnapshot,
+} from '@/frontend/features/player/lib/subtitle-generation-phase';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { playerApi } from '@/frontend/features/player/playerApi';
 
@@ -57,8 +61,8 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
 
     start: async (videoId, messages, options) => {
         if (!videoId) return;
-        const current = get();
-        if (current.startingVideos[videoId] || current.taskIdsByVideo[videoId] !== undefined) {
+        const { phase } = deriveSubtitleGenerationState(get(), videoId);
+        if (phase !== 'idle') {
             return;
         }
 
@@ -118,6 +122,7 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
                 return;
             }
 
+            const cancelPendingDuringStart = Boolean(get().cancellingVideos[videoId]);
             set((state) => {
                 const nextStarting = { ...state.startingVideos };
                 delete nextStarting[videoId];
@@ -126,6 +131,26 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
                     taskIdsByVideo: { ...state.taskIdsByVideo, [videoId]: id },
                 };
             });
+
+            // 若用户在 `starting` 窗口期内就点击了取消，拿到 taskId 后立刻补发取消请求。
+            if (cancelPendingDuringStart) {
+                try {
+                    await playerApi.cancelSubtitleGeneration(id);
+                } catch (error) {
+                    toast.error(messages.formatFailed(
+                        error instanceof Error ? error.message : String(error),
+                    ));
+                } finally {
+                    set((state) => {
+                        if (!(videoId in state.cancellingVideos)) {
+                            return state;
+                        }
+                        const next = { ...state.cancellingVideos };
+                        delete next[videoId];
+                        return { cancellingVideos: next };
+                    });
+                }
+            }
         } catch (error) {
             set((state) => clearVideoEntry(state, videoId));
             toast.error(messages.formatFailed(
@@ -136,14 +161,18 @@ export const useSubtitleGenerationStore = create<SubtitleGenerationState>((set, 
 
     cancel: async (videoId, formatFailed) => {
         if (!videoId) return;
-        const { taskIdsByVideo, cancellingVideos } = get();
-        const taskId = taskIdsByVideo[videoId];
-        if (taskId === undefined || cancellingVideos[videoId]) {
+        const current: SubtitleGenerationMapsSnapshot = get();
+        const { phase, taskId } = deriveSubtitleGenerationState(current, videoId);
+        if (phase === 'idle' || phase === 'cancelling') {
             return;
         }
         set((state) => ({
             cancellingVideos: { ...state.cancellingVideos, [videoId]: true },
         }));
+        if (taskId === undefined) {
+            // 尚在 `starting` 期：由 start() 拿到 taskId 后消费并下发真实取消。
+            return;
+        }
         try {
             await playerApi.cancelSubtitleGeneration(taskId);
         } catch (error) {

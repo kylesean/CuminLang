@@ -479,7 +479,8 @@ export default function PracticeDock() {
                 typedText: typedSentence,
                 expectedText: activeUnit.text,
             });
-            if (latestUnitKeyRef.current !== targetKey) {
+            const panelState = usePracticePanel.getState();
+            if (latestUnitKeyRef.current !== targetKey || panelState.mode !== 'dictation' || !panelState.visible) {
                 return false;
             }
             setResult(vo);

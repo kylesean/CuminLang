@@ -299,6 +299,12 @@ export function usePlayerBridge(navigate: (path: string) => void) {
             // 所以这里必须显式 play: true，否则新打开的会话会停在暂停。
             usePlayer.getState().seekTo({ time: resumeTime, play: true });
             lastLoadedFileRef.current = file;
+            usePlaybackSession.getState().loadedVideo(file);
+            logger.info('player ready callback completed', {
+                videoId: currentVideoId,
+                videoPath: file,
+                videoLoaded: usePlaybackSession.getState().videoLoaded,
+            });
         } catch (error) {
             logger.error('failed to jump to history progress', { error: error instanceof Error ? error.message : String(error) });
         } finally {
@@ -306,15 +312,6 @@ export function usePlayerBridge(navigate: (path: string) => void) {
                 inFlightFileRef.current = undefined;
             }
         }
-        if (!isSessionActive()) {
-            return;
-        }
-        usePlaybackSession.getState().loadedVideo(file);
-        logger.info('player ready callback completed', {
-            videoId: currentVideoId,
-            videoPath: file,
-            videoLoaded: usePlaybackSession.getState().videoLoaded,
-        });
     }, []);
 
     const handleAutoPlayNext = useCallback(async () => {

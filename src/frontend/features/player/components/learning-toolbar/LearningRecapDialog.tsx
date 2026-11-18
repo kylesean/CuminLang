@@ -210,10 +210,12 @@ function LearningRecapContentBody({
     };
 
     const handleDraftChange = (value: string) => {
+        recapEpochRef.current += 1;
         setDraft(value);
         if (retellResult) setRetellResult(null);
         if (retellError) setRetellError(null);
         if (spokenTranscript) setSpokenTranscript(null);
+        if (retellLoading) setRetellLoading(false);
     };
 
     /**

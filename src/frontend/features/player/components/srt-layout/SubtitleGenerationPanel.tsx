@@ -4,7 +4,12 @@ import { HStack } from '@astryxdesign/core/HStack';
 import { Text } from '@astryxdesign/core/Text';
 import { VStack } from '@astryxdesign/core/VStack';
 import { Captions } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import useDpTaskCenter from '@/frontend/app/stores/dpTaskStore';
+import {
+    canCancelSubtitleGeneration,
+    deriveSubtitleGenerationState,
+} from '@/frontend/features/player/lib/subtitle-generation-phase';
 import { usePlaybackSession } from '@/frontend/features/player/playbackSessionStore';
 import { useSubtitleGenerationStore } from '@/frontend/features/player/subtitleGenerationStore';
 
@@ -17,21 +22,13 @@ import { useSubtitleGenerationStore } from '@/frontend/features/player/subtitleG
 export default function SubtitleGenerationPanel() {
     const { t } = useI18nTranslation('player');
     const videoId = usePlaybackSession((s) => s.videoId);
-    const taskId = useSubtitleGenerationStore((s) => (videoId ? s.taskIdsByVideo[videoId] : undefined));
-    const starting = useSubtitleGenerationStore((s) => (videoId ? Boolean(s.startingVideos[videoId]) : false));
-    const cancelling = useSubtitleGenerationStore((s) => (videoId ? Boolean(s.cancellingVideos[videoId]) : false));
+    const { phase, taskId, running } = useSubtitleGenerationStore(
+        useShallow((s) => deriveSubtitleGenerationState(s, videoId)),
+    );
     const startGeneration = useSubtitleGenerationStore((s) => s.start);
     const cancelGeneration = useSubtitleGenerationStore((s) => s.cancel);
     const task = useDpTaskCenter((s) => (taskId !== undefined ? s.tasks.get(taskId) : undefined));
-
-    const phase = cancelling
-        ? 'cancelling'
-        : taskId !== undefined
-            ? 'running'
-            : starting
-                ? 'starting'
-                : 'idle';
-    const running = phase !== 'idle';
+    const cancelling = phase === 'cancelling';
     const progress = task && task !== 'init' ? task.progress ?? null : null;
 
     const formatFailed = (message: string) => t('subtitleGeneration.failed', { message });
@@ -50,7 +47,7 @@ export default function SubtitleGenerationPanel() {
      * 请求取消当前任务；终态仍以任务中心推送的 CANCELLED 为准。
      */
     const cancel = async (): Promise<void> => {
-        if (!videoId || taskId === undefined || cancelling) {
+        if (!videoId || !canCancelSubtitleGeneration(phase)) {
             return;
         }
         await cancelGeneration(videoId, formatFailed);
@@ -79,7 +76,7 @@ export default function SubtitleGenerationPanel() {
                         variant="secondary"
                         label={t('subtitleGeneration.cancel')}
                         isLoading={cancelling}
-                        isDisabled={cancelling || taskId === undefined}
+                        isDisabled={!canCancelSubtitleGeneration(phase)}
                         onClick={() => void cancel()}
                     />
                 ) : (

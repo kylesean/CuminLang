@@ -137,8 +137,8 @@ export const WordPopoverHost: React.FC = () => {
     const { t: tPlayer } = useTranslation('player');
 
     const pause = usePlayer((s) => s.pause);
-    const [favoriting, setFavoriting] = useState(false);
-    const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [favoritingPopKey, setFavoritingPopKey] = useState<string | null>(null);
+    const [updatingStatusPopKey, setUpdatingStatusPopKey] = useState<string | null>(null);
     const [optimisticSaved, setOptimisticSaved] = useState<{ popKey: string; version: number } | null>(null);
     const [optimisticStatusState, setOptimisticStatusState] = useState<{ popKey: string; status: WordStatus } | null>(null);
 
@@ -547,19 +547,23 @@ export const WordPopoverHost: React.FC = () => {
     const rawWordStatus = cleanWord ? getWordStatus(vocabKey) : undefined;
     const effectiveWordStatus = optimisticStatus ?? rawWordStatus ?? null;
 
+    const favoriting = Boolean(target && favoritingPopKey === target.popKey);
+    const updatingStatus = Boolean(target && updatingStatusPopKey === target.popKey);
+
     const handleFavorite = useCallback(async () => {
-        if (!target || favoriting) return;
+        if (!target || favoritingPopKey === target.popKey) return;
+        const activePopKey = target.popKey;
         const wasFavorited = effectiveFavorited;
         const deleteKey = getBaseWord(target.word) ?? getBaseWord(original) ?? (target.kind === 'phrase' ? cleanWord : original);
 
-        setFavoriting(true);
+        setFavoritingPopKey(activePopKey);
         try {
             if (wasFavorited) {
                 const result = await videoLearningApi.deleteWord(deleteKey);
                 if (result.success) {
                     removeVocabularyWords([target.word, original, cleanWord, deleteKey]);
-                    setOptimisticSaved(null);
-                    setOptimisticStatusState(null);
+                    setOptimisticSaved((prev) => (prev?.popKey === activePopKey ? null : prev));
+                    setOptimisticStatusState((prev) => (prev?.popKey === activePopKey ? null : prev));
                 } else {
                     toast.error(result.error || t('unfavoriteWordFailed'));
                 }
@@ -569,7 +573,7 @@ export const WordPopoverHost: React.FC = () => {
             const result = await videoLearningApi.favoriteWord(original, buildFavoriteTranslate(dictionaryResponse));
             if (result.success) {
                 setOptimisticSaved({
-                    popKey: target.popKey,
+                    popKey: activePopKey,
                     version: useVocabularyStore.getState().version,
                 });
                 const session = usePlaybackSession.getState();
@@ -589,19 +593,20 @@ export const WordPopoverHost: React.FC = () => {
             logger.error('toggle favorite word failed', { error: error instanceof Error ? error.message : error });
             toast.error(wasFavorited ? t('unfavoriteWordFailed') : t('favoriteWordFailed'));
         } finally {
-            setFavoriting(false);
+            setFavoritingPopKey((prev) => (prev === activePopKey ? null : prev));
         }
-    }, [cleanWord, dictionaryResponse, effectiveFavorited, favoriting, getBaseWord, original, removeVocabularyWords, sentenceHash, sentenceIndex, sentenceText, t, target]);
+    }, [cleanWord, dictionaryResponse, effectiveFavorited, favoritingPopKey, getBaseWord, original, removeVocabularyWords, sentenceHash, sentenceIndex, sentenceText, t, target]);
 
     const handleStatusChange = useCallback(async (next: WordStatus) => {
-        if (!target || updatingStatus) return;
+        if (!target || updatingStatusPopKey === target.popKey) return;
+        const activePopKey = target.popKey;
         const nextTarget: WordStatus = effectiveWordStatus === next ? 'learning' : next;
-        setUpdatingStatus(true);
+        setUpdatingStatusPopKey(activePopKey);
         try {
             const result = await videoLearningApi.updateWordState(cleanWord, nextTarget);
             if (result.success) {
                 setWordStatus(cleanWord, nextTarget);
-                setOptimisticStatusState({ popKey: target.popKey, status: nextTarget });
+                setOptimisticStatusState({ popKey: activePopKey, status: nextTarget });
                 const session = usePlaybackSession.getState();
                 void videoLearningApi.recordWordEncounter({
                     word: cleanWord,
@@ -619,9 +624,9 @@ export const WordPopoverHost: React.FC = () => {
             logger.error('update word status failed', { error: error instanceof Error ? error.message : error });
             toast.error(t('updateWordStatusFailed'));
         } finally {
-            setUpdatingStatus(false);
+            setUpdatingStatusPopKey((prev) => (prev === activePopKey ? null : prev));
         }
-    }, [cleanWord, effectiveWordStatus, sentenceHash, sentenceIndex, sentenceText, setWordStatus, t, target, updatingStatus]);
+    }, [cleanWord, effectiveWordStatus, sentenceHash, sentenceIndex, sentenceText, setWordStatus, t, target, updatingStatusPopKey]);
 
     // 划词短语弹出时自动提供可选短语朗读能力（点击收藏等仍不阻塞）
     useEffect(() => {
