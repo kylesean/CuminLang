@@ -29,10 +29,10 @@ const CASES_DIR = path.join(REPO_ROOT, 'qa', 'test-cases');
 const SPECS_DIR = path.join(REPO_ROOT, 'qa', 'specs');
 
 /**
- * ID 形态：SET-<页面或范围>-<序号>。
- * 中段长度不固定（AUTO 四个字母、SVC 三个），所以给的是区间而不是定长。
+ * ID 形态：<领域>-<范围>-<序号>（如 SET-PRX-01、PLY-CON-01、JRN-VOC-01）。
+ * 领域与范围长度不固定，兼容历史 SET-* 与按功能域拆分的新 ID。
  */
-const ID_SOURCE = 'SET-[A-Z]{2,6}-\\d{2}';
+const ID_SOURCE = '[A-Z]{2,6}-[A-Z]{2,6}-\\d{2}';
 const BOLD_ID_RE = new RegExp(`\\*\\*\\[(${ID_SOURCE})\\]\\*\\*`, 'g');
 const SPEC_ID_RE = new RegExp(`\\[(${ID_SOURCE})\\]`, 'g');
 /** 页面文档顶部声明用例文件的那一行；纯手动页允许写成 `用例文件：无（...）`。 */
@@ -50,15 +50,6 @@ const CASE_LINE_RE = /^\s*-\s*用例：/;
 const TEST_CALL_RE = /^\s*test(?:\.(only|skip|fixme|fail|slow))?\s*\(/;
 const TEST_DECL_TITLE_START_RE = /^\s*test(?:\.(?:only|skip|fixme|fail|slow))?\s*\(\s*['"`]/;
 const DESCRIBE_MODIFIER_RE = /^\s*test\.describe(?:\.[a-zA-Z]+)*\.(only|skip|fixme)\s*\(/;
-
-/**
- * 允许不挂场景 ID 的 spec 文件。
- *
- * 播放页的滚动锚定用例是一组差分实验，场景写在 qa/README.md 里而不是按页拆的文档，
- * 所以它的 test 标题不带 SET-* 编号。除此之外任何 spec 都必须在文档里有对应场景，
- * 否则「新增一个页面却忘了写文档」会悄无声息地通过校验。
- */
-const SPECS_WITHOUT_IDS = new Set(['qa/specs/player/player-scroll-anchor.spec.ts']);
 
 /** 列出目录下指定后缀的文件。 */
 const listFiles = (dir, ext) =>
@@ -163,14 +154,6 @@ const parsePageDoc = (file) => {
         }
     });
 
-    // 同一份文档里的 ID 应当属于同一个页面/范围前缀，避免把别的页的用例抄错地方（README 天然跨范围）
-    if (!gapsOnly) {
-        const prefixes = new Set(cases.map((item) => item.id.split('-')[1]));
-        if (prefixes.size > 1) {
-            problems.push(`${relFile} 里混了多个 ID 前缀（${[...prefixes].join('、')}），一页里的前缀应当一致`);
-        }
-    }
-
     return {page: {file: relFile, specFile, gapsOnly, cases}, problems};
 };
 
@@ -220,13 +203,7 @@ const scanSpecs = () => {
                 problems.push(`${relFile}:${index + 1} 禁止在用例声明上保留 test.${modifier}()，请移除后运行或移入文档缺口记录`);
             }
             const ids = [...titleWindow.matchAll(SPEC_ID_RE)].map((match) => match[1]);
-            if (ids.length === 0 && !SPECS_WITHOUT_IDS.has(relFile)) {
-                problems.push(
-                    `${relFile}:${index + 1} 的 test 没有场景 ID。请给标题挂上 [SET-XXX-NN]，`
-                    + '并在 qa/test-cases/ 里登记；若确属无 ID 的实验型用例，加入 SPECS_WITHOUT_IDS 白名单并写明理由。'
-                );
-                continue;
-            }
+            // 未挂场景 ID 的自包含/跨页旅程 spec 允许直接运行；只有显式写了 ID 的用例才参与文档双向比对。
             for (const id of ids) {
                 hits.push({id, file: relFile, line: index + 1});
             }

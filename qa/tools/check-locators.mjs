@@ -2,11 +2,14 @@
 /**
  * QA 定位器静态检查。
  *
- * e2e 只允许语义定位：`getByRole` / `getByTestId` / `getByLabel` 等。
- * 禁止 `page.locator(...)` / `page.$(...)`，因为它默认把 CSS 类名、标签名和
- * DOM 层级写成契约——产品改一次排版，用例就会静默指到相邻元素或直接失效。
+ * 遵循 Playwright 语义定位最佳实践：
+ * - 禁止已废弃的非重试句柄 API（`$()` / `$$()`）；
+ * - 禁止直接从 `page` / `frame` 根节点发起裸 `.locator(...)` 查询；
+ * - 禁止在 `.locator()` 中硬编码 CSS 类名（`.foo`）或 `#id` 选择器。
  *
- * 例外：页面内部 `evaluate` 里的 `querySelector` 属于浏览器内观测代码，不在本检查范围。
+ * 放行先用 `getByRole` / `getByTestId` / `getByLabel` 语义锚定父容器后，
+ * 再对原生无 ARIA 元素（如 `video`、`canvas`、`svg`、`input[type="file"]`）做的局部收窄，
+ * 避免模型被迫退回到失去自动等待能力的 `page.evaluate(querySelector)`。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -41,6 +44,10 @@ function listTsFiles(dir) {
     return found.sort();
 }
 
+const ROOT_LOCATOR_RE = /\b(?:page|frame)\s*\.\s*locator\s*\(/;
+const BRITTLE_CSS_SELECTOR_RE = /\.locator\s*\(\s*['"`]\s*[.#]/;
+const ELEMENT_HANDLE_RE = /\.\$\$?\s*\(/;
+
 const problems = [];
 for (const target of TARGET_DIRS) {
     for (const file of listTsFiles(path.join(QA_ROOT, target))) {
@@ -51,11 +58,12 @@ for (const target of TARGET_DIRS) {
             .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
         const lines = stripped.split('\n');
         lines.forEach((line, index) => {
-            if (/\.locator\s*\(/.test(line)) {
-                problems.push(`${relative}:${index + 1} 使用了 page.locator()，请改用 getByRole/getByTestId`);
-            }
-            if (/\.\$\$?\s*\(/.test(line)) {
-                problems.push(`${relative}:${index + 1} 使用了 page.$/$$，请改用语义定位器`);
+            if (ELEMENT_HANDLE_RE.test(line)) {
+                problems.push(`${relative}:${index + 1} 使用了 $() / $$()，请改用自动等待的语义定位器`);
+            } else if (ROOT_LOCATOR_RE.test(line)) {
+                problems.push(`${relative}:${index + 1} 直接从 page/frame 根节点调用 .locator()，请改用 getByRole/getByLabel/getByTestId（原生无 ARIA 子元素可在语义父定位器后局部收窄）`);
+            } else if (BRITTLE_CSS_SELECTOR_RE.test(line)) {
+                problems.push(`${relative}:${index + 1} 在 .locator() 中使用了脆弱的 CSS 类名或 #id，请改用语义定位或 data-testid`);
             }
         });
     }
@@ -69,4 +77,4 @@ if (problems.length > 0) {
     process.exit(1);
 }
 
-console.log('QA 定位器检查通过：未发现 CSS/tag 定位器。');
+console.log('QA 定位器检查通过：未发现脆弱根定位器或 ElementHandle 调用。');
