@@ -498,21 +498,28 @@ export default function ContextStudioPage() {
         }
     }, [filteredItems]);
 
+    const removeWordFromDueQueue = useCallback((wordText: string) => {
+        const normalized = wordText.toLowerCase();
+        if (dueWords.has(normalized)) {
+            setDueWords((prev) => {
+                const next = new Set(prev);
+                next.delete(normalized);
+                return next;
+            });
+            setDueTotalCount((prev) => Math.max(0, prev - 1));
+        }
+        setDueCards((prev) => prev.filter((card) => card.word.toLowerCase() !== normalized));
+    }, [dueWords]);
+
     const handleReviewWordCompleted = useCallback((wordText: string, nextStatus?: WordStatus) => {
         const normalized = wordText.toLowerCase();
-        setDueWords((prev) => {
-            const next = new Set(prev);
-            next.delete(normalized);
-            return next;
-        });
-        setDueCards((prev) => prev.filter((card) => card.word.toLowerCase() !== normalized));
-        setDueTotalCount((prev) => Math.max(0, prev - 1));
+        removeWordFromDueQueue(wordText);
         if (nextStatus) {
             setWords((prev) =>
                 prev.map((w) => (w.word.toLowerCase() === normalized ? { ...w, status: nextStatus } : w)),
             );
         }
-    }, []);
+    }, [removeWordFromDueQueue]);
 
     const handleMemoryMapWord = useCallback(
         (wordText: string) => {
@@ -773,39 +780,43 @@ export default function ContextStudioPage() {
             {/* 主体工作区：三栏工作台 ↔ 今日主动回忆训练 ↔ 记忆全景 */}
             <div className="flex-1 min-h-0 px-6 pb-5 pt-2 overflow-hidden">
                 {studioView === 'review' ? (
-                    <ReviewSessionCanvas
-                        key={reviewSessionKey}
-                        cards={topicCards ?? dueCards}
-                        allWords={words}
-                        sentences={sentences}
-                        topicLabel={activeReviewTopic}
-                        onSwitchToDueQueue={
-                            activeReviewTopic
-                                ? () => {
-                                      setTopicCards(null);
-                                      setActiveReviewTopic(null);
-                                      setReviewSessionKey((prev) => prev + 1);
-                                  }
-                                : undefined
-                        }
-                        onRated={(wordText, res) => handleReviewWordCompleted(wordText, res.status)}
-                        onOpenWord={(wordText) => {
-                            const found = words.find((w) => w.word.toLowerCase() === wordText.toLowerCase());
-                            if (found) {
-                                setExplicitSelection({ kind: 'word', word: found });
-                            } else {
-                                setSearchParams({ word: wordText });
-                                setExplicitSelection(null);
+                    loading && !topicCards ? (
+                        <ContextStudioListSkeleton ariaLabel={t('contextStudio.loading', { defaultValue: '正在加载语境资产...' })} />
+                    ) : (
+                        <ReviewSessionCanvas
+                            key={reviewSessionKey}
+                            cards={topicCards ?? dueCards}
+                            allWords={words}
+                            sentences={sentences}
+                            topicLabel={activeReviewTopic}
+                            onSwitchToDueQueue={
+                                activeReviewTopic
+                                    ? () => {
+                                          setTopicCards(null);
+                                          setActiveReviewTopic(null);
+                                          setReviewSessionKey((prev) => prev + 1);
+                                      }
+                                    : undefined
                             }
-                            setActiveFilter('words');
-                            setStudioView('workspace');
-                        }}
-                        onExit={() => {
-                            setTopicCards(null);
-                            setActiveReviewTopic(null);
-                            setStudioView('workspace');
-                        }}
-                    />
+                            onRated={(wordText, res) => handleReviewWordCompleted(wordText, res.status)}
+                            onOpenWord={(wordText) => {
+                                const found = words.find((w) => w.word.toLowerCase() === wordText.toLowerCase());
+                                if (found) {
+                                    setExplicitSelection({ kind: 'word', word: found });
+                                } else {
+                                    setSearchParams({ word: wordText });
+                                    setExplicitSelection(null);
+                                }
+                                setActiveFilter('words');
+                                setStudioView('workspace');
+                            }}
+                            onExit={() => {
+                                setTopicCards(null);
+                                setActiveReviewTopic(null);
+                                setStudioView('workspace');
+                            }}
+                        />
+                    )
                 ) : studioView === 'memory' ? (
                     <Card padding={0} height="100%" className="h-full min-h-0 flex flex-col overflow-hidden">
                         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded-full p-5">
@@ -1090,12 +1101,16 @@ export default function ContextStudioPage() {
                                 onEdit={setEditingWord}
                                 onDeleted={(deletedText) => {
                                     setWords((prev) => prev.filter((w) => w.word !== deletedText));
+                                    removeWordFromDueQueue(deletedText);
                                     setExplicitSelection(null);
                                 }}
                                 onStatusUpdated={(wordText, nextStatus) => {
                                     setWords((prev) =>
                                         prev.map((w) => (w.word === wordText ? { ...w, status: nextStatus } : w)),
                                     );
+                                    if (nextStatus === 'known' || nextStatus === 'ignored') {
+                                        removeWordFromDueQueue(wordText);
+                                    }
                                 }}
                                 onReviewRated={(wordText, nextStatus) => handleReviewWordCompleted(wordText, nextStatus)}
                                 onPlayStarted={stopSentencePlaylist}

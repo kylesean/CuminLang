@@ -4,6 +4,7 @@ import * as path from 'path';
 import { injectable } from 'inversify';
 import { getRuntimeResourcePath } from '@/backend/utils/runtimeEnv';
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { trackActiveChildProcess } from '@/backend/infrastructure/system/ActiveChildProcessRegistry';
 import { OutputTail } from '@/backend/utils/output-tail';
 
 /**
@@ -68,6 +69,7 @@ export class SherpaOnnxTtsCli {
                 cwd: path.dirname(executablePath),
                 stdio: ['ignore', 'ignore', 'pipe'],
             });
+            trackActiveChildProcess(child);
             this.logger.info('spawned sherpa-onnx tts', {
                 pid: child.pid,
                 outputPath: params.outputPath,

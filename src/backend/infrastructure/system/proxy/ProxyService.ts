@@ -259,7 +259,7 @@ const snapshotProxyConfig = async (): Promise<Electron.ProxyConfig> => {
         if (systemProxy) {
             return {
                 mode: 'fixed_servers',
-                proxyRules: systemProxy.proxyUrl.toLowerCase(),
+                proxyRules: systemProxy.proxyUrl,
                 proxyBypassRules: systemProxy.noProxy.length > 0 ? systemProxy.noProxy.join(',') : undefined,
             };
         }

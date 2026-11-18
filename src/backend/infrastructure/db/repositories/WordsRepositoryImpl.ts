@@ -64,15 +64,31 @@ export default class WordsRepositoryImpl implements WordsRepository {
      * @param values 导入后的完整单词列表。
      */
     public async replaceAll(values: InsertWord[]): Promise<void> {
-        const chunkSize = 5000;
+        // 每行最多绑定约 10 个参数，300 行远低于 SQLite 32766 变量上限。
+        const chunkSize = 300;
         this.db.transaction((tx) => {
-            tx.delete(words).run();
+            tx.delete(words).where(ne(words.source, 'default')).run();
             if (values.length === 0) {
                 return;
             }
 
             for (let index = 0; index < values.length; index += chunkSize) {
-                tx.insert(words).values(values.slice(index, index + chunkSize)).run();
+                tx.insert(words)
+                    .values(values.slice(index, index + chunkSize))
+                    .onConflictDoUpdate({
+                        target: words.word,
+                        set: {
+                            translate: sql`excluded.translate`,
+                            status: sql`excluded.status`,
+                            source: sql`excluded.source`,
+                            mastery: sql`excluded.mastery`,
+                            confidence: sql`excluded.confidence`,
+                            last_seen_at: sql`excluded.last_seen_at`,
+                            mastered_at: sql`excluded.mastered_at`,
+                            updated_at: sql`excluded.updated_at`,
+                        },
+                    })
+                    .run();
             }
         });
     }

@@ -138,9 +138,16 @@ export default dbProxy;
  *
  * @throws 文件被占用、无写权限等删除失败时原样抛出，由调用方展示给用户。
  */
-export async function resetDatabaseFile(): Promise<void> {
+/**
+ * 显式关闭主进程 SQLite 连接（应用退出前调用以完成 WAL checkpoint）。
+ */
+export function closeMainDatabase(): void {
     handle?.close();
     handle = null;
+}
+
+export async function resetDatabaseFile(): Promise<void> {
+    closeMainDatabase();
     openError = null;
     for (const suffix of ['', '-wal', '-shm']) {
         fs.rmSync(`${file}${suffix}`, { force: true });

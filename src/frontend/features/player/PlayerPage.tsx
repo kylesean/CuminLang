@@ -64,7 +64,7 @@ const PlayerWithControlsPage = () => {
 
         const isVideo = !!video && !MediaUtil.isAudio(video.fileName);
         if (!isVideo) {
-            playerApi.setWindowButtonsVisibility(true).then();
+            void Promise.resolve(playerApi.setWindowButtonsVisibility(true)).catch(() => undefined);
             windowButtonsVisibleRef.current = true;
             return;
         }
@@ -74,7 +74,7 @@ const PlayerWithControlsPage = () => {
                 return;
             }
             windowButtonsVisibleRef.current = visible;
-            playerApi.setWindowButtonsVisibility(visible).then();
+            void Promise.resolve(playerApi.setWindowButtonsVisibility(visible)).catch(() => undefined);
         };
 
         if (showSideBar) {

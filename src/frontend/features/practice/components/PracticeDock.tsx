@@ -339,10 +339,16 @@ export default function PracticeDock() {
         setResult(null);
     }
 
-    useEffect(() => {
-        latestUnitKeyRef.current = unitKey;
+    const stopHistoryAudio = useCallback(() => {
         audioRef.current?.pause();
         audioRef.current = null;
+        audioDisposeRef.current?.();
+        audioDisposeRef.current = null;
+    }, []);
+
+    useEffect(() => {
+        latestUnitKeyRef.current = unitKey;
+        stopHistoryAudio();
         // 主动切句（playClip / autoFlow）会先行以目标句启动受控试听并登记 unitKey；
         // 这里仅在外部跳转或模式切换时清掉上一句的受控边界，避免把自己刚发起的新片段误删。
         if (lastStartedClipUnitKeyRef.current !== unitKey) {
@@ -351,22 +357,20 @@ export default function PracticeDock() {
         lastStartedClipUnitKeyRef.current = null;
         setDictationRevealed(false);
         setPeekingSpoiler(false);
-    }, [unitKey, mode, setDictationRevealed, setPeekingSpoiler]);
+    }, [unitKey, mode, setDictationRevealed, setPeekingSpoiler, stopHistoryAudio]);
 
     // 关闭练习工作台时清理音轨与历史回放，不把片段倍速/暂停边界泄漏回观影模式
     useEffect(() => {
         if (!visible) {
-            audioRef.current?.pause();
-            audioRef.current = null;
+            stopHistoryAudio();
             usePlayer.getState().clearPracticeClip?.();
         }
-    }, [visible]);
+    }, [visible, stopHistoryAudio]);
 
     useEffect(() => () => {
-        audioRef.current?.pause();
-        audioRef.current = null;
+        stopHistoryAudio();
         usePlayer.getState().clearPracticeClip?.();
-    }, []);
+    }, [stopHistoryAudio]);
 
     const translationText = useMemo(() => {
         if (!activeUnit) return '';
@@ -499,8 +503,7 @@ export default function PracticeDock() {
     }, [activeUnit, mutateFileSummaries, mutateHistory, setDictationRevealed]);
 
     const handlePlayHistoryAudio = useCallback((audioPath: string) => {
-        audioRef.current?.pause();
-        audioDisposeRef.current?.();
+        stopHistoryAudio();
         const { audio, dispose } = createBoostedAudio(
             UrlUtil.toUrl(audioPath),
             useAudioVolume.getState().recordingGain,
@@ -521,7 +524,7 @@ export default function PracticeDock() {
             }
             dispose();
         });
-    }, [t]);
+    }, [stopHistoryAudio, t]);
 
     // 练习工作台主控快捷键：Esc 退出，R/S(跟读) 或 Alt+R/Alt+S(听写) 试听，听写 \ 按住偷看，↑/↓ 切句，F 开关专注态，结果页 Enter 直接跳下一句
     useEffect(() => {

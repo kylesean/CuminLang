@@ -37,12 +37,15 @@ export const playAudioUrl = async (
     options?: {
         playbackRate?: number;
         waitForEnd?: boolean;
+        skipStop?: boolean;
     },
 ) => {
     if (TypeGuards.isNull(audioUrl)) {
         return;
     }
-    stopActiveAudio();
+    if (!options?.skipStop) {
+        stopActiveAudio();
+    }
     const epoch = playbackEpoch;
     getRendererLogger('AudioPlayer').debug('play audio url', { audioUrl });
     const nextPlayer = new Audio(audioUrl);
@@ -89,13 +92,16 @@ export const playMediaSegment = (
     startTime: number,
     endTime?: number,
     playbackRate = 1,
+    options?: { skipStop?: boolean },
 ): Promise<void> => {
     const url = UrlUtil.toUrl(videoPath);
     if (!url || !Number.isFinite(startTime) || startTime < 0) {
         return Promise.reject(new Error('Invalid media segment'));
     }
 
-    stopActiveAudio();
+    if (!options?.skipStop) {
+        stopActiveAudio();
+    }
 
     return new Promise<void>((resolve, reject) => {
         const media = document.createElement('video');
@@ -232,7 +238,7 @@ export const playContextAudio = async (options: {
     const epoch = playbackEpoch;
     if (videoPath && typeof startTime === 'number' && Number.isFinite(startTime)) {
         try {
-            await playMediaSegment(videoPath, startTime, endTime, playbackRate);
+            await playMediaSegment(videoPath, startTime, endTime, playbackRate, { skipStop: true });
             return 'native';
         } catch (error) {
             if (epoch !== playbackEpoch) {
@@ -253,7 +259,7 @@ export const playContextAudio = async (options: {
             return 'tts';
         }
         if (url) {
-            await playAudioUrl(url, { playbackRate, waitForEnd });
+            await playAudioUrl(url, { playbackRate, waitForEnd, skipStop: true });
         } else {
             await playWord(text, { playbackRate, waitForEnd });
         }

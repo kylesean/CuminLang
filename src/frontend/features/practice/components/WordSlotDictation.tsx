@@ -79,6 +79,7 @@ export default function WordSlotDictation({
     };
 
     useEffect(() => {
+        lastVerifiedRef.current = null;
         if (!result) {
             inputRef.current?.focus();
         }

@@ -18,7 +18,7 @@ import path from 'node:path';
 /**
  * 字幕文件允许的扩展名。
  */
-const SUBTITLE_EXTENSIONS = ['.srt', '.vtt'];
+const SUBTITLE_EXTENSIONS = ['.srt', '.vtt', '.ass'];
 
 /**
  * 词汇表文件允许的扩展名。

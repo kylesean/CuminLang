@@ -105,7 +105,7 @@ const electronHandler = {
         const unregisterFunctions: Array<() => void> = [];
 
         for (const [path, handler] of Object.entries(apis) as Array<[keyof RendererApiMap, RendererApiMap[keyof RendererApiMap]]>) {
-            const unregister = this.registerRendererApi(path, handler);
+            const unregister = electronHandler.registerRendererApi(path, handler);
             unregisterFunctions.push(unregister);
         }
 

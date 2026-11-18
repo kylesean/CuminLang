@@ -38,14 +38,23 @@ const BINARY_WORK_DIRECTORY = '.yt-dlp-download';
 const BINARY_DOWNLOAD_CANCELLED_MESSAGE = 'yt-dlp 组件下载已取消';
 
 /**
- * 从多个英语字幕文件里挑出最该用的那一个。
+ * 从多个候选字幕文件里挑出最该挂载的那一个。
  *
- * 具体优先级见 `pickPreferredEnglishSubtitle`：作者上传轨 > ASR 轨 > 其他英语变体。
+ * 复用本地已导入视频时优先保留权威人工/本地识别轨（`.edited.srt` > `.local.srt`），
+ * 否则回落到 `pickPreferredEnglishSubtitle`：作者上传轨 > ASR 轨 > 其他英语变体。
  *
  * @param paths 候选字幕文件路径。
  * @returns 选中的字幕路径；没有匹配时返回 undefined。
  */
 const pickPreferredEnglishSrt = (paths: readonly string[]): string | undefined => {
+    const edited = paths.find((p) => p.toLowerCase().endsWith('.edited.srt'));
+    if (edited) {
+        return edited;
+    }
+    const local = paths.find((p) => p.toLowerCase().endsWith('.local.srt'));
+    if (local) {
+        return local;
+    }
     const selected = pickPreferredEnglishSubtitle(paths.map((p) => path.basename(p)));
     if (!selected) {
         return undefined;

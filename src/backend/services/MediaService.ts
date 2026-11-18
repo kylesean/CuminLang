@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import path from 'path';
 import { inject, injectable } from 'inversify';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
@@ -196,13 +197,20 @@ export class MediaServiceImpl implements MediaService {
             throw new Error('媒体路径不能为空');
         }
         const libraryRoot = await this.storageDirectoryProvider.provideDirectory(StorageDirectoryTarget.LIBRARY_ROOT);
-        if (isPathInsideRoot(libraryRoot, sourceFilePath)) {
-            return;
+        const literalAllowed = isPathInsideRoot(libraryRoot, sourceFilePath)
+            || this.mediaPathRegistry.isAllowed(sourceFilePath);
+        if (!literalAllowed) {
+            throw new Error(`媒体路径未授权：${sourceFilePath}`);
         }
-        if (this.mediaPathRegistry.isAllowed(sourceFilePath)) {
-            return;
+
+        // 若目标在磁盘上存在，进一步校验 realpath，防止库内软链接逃逸到库外（与 media:// 协议保持一致）。
+        const realTargetPath = await fs.realpath(sourceFilePath).catch(() => null);
+        if (realTargetPath !== null) {
+            const realLibraryRoot = await fs.realpath(libraryRoot).catch(() => libraryRoot);
+            if (!isPathInsideRoot(realLibraryRoot, realTargetPath) && !this.mediaPathRegistry.isAllowed(realTargetPath)) {
+                throw new Error(`媒体路径未授权：${sourceFilePath}`);
+            }
         }
-        throw new Error(`媒体路径未授权：${sourceFilePath}`);
     }
 
     /**

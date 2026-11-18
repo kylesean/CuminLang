@@ -34,7 +34,7 @@ export default class EnglishDictionaryController implements Controller {
             broadcastError: false,
         });
         registerRoute('dictionary-enhancement/remove', async () => {
-            this.englishDictionaryService.remove();
+            await this.englishDictionaryService.remove();
         }, {
             broadcastError: false,
         });

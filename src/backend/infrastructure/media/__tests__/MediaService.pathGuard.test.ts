@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'path';
 
 import { MediaServiceImpl } from '@/backend/services/MediaService';
@@ -7,6 +9,7 @@ import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/Stor
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
 import type FfmpegService from '@/backend/services/FfmpegService';
+import FileSystemGatewayImpl from '@/backend/infrastructure/storage/FileSystemGatewayImpl';
 import { MemoryFileSystemGateway } from '@/test/memory-file-system-gateway';
 
 // 日志模块是系统边界：测试里静音，避免真实落盘和对 Electron app 的依赖。
@@ -85,5 +88,35 @@ describe('MediaService 媒体路径授权', () => {
         await gateway.writeTextFile(sibling, 'bytes');
 
         await expect(service.info(sibling)).rejects.toThrow('媒体路径未授权');
+    });
+
+    it('媒体库内指向库外真实文件的符号链接同样被拒绝', async () => {
+        const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'cl-media-symlink-'));
+        try {
+            const realLib = path.join(tempRoot, 'library');
+            const outsideDir = path.join(tempRoot, 'secret');
+            await fs.mkdir(realLib, { recursive: true });
+            await fs.mkdir(outsideDir, { recursive: true });
+            const outsideFile = path.join(outsideDir, 'secret.mp4');
+            await fs.writeFile(outsideFile, 'secret');
+            const linkInsideLib = path.join(realLib, 'escape.mp4');
+            await fs.symlink(outsideFile, linkInsideLib);
+
+            const realProvider = {
+                provideDirectory: vi.fn(async (target: StorageDirectoryTarget) =>
+                    target === StorageDirectoryTarget.LIBRARY_ROOT ? realLib : path.join(realLib, 'temp')),
+                ensurePathAccessPermissionIfExists: vi.fn(async () => undefined),
+            } as unknown as StorageDirectoryProvider;
+            const realService = new MediaServiceImpl(
+                realProvider,
+                createFfmpeg(),
+                new FileSystemGatewayImpl(),
+                new MediaPathRegistry(),
+            );
+
+            await expect(realService.info(linkInsideLib)).rejects.toThrow('媒体路径未授权');
+        } finally {
+            await fs.rm(tempRoot, { recursive: true, force: true });
+        }
     });
 });

@@ -555,7 +555,7 @@ export class MobileAccessServiceImpl implements MobileAccessService {
      * @param position 播放位置，单位秒。
      */
     private async saveProgress(id: string, position: number): Promise<void> {
-        const filePath = await this.watchHistoryService.videoPath(id);
+        const filePath = await this.resolveVideoPathOrThrowNotFound(id);
         await this.watchHistoryService.updateProgress(filePath, Math.floor(position));
     }
 }

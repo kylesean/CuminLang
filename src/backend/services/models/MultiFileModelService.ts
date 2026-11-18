@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
@@ -78,11 +80,18 @@ export default abstract class MultiFileModelService implements LocalModelService
         if (this.downloading) {
             return this.downloading;
         }
-        const status = await this.getStatus();
-        if (status.ready) {
-            return { success: true, message: `${this.spec.modelDisplayName}已就绪` };
-        }
-        const task = this.runDownload().finally(() => {
+        const abortController = new AbortController();
+        this.activeAbort = abortController;
+        const task = (async () => {
+            const status = await this.getStatus();
+            if (abortController.signal.aborted) {
+                return { success: false, message: `${this.spec.modelDisplayName}下载已取消` };
+            }
+            if (status.ready) {
+                return { success: true, message: `${this.spec.modelDisplayName}已就绪` };
+            }
+            return this.runDownload(abortController);
+        })().finally(() => {
             this.downloading = null;
             this.activeAbort = null;
         });
@@ -100,7 +109,11 @@ export default abstract class MultiFileModelService implements LocalModelService
     }
 
     public async deleteModel(): Promise<{ success: boolean; message: string }> {
+        const inflight = this.downloading;
         await this.cancelDownload();
+        if (inflight) {
+            await inflight.catch(() => undefined);
+        }
         const modelDir = await this.getModelDir();
         await this.fileSystemGateway.removeDirectoryIfExists(modelDir);
         return { success: true, message: `${this.spec.modelDisplayName}已删除` };
@@ -111,9 +124,7 @@ export default abstract class MultiFileModelService implements LocalModelService
         return path.join(modelsRoot, this.spec.modelDirectoryName);
     }
 
-    private async runDownload(): Promise<{ success: boolean; message: string }> {
-        const abortController = new AbortController();
-        this.activeAbort = abortController;
+    private async runDownload(abortController: AbortController): Promise<{ success: boolean; message: string }> {
         const modelDir = await this.getModelDir();
         const workDir = `${modelDir}.downloading`;
 
@@ -168,29 +179,20 @@ export default abstract class MultiFileModelService implements LocalModelService
                 }
                 const totalBytes = Number(response.headers.get('content-length') ?? '0');
                 let receivedBytes = 0;
-                const writer = fs.createWriteStream(targetPath);
-                const reader = response.body.getReader();
-                try {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        if (value) {
-                            receivedBytes += value.byteLength;
-                            writer.write(value);
-                            if (reportProgress) {
-                                const percent = totalBytes > 0
-                                    ? Math.min(99, Math.round((receivedBytes / totalBytes) * 100))
-                                    : 0;
-                                this.emitProgress(percent, receivedBytes, totalBytes, 'downloading');
-                            }
-                        }
+                const bodyStream = Readable.fromWeb(
+                    response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>,
+                );
+                bodyStream.on('data', (chunk: Buffer) => {
+                    receivedBytes += chunk.byteLength;
+                    if (reportProgress) {
+                        const percent = totalBytes > 0
+                            ? Math.min(99, Math.round((receivedBytes / totalBytes) * 100))
+                            : 0;
+                        this.emitProgress(percent, receivedBytes, totalBytes, 'downloading');
                     }
-                } finally {
-                    await new Promise<void>((resolve, reject) => {
-                        writer.end(() => resolve());
-                        writer.on('error', reject);
-                    });
-                }
+                });
+                const writer = fs.createWriteStream(targetPath);
+                await pipeline(bodyStream, writer, { signal });
                 return;
             } catch (error) {
                 lastError = error;

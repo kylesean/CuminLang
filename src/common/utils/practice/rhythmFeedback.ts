@@ -6,6 +6,7 @@ import { isContentLemma } from '@/common/learning/contentWords';
 import { parsePcm16WavHeader } from '@/common/utils/audio/wav';
 import {
     alignPracticeTokens,
+    expandSpokenTokens,
     normalizePracticeTokens,
 } from '@/common/utils/practice/pronunciationScoring';
 import {
@@ -108,7 +109,7 @@ const buildTimedWords = (tokens: RhythmToken[], fallbackEndSec: number): TimedWo
 
     const words: TimedWord[] = [];
     groups.forEach((group, index) => {
-        const normalized = normalizePracticeTokens(group.text);
+        const normalized = expandSpokenTokens(normalizePracticeTokens(group.text));
         if (normalized.length === 0) {
             return;
         }
@@ -216,7 +217,7 @@ export const buildRhythmFeedback = (input: {
     }
 
     const alignment = alignPracticeTokens(input.expectedText, input.transcript);
-    const expectedTokens = normalizePracticeTokens(input.expectedText);
+    const expectedTokens = expandSpokenTokens(normalizePracticeTokens(input.expectedText));
     let actualIndex = 0;
     const aligned: Array<{ expected: string; timed: TimedWord | null }> = [];
     for (const entry of alignment.words) {
@@ -236,7 +237,7 @@ export const buildRhythmFeedback = (input: {
         const ctcTimed = input.ctcWordTimings?.get(idx);
         const rawTimed = ctcTimed ?? entry.timed;
         if (!rawTimed) return null;
-        const start = Math.max(0, rawTimed.start);
+        const start = Math.min(durationSec, Math.max(0, rawTimed.start));
         const end = Math.min(durationSec, Math.max(rawTimed.end, start + MIN_WORD_DURATION_SEC));
         return {
             word: entry.expected,

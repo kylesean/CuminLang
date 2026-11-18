@@ -10,26 +10,27 @@ export const AllFormats = [...SupportedVideoFormats, ...UnsupportedVideoFormats,
 export const SupportedFormats = [...SupportedVideoFormats, ...SupportedAudioFormats, ...SupportedSubtitleFormats];
 /** 全部媒体文件（视频 + 音频，不含字幕），与 {@link MediaUtil.isMedia} 的判定范围一致。 */
 export const MediaFormats = [...SupportedVideoFormats, ...UnsupportedVideoFormats, ...SupportedAudioFormats];
+const VideoFormats = [...SupportedVideoFormats, ...UnsupportedVideoFormats];
+
+const hasAnyExtension = (filePath: string, extensions: readonly string[]): boolean => {
+    if (StrUtil.isBlank(filePath)) {
+        return false;
+    }
+    const lower = filePath.toLowerCase();
+    return extensions.some((ext) => lower.endsWith(ext));
+};
+
 export default class MediaUtil {
     public static isSrt(path: string): boolean {
-        if (StrUtil.isBlank(path)) {
-            return false;
-        }
-        return path.endsWith('.srt');
+        return hasAnyExtension(path, ['.srt']);
     }
 
     public static isVtt(path: string): boolean {
-        if (StrUtil.isBlank(path)) {
-            return false;
-        }
-        return path.endsWith('.vtt');
+        return hasAnyExtension(path, ['.vtt']);
     }
 
     public static isAss(path: string): boolean {
-        if (StrUtil.isBlank(path)) {
-            return false;
-        }
-        return path.endsWith('.ass');
+        return hasAnyExtension(path, ['.ass']);
     }
 
     public static isSubtitle(path: string): boolean {
@@ -37,25 +38,16 @@ export default class MediaUtil {
     }
 
     public static supported(path: string): boolean {
-        if (StrUtil.isBlank(path)) {
-            return false;
-        }
-        return SupportedFormats.some(f => path.endsWith(f));
+        return hasAnyExtension(path, SupportedFormats);
     }
 
     public static isVideo(path: string): boolean {
-        if (StrUtil.isBlank(path)) {
-            return false;
-        }
         // SupportedVideoFormats and UnsupportedVideoFormats
-        return [...SupportedVideoFormats, ...UnsupportedVideoFormats].some(f => path.endsWith(f));
+        return hasAnyExtension(path, VideoFormats);
     }
 
     public static isAudio(path: string): boolean {
-        if (StrUtil.isBlank(path)) {
-            return false;
-        }
-        return SupportedAudioFormats.some(f => path.endsWith(f));
+        return hasAnyExtension(path, SupportedAudioFormats);
     }
 
     public static isMedia(path: string): boolean {

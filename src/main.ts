@@ -34,6 +34,7 @@ import {
     showAndFocusWindow,
 } from '@/backend/infrastructure/window/window-close-policy';
 import { storeGet } from '@/backend/infrastructure/settings/store';
+import { closeMainDatabase } from '@/backend/infrastructure/db';
 import type MobileAccessService from '@/backend/services/MobileAccessService';
 import type RendererEvents from '@/backend/services/gateways/renderer/RendererEvents';
 import { MEDIA_PROTOCOL_SCHEME, registerMediaProtocol } from '@/backend/infrastructure/media/MediaProtocol';
@@ -308,6 +309,19 @@ const createWindow = () => {
             hideWindowToTray(mainWindow);
         }
     });
+    mainWindow.on('closed', () => {
+        if (mainWindowRef.current === mainWindow) {
+            mainWindowRef.current = null;
+        }
+        // 无托盘状态下关闭主窗口即准备退出：同步销毁无父窗口的桌面歌词，防止进程常驻无法退出。
+        if (!isAppTrayActive() && shutdownPhase === 'idle') {
+            try {
+                container.get<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow).destroy();
+            } catch {
+                // 容器尚未就绪时忽略
+            }
+        }
+    });
     mainWindow.webContents.once('dom-ready', () => {
         logger.info('renderer dom ready', {
             durationMs: Math.round(performance.now() - startupStartedAt),
@@ -487,12 +501,22 @@ app.on('before-quit', (event) => {
                 logger.error('mobile access shutdown failed', { error });
             });
         void Promise.allSettled([embeddingShutdown, mobileAccessShutdown]).finally(() => {
+            try {
+                closeMainDatabase();
+            } catch (dbError) {
+                logger.error('main database close failed', { error: dbError });
+            }
             shutdownPhase = 'ready';
             app.quit();
         });
     } catch (error) {
         // 容器未初始化等同步异常也必须继续退出，否则应用会卡在“退不出”状态。
         logger.error('service shutdown failed', { error });
+        try {
+            closeMainDatabase();
+        } catch {
+            // 忽略数据库关闭异常
+        }
         shutdownPhase = 'ready';
         app.quit();
     }

@@ -313,7 +313,6 @@ const readJsonBody = (
                 // 不立刻 destroy 连接：让调用方能正常回一个 JSON 错误，浏览器也拿得到原因。
                 // 但要把剩余请求体快速排干并声明 Connection: close，否则攻击者以
                 // 每秒一字节滴注就能把每条连接挂满 Node 默认 300 秒 requestTimeout。
-                settled = true;
                 request.removeAllListeners('data');
                 request.resume();
                 response.setHeader('Connection', 'close');

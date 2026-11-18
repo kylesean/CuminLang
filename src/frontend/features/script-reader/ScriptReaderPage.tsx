@@ -722,24 +722,31 @@ export default function ScriptReaderPage() {
             return;
         }
         setIsSavingEdit(true);
+        const targetVideoId = activeDoc.videoId;
         try {
             const response = await playerApi.saveEditedSubtitle({
-                videoId: activeDoc.videoId,
+                videoId: targetVideoId,
                 ...(activeDoc.videoPath ? { videoPath: activeDoc.videoPath } : {}),
                 ...(activeDoc.srtFile ? { sourceSubtitlePath: activeDoc.srtFile } : {}),
                 oldFileHash: targetSentence.fileHash,
                 lines: nextLines,
             });
-            setSentences(response.srt.sentences);
             setDocuments((prev) => prev.map((d) => (
-                d.videoId === activeDoc.videoId
+                d.videoId === targetVideoId
                     ? { ...d, srtFile: response.srt.filePath, hasSubtitle: true }
                     : d
             )));
+            if (prevEffectiveVideoIdRef.current !== targetVideoId) {
+                return;
+            }
+            setSentences(response.srt.sentences);
             setEditingState(null);
-            void useSavedSentences.getState().loadForVideo(activeDoc.videoId).catch(() => undefined);
+            void useSavedSentences.getState().loadForVideo(targetVideoId).catch(() => undefined);
             toast.success(t('scriptReader.proofreadSaved', { defaultValue: '已校对并保存为 .edited.srt' }));
         } catch (error) {
+            if (prevEffectiveVideoIdRef.current !== targetVideoId) {
+                return;
+            }
             const message = error instanceof Error ? error.message : String(error);
             toast.error(t('scriptReader.proofreadFailed', { defaultValue: '保存校对失败: {{message}}', message }));
         } finally {

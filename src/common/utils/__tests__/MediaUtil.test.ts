@@ -16,3 +16,21 @@ describe('MediaUtil.formatDisplayTitle', () => {
         expect(MediaUtil.formatDisplayTitle(input)).toBe(expected);
     });
 });
+
+describe('MediaUtil 扩展名大小写不敏感', () => {
+    it.each([
+        ['movie.MP4', true, false, false, true],
+        ['movie.MKV', true, false, false, false],
+        ['podcast.MP3', false, true, false, true],
+        ['track.FLAC', false, true, false, true],
+        ['sub.SRT', false, false, true, true],
+        ['sub.VTT', false, false, true, true],
+        ['sub.ASS', false, false, true, true],
+    ])('%s -> video=%s audio=%s subtitle=%s supported=%s', (file, expectedVideo, expectedAudio, expectedSub, expectedSupported) => {
+        expect(MediaUtil.isVideo(file)).toBe(expectedVideo);
+        expect(MediaUtil.isAudio(file)).toBe(expectedAudio);
+        expect(MediaUtil.isSubtitle(file)).toBe(expectedSub);
+        expect(MediaUtil.isMedia(file)).toBe(expectedVideo || expectedAudio);
+        expect(MediaUtil.supported(file)).toBe(expectedSupported);
+    });
+});

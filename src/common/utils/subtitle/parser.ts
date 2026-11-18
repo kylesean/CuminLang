@@ -214,10 +214,10 @@ export function parseSrt(srtContent: Nullable<string>): SrtLine[] {
             return true;
         })
         .map(block => block
-            .replace(/{\w+}/g, '')
+            .replace(/{\\[^}]*}|{\w+}/g, '')
             .replace(/<\/?c[^>]*>/g, '')
             .replace(/<\/?v[^>]*>/g, '')
-        ); // 移除样式/WEBVTT 标签
+        ); // 移除样式/ASS/WEBVTT 标签
 
     const srtLines: SrtLine[] = [];
 

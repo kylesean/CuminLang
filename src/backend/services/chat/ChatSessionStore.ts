@@ -212,8 +212,8 @@ export class InMemoryChatSessionStore implements ChatSessionStore {
     }
 
     public finishRun(sessionId: string, runId: string): void {
-        const session = this.get(sessionId);
-        session.runs.delete(runId);
+        // 已关闭会话可能在在途流结束前被容量淘汰，静默忽略即可，避免 finally 抛未捕获异常。
+        this.sessions.get(sessionId)?.runs.delete(runId);
     }
 
     public stopRun(sessionId: string, runId: string): boolean {

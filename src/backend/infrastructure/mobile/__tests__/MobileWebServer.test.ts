@@ -277,4 +277,22 @@ describe('手机页的浏览器访问链路', () => {
         expect(videoResp.status).toBe(404);
         expect(thumbResp.status).toBe(404);
     });
+
+    it('请求体超过 16 KiB 时及时返回 413 JSON 而不挂起连接', async () => {
+        const oversizedBody = JSON.stringify({ texts: ['a'.repeat(20 * 1024)] });
+        const response = await fetch(`${baseUrl}/api/translate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CuminLang-Token': TEST_TOKEN,
+            },
+            body: oversizedBody,
+            signal: AbortSignal.timeout(2_000),
+        });
+
+        expect(response.status).toBe(413);
+        await expect(response.json()).resolves.toMatchObject({
+            error: expect.stringContaining('过大'),
+        });
+    });
 });

@@ -330,4 +330,66 @@ describe('ProsodySignalService', () => {
         await expect(service.invalidate(file)).resolves.toBe(1);
         expect(rows.size).toBe(0);
     });
+
+    it('并发调用 getShifts 共享同一次解码，不重复启动 ffmpeg 且不互相删掉临时 WAV', async () => {
+        const file = await setupVideo();
+        const { repository } = memoryRepository();
+        let releaseConvert!: () => void;
+        const convertGate = new Promise<void>((resolve) => {
+            releaseConvert = resolve;
+        });
+        const convertToWav = vi.fn(async (_input: string, output: string) => {
+            await convertGate;
+            await fs.writeFile(output, wav([1, -0.4, 1]));
+        });
+        const service = new ProsodySignalServiceImpl(
+            { convertToWav } as unknown as FfmpegService,
+            repository,
+            { provideDirectory: async () => tempDirectory! } as unknown as StorageDirectoryProvider,
+        );
+        const sentences = [
+            sentence(0, 0, 1, 'We should leave before the storm arrives.'),
+            sentence(1, 1.4, 2.4, 'The wind is getting stronger now.'),
+        ];
+
+        const firstPromise = service.getShifts(file, sentences);
+        const secondPromise = service.getShifts(file, sentences);
+        await vi.waitFor(() => expect(convertToWav).toHaveBeenCalledTimes(1));
+        releaseConvert();
+
+        const [first, second] = await Promise.all([firstPromise, secondPromise]);
+        expect(first).not.toBeNull();
+        expect(second).toEqual(first);
+        expect(convertToWav).toHaveBeenCalledTimes(1);
+    });
+
+    it('解码进行期间调用 invalidate 后，在途旧计算不得再把过期信号写回仓库', async () => {
+        const file = await setupVideo();
+        const { repository, rows } = memoryRepository();
+        let releaseConvert!: () => void;
+        const convertGate = new Promise<void>((resolve) => {
+            releaseConvert = resolve;
+        });
+        const convertToWav = vi.fn(async (_input: string, output: string) => {
+            await convertGate;
+            await fs.writeFile(output, wav([1, -0.4, 1]));
+        });
+        const service = new ProsodySignalServiceImpl(
+            { convertToWav } as unknown as FfmpegService,
+            repository,
+            { provideDirectory: async () => tempDirectory! } as unknown as StorageDirectoryProvider,
+        );
+        const sentences = [
+            sentence(0, 0, 1, 'We should leave before the storm arrives.'),
+            sentence(1, 1.4, 2.4, 'The wind is getting stronger now.'),
+        ];
+
+        const pending = service.getShifts(file, sentences);
+        await vi.waitFor(() => expect(convertToWav).toHaveBeenCalledTimes(1));
+        await service.invalidate(file);
+        releaseConvert();
+        await pending;
+
+        expect(rows.size).toBe(0);
+    });
 });

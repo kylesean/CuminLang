@@ -619,12 +619,10 @@ export class LocalEmbeddingRuntime {
         if (await this.isMultimodalReady()) {
             try {
                 await this.verifyModelIntegrity(LOCAL_EMBEDDING_MMPROJ, await this.mmprojPath());
+                args.push('--mmproj', await this.mmprojPath());
             } catch (error) {
                 this.logger.warn('embedding mmproj integrity check failed, skip multimodal', { error });
                 await fs.promises.rm(await this.mmprojPath(), { force: true }).catch(() => undefined);
-            }
-            if (await this.isMultimodalReady()) {
-                args.push('--mmproj', await this.mmprojPath());
             }
         }
         if (generation !== this.generation) {
@@ -632,7 +630,7 @@ export class LocalEmbeddingRuntime {
         }
         const child = spawn(runtimePath, args, {
             windowsHide: true,
-            stdio: ['ignore', 'ignore', 'pipe'],
+            stdio: ['ignore', 'ignore', 'ignore'],
             env: { ...process.env, LLAMA_API_KEY: this.apiKey },
         });
         this.child = child;

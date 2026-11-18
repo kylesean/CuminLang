@@ -122,7 +122,7 @@ const releaseSession = (fileHash: string | null): void => {
     if (!fileHash) {
         return;
     }
-    playerApi.releaseSubtitleTranslationSession(fileHash, rendererSessionId).catch((error) => {
+    Promise.resolve(playerApi.releaseSubtitleTranslationSession(fileHash, rendererSessionId)).catch((error) => {
         logger.error('release subtitle translation session failed', {
             fileHash,
             error,

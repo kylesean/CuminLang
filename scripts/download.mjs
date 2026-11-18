@@ -340,13 +340,17 @@ const downloadAndExtractBinaryFromArchive = async ({
  * （LocalAiRuntime.start）另有等价自愈，覆盖从不重跑下载脚本的安装。
  * @param {string} runtimeDir 运行时目录。
  */
-const ensureLlamaSonameAliases = (runtimeDir) => {
-    if (process.platform === 'win32' || process.platform === 'darwin') return;
+const ensureLlamaSonameAliases = (runtimeDir, targetPlatform = os.platform()) => {
+    if (targetPlatform === 'win32' || targetPlatform === 'darwin' || !fs.existsSync(runtimeDir)) return;
     for (const entry of fs.readdirSync(runtimeDir)) {
         const match = entry.match(/^(.+)\.so\.\d+\.\d+\.\d+$/);
         if (!match) continue;
         const alias = path.join(runtimeDir, `${match[1]}.so.0`);
-        if (fs.existsSync(alias)) continue;
+        const existing = fs.lstatSync(alias, { throwIfNoEntry: false });
+        if (existing) {
+            if (!existing.isSymbolicLink() || fs.existsSync(alias)) continue;
+            fs.unlinkSync(alias);
+        }
         fs.symlinkSync(entry, alias);
         console.info(chalk.green(`✅ runtime alias: ${match[1]}.so.0 -> ${entry}`));
     }
@@ -548,9 +552,6 @@ const llamaDependencyPrefixesFor = (platform) => platform === 'win32'
     // 动态链接器按 SONAME 查找）；Windows 的 DLL；macOS 另有 Metal 着色器。
     const extraCopyPatterns = platform === 'win32' ? [/\.dll$/] : [/\.dylib$/, /\.metal$/, /\.so(\.|$)/];
     const exePath = path.join(llamaDir, exeName);
-    // 官方包不再内含 .so.0 别名；无论是否需要重新下载都补一次（幂等），
-    // 存量安装（.complete 已存在）也能在重跑下载脚本时修复。
-    ensureLlamaSonameAliases(llamaDir);
     if (!isLlamaRuntimeReady(llamaDir, exeName, dependencyPrefixes)) {
         await downloadAndExtractBinaryFromArchive({
             url: `https://github.com/ggml-org/llama.cpp/releases/download/${llamaVersion}/${assetName}`,
@@ -567,6 +568,9 @@ const llamaDependencyPrefixesFor = (platform) => platform === 'win32'
         // 不在运行时侧复刻依赖库清单，避免两份清单漂移。
         fs.writeFileSync(path.join(llamaDir, '.complete'), `${llamaVersion}\n`);
     }
+    // 官方包不再内含 .so.0 别名；必须在下载/解压完成后执行，
+    // 兼顾全新安装与存量安装（.complete 已存在）的幂等补链。
+    ensureLlamaSonameAliases(llamaDir, platform);
 }
 
 /**

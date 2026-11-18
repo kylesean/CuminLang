@@ -777,4 +777,124 @@ describe('ScriptReaderPage - Refactored Book & Inspector Intensive Studio', () =
             expect(screen.queryByPlaceholderText('搜索文稿...')).toBeNull();
         });
     });
+
+    it('编辑文档 A 的保存请求迟到完成时，不得覆盖已切换到的文档 B 内容', async () => {
+        let resolveSave!: (value: unknown) => void;
+        mockSaveEditedSubtitle.mockImplementationOnce(
+            () => new Promise((resolve) => {
+                resolveSave = resolve;
+            }),
+        );
+        mockListReaderDocuments.mockResolvedValueOnce([
+            {
+                videoId: 'vid-a',
+                title: 'Doc A',
+                srtFile: '/tmp/a.srt',
+                videoPath: '/tmp/a.mp4',
+                updatedAt: '2026-11-17T00:00:00Z',
+                mediaType: 'video',
+                hasSubtitle: true,
+            },
+            {
+                videoId: 'vid-b',
+                title: 'Doc B',
+                srtFile: '/tmp/b.srt',
+                videoPath: '/tmp/b.mp4',
+                updatedAt: '2026-11-17T00:00:00Z',
+                mediaType: 'video',
+                hasSubtitle: true,
+            },
+        ]);
+        mockParseSubtitleToSentences.mockImplementation(async (params: { subtitlePath?: string }) => {
+            if (params?.subtitlePath === '/tmp/a.srt') {
+                return {
+                    fileHash: 'ha',
+                    sentences: [{
+                        fileHash: 'ha',
+                        index: 0,
+                        start: 1,
+                        end: 3,
+                        adjustedStart: null,
+                        adjustedEnd: null,
+                        text: 'Doc A original line.',
+                        textZH: 'A 译文',
+                        key: 'ka-0',
+                        transGroup: 1,
+                        translationKey: 'ha:0',
+                        struct: { original: '', blocks: [] },
+                    }],
+                };
+            }
+            return {
+                fileHash: 'hb',
+                sentences: [{
+                    fileHash: 'hb',
+                    index: 0,
+                    start: 1,
+                    end: 3,
+                    adjustedStart: null,
+                    adjustedEnd: null,
+                    text: 'Doc B untouched line.',
+                    textZH: 'B 译文',
+                    key: 'kb-0',
+                    transGroup: 1,
+                    translationKey: 'hb:0',
+                    struct: { original: '', blocks: [] },
+                }],
+            };
+        });
+
+        render(
+            <MemoryRouter initialEntries={['/reader']}>
+                <ScriptReaderPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('script-sentence-row-0').textContent).toContain('Doc A original line.');
+        });
+
+        fireEvent.click(screen.getByTestId('inspector-proofread-btn'));
+        const inlineEditor = await screen.findByTestId('script-inline-editor');
+        fireEvent.change(inlineEditor, { target: { value: 'Doc A edited line.' } });
+        fireEvent.keyDown(inlineEditor, { key: 'Enter' });
+
+        await waitFor(() => {
+            expect(resolveSave).toBeTypeOf('function');
+        });
+
+        fireEvent.click(screen.getByTestId('script-doc-switcher'));
+        fireEvent.click(await screen.findByText('Doc B'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('script-sentence-row-0').textContent).toContain('Doc B untouched line.');
+        });
+
+        resolveSave({
+            srt: {
+                filePath: '/tmp/a.edited.srt',
+                fileHash: 'ha-edited',
+                sentences: [{
+                    fileHash: 'ha-edited',
+                    index: 0,
+                    start: 1,
+                    end: 3,
+                    adjustedStart: null,
+                    adjustedEnd: null,
+                    text: 'Doc A edited line.',
+                    textZH: 'A 译文',
+                    key: 'ka-0',
+                    transGroup: 1,
+                    translationKey: 'ha-edited:0',
+                    struct: { original: '', blocks: [] },
+                }],
+            },
+            resolution: { origin: 'user_edited', subtitlePath: '/tmp/a.edited.srt', tracks: [] },
+        });
+
+        await waitFor(() => {
+            expect(screen.getByTestId('script-sentence-row-0').textContent).toContain('Doc B untouched line.');
+            expect(screen.getByTestId('script-sentence-row-0').textContent).not.toContain('Doc A edited line.');
+        });
+    });
 });

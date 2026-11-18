@@ -136,11 +136,13 @@ describe('MobileAccessService 生命周期串行化', () => {
                 getWatchDetail: (id: string) => Promise<unknown>;
                 resolveVideoFile: (id: string) => Promise<string>;
                 getThumbnail: (id: string) => Promise<string>;
+                saveProgress: (id: string, position: number) => Promise<void>;
             };
         }).createDataSource();
 
         await expect(dataSource.getWatchDetail('missing-id')).rejects.toMatchObject({ status: 404 });
         await expect(dataSource.resolveVideoFile('missing-id')).rejects.toMatchObject({ status: 404 });
         await expect(dataSource.getThumbnail('missing-id')).rejects.toMatchObject({ status: 404 });
+        await expect(dataSource.saveProgress('missing-id', 12)).rejects.toMatchObject({ status: 404 });
     });
 });

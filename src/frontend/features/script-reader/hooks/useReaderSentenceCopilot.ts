@@ -41,9 +41,11 @@ export function useReaderSentenceCopilot({
     const [cloudAvailable, setCloudAvailable] = useState(false);
     const [input, setInput] = useState('');
     const [attachedFocusExpr, setAttachedFocusExpr] = useState<string | null>(null);
+    const [resetNonce, setResetNonce] = useState(0);
     const sessionIdRef = useRef('');
     const epochRef = useRef(0);
     const hydratedSessionRef = useRef('');
+    const skipNextRestoreRef = useRef(false);
     const sentencesRef = useRef(allSentences);
     const sentenceTextRef = useRef(sentenceText);
 
@@ -101,14 +103,18 @@ export function useReaderSentenceCopilot({
 
         const initSession = async () => {
             try {
+                const skipRestore = skipNextRestoreRef.current;
+                skipNextRestoreRef.current = false;
                 const [available, studyNote] = await Promise.all([
                     Promise.resolve(chatApi.learningAvailable?.() ?? false).catch(() => false),
-                    Promise.resolve(
-                        chatApi.getStudyNote?.({
-                            fileHash: sentenceFileHash,
-                            sentenceIndex,
-                        }) ?? null,
-                    ).catch(() => null),
+                    skipRestore
+                        ? Promise.resolve(null)
+                        : Promise.resolve(
+                            chatApi.getStudyNote?.({
+                                fileHash: sentenceFileHash,
+                                sentenceIndex,
+                            }) ?? null,
+                        ).catch(() => null),
                 ]);
 
                 if (epochRef.current !== epoch) {
@@ -159,7 +165,7 @@ export function useReaderSentenceCopilot({
             epochRef.current += 1;
             closePrevious();
         };
-    }, [activeKey, videoId, sentenceFileHash, sentenceIndex]);
+    }, [activeKey, videoId, sentenceFileHash, sentenceIndex, resetNonce]);
 
     const dictation = useWhisperDictation({
         onTranscriptReady: useCallback((transcript: string) => {
@@ -185,6 +191,7 @@ export function useReaderSentenceCopilot({
     const clearConversation = useCallback(() => {
         if (isBusy) return;
         setMessages([]);
+        skipNextRestoreRef.current = true;
         if (videoId && sentenceFileHash && sentenceIndex !== null && sentenceText.trim()) {
             void chatApi.saveStudyNote?.({
                 sentenceKey: buildSentenceStudyKey(sentenceFileHash, sentenceIndex),
@@ -195,6 +202,7 @@ export function useReaderSentenceCopilot({
                 messages: [],
             }).catch(() => undefined);
         }
+        setResetNonce((prev) => prev + 1);
     }, [isBusy, sentenceFileHash, sentenceIndex, sentenceText, setMessages, videoId]);
 
     const messageViews = useMemo(

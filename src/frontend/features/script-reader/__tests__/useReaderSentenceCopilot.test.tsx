@@ -67,4 +67,46 @@ describe('useReaderSentenceCopilot', () => {
         expect(JSON.stringify(result.current.messageViews[1])).toContain('keep + doing');
         unmount();
     });
+
+    it('clearConversation 清空界面对话的同时关闭旧后端会话并重建空历史会话', async () => {
+        vi.mocked(chatApi.getStudyNote).mockResolvedValue({
+            messages: [
+                { id: 'm1', role: 'user', blocks: [{ kind: 'text', text: '旧问题' }] },
+                { id: 'm2', role: 'assistant', blocks: [{ kind: 'text', text: '旧回答' }] },
+            ],
+        } as never);
+        vi.mocked(chatApi.createSession)
+            .mockResolvedValueOnce({ sessionId: 'sess-old' } as never)
+            .mockResolvedValueOnce({ sessionId: 'sess-fresh' } as never);
+        const saveStudyNoteSpy = vi.fn(async () => ({}));
+        Object.assign(chatApi, { saveStudyNote: saveStudyNoteSpy });
+
+        const { result, unmount } = renderHook(() => useReaderSentenceCopilot({
+            videoId: 'vid-1',
+            activeSentence: sampleSentence,
+            focusedText: sampleSentence.text,
+            allSentences: [sampleSentence],
+        }));
+
+        await waitFor(() => {
+            expect(result.current.sessionReady).toBe(true);
+            expect(result.current.messageViews).toHaveLength(2);
+        });
+
+        result.current.clearConversation();
+
+        await waitFor(() => {
+            expect(result.current.messageViews).toHaveLength(0);
+            expect(chatApi.closeSession).toHaveBeenCalledWith('sess-old');
+            expect(chatApi.createSession).toHaveBeenCalledTimes(2);
+        });
+
+        expect(saveStudyNoteSpy).toHaveBeenCalledWith(expect.objectContaining({
+            messages: [],
+        }));
+        expect(vi.mocked(chatApi.createSession).mock.calls[1]?.[0]).toMatchObject({
+            restoredMessages: [],
+        });
+        unmount();
+    });
 });

@@ -291,9 +291,12 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
             // 但如果备份里的某个词正好与默认词表同形，必须先让位，否则会撞上 word 唯一约束；
             // 恢复后该词属于用户，而不是产品内置词。
             const restoreWords = snapshot.words.map((word) => word.word.toLowerCase());
-            tx.delete(words).where(restoreWords.length > 0
-                ? or(ne(words.source, 'default'), inArray(sql`lower(${words.word})`, restoreWords))
-                : ne(words.source, 'default')).run();
+            tx.delete(words).where(ne(words.source, 'default')).run();
+            if (restoreWords.length > 0) {
+                inChunks(restoreWords, RESTORE_BATCH_ROWS, (chunk) => {
+                    tx.delete(words).where(inArray(sql`lower(${words.word})`, chunk)).run();
+                });
+            }
 
             for (const word of snapshot.words) {
                 tx.insert(words).values({

@@ -250,6 +250,7 @@ export class ChatSessionServiceImpl implements ChatSessionService {
         let chunkCount = 0;
         let content = '';
         let aborted = false;
+        let hasErrorChunk = false;
         let hasOutput = false;
         let streamStarted = alreadyStarted;
         let shouldFallbackWithoutTools = false;
@@ -282,6 +283,7 @@ export class ChatSessionServiceImpl implements ChatSessionService {
                         });
                         break;
                     }
+                    hasErrorChunk = true;
                 } else if (chunk.type === 'text-delta') {
                     hasOutput = true;
                     content += chunk.delta;
@@ -357,7 +359,7 @@ export class ChatSessionServiceImpl implements ChatSessionService {
         if (shouldFallbackWithoutTools) {
             return this.runStream(sessionId, messageId, model, messages, abortSignal, personaPrompt, false, streamStarted);
         }
-        if (!aborted && !abortSignal.aborted) {
+        if (!aborted && !hasErrorChunk && !abortSignal.aborted) {
             this.chatSessionStore.appendMessage(sessionId, { role: 'assistant', content });
             this.chatSessionStore.appendPersistedMessage(sessionId, {
                 id: messageId,

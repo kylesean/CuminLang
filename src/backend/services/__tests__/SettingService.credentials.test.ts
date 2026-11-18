@@ -160,6 +160,33 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         expect(selection.providers.embeddingEngine).toBe('openai');
         expect(selection.openai.featureModels.sentenceLearning).toBe('gpt-4o-mini');
     });
+
+    it('providerKeys 读取为空（含密文暂时无法解密场景）且未显式改动密钥时，写入空串而非 "{}" 以免覆盖磁盘密文', async () => {
+        const emptyKeysStore = createStore({
+            'apiKeys.openAi.key': '',
+            'apiKeys.openAi.providerKeys': '',
+        });
+        const svc = createService(emptyKeysStore);
+
+        await svc.saveServiceCredentials({
+            openai: {
+                endpoint: 'https://api.example.com/v1',
+                apiFormat: 'openai',
+                models: ['gpt-4o-mini'],
+                activeProviderId: 'openai',
+                providers: [{
+                    id: 'openai',
+                    name: 'OpenAI',
+                    apiFormat: 'openai',
+                    endpoint: 'https://api.example.com/v1',
+                    models: ['gpt-4o-mini'],
+                }],
+            },
+            tencent: {},
+        });
+
+        expect(emptyKeysStore.values.get('apiKeys.openAi.providerKeys')).toBe('');
+    });
 });
 
 describe('代理设置校验与落盘', () => {

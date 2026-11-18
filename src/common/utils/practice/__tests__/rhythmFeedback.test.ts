@@ -270,4 +270,32 @@ describe('buildRhythmFeedback', () => {
 
         expect(feedback?.notes).not.toContain('syllables-more');
     });
+
+    it('口语缩读（gonna 等）展开后后续词的时间戳与能量不发生一格错位', () => {
+        const samples: number[] = [];
+        fill(samples, 0.2, 2000); // i
+        fill(samples, 0.2, 2000); // am
+        fill(samples, 0.4, 4000); // gonna -> going + to
+        fill(samples, 0.3, 14000); // go (loudest)
+        const pcm = decodePcm16Wav(buildWav(samples));
+
+        const feedback = buildRhythmFeedback({
+            expectedText: 'i am going to go',
+            transcript: 'i am gonna go',
+            tokens: tokensFor([
+                { word: 'i', start: 0, end: 0.2 },
+                { word: 'am', start: 0.2, end: 0.4 },
+                { word: 'gonna', start: 0.4, end: 0.8 },
+                { word: 'go', start: 0.8, end: 1.1 },
+            ]),
+            pcm: pcm!,
+            referenceDurationSec: 1.1,
+        });
+
+        expect(feedback).not.toBeNull();
+        expect(feedback?.words.map((word) => word.word)).toEqual(['i', 'am', 'going', 'to', 'go']);
+        const goWord = feedback?.words[4];
+        expect(goWord?.durationSec).toBeCloseTo(0.3, 1);
+        expect(goWord?.emphasis).toBe(1);
+    });
 });

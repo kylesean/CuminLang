@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { inject, injectable } from 'inversify';
 
 import { getMainLogger } from '@/backend/infrastructure/logger';
@@ -76,7 +76,8 @@ export default interface ProsodySignalService {
 @injectable()
 export class ProsodySignalServiceImpl implements ProsodySignalService {
     private readonly logger = getMainLogger('ProsodySignalService');
-    private readonly inFlight = new Map<string, Promise<ProsodyShift[] | null>>();
+    private readonly inFlight = new Map<string, Promise<ProsodyPayload | null>>();
+    private readonly invalidatedEpoch = new Map<string, number>();
 
     public constructor(
         @inject(TYPES.FfmpegService) private readonly ffmpegService: FfmpegService,
@@ -92,39 +93,13 @@ export class ProsodySignalServiceImpl implements ProsodySignalService {
         if (sentences.length < 2) {
             return [];
         }
-        const inputHash = await videoInputHash(videoPath);
-        if (!inputHash) {
-            return null;
-        }
-        try {
-            const cached = await this.repository.find(videoPath, PROSODY_SIGNAL_KIND, PROSODY_SIGNAL_VERSION);
-            if (cached && cached.input_hash === inputHash) {
-                const payload = parsePayload(cached.payload_json);
-                if (payload) {
-                    return shiftsFromPayload(payload, sentences);
-                }
-                this.logger.warn('prosody payload invalid, recomputing', { videoPath });
-            }
-        } catch (error) {
-            this.logger.warn('prosody signal read skipped', {
-                error: error instanceof Error ? error.message : String(error),
-            });
-        }
-
-        const existing = this.inFlight.get(videoPath);
-        if (existing) {
-            return existing;
-        }
-        const task = this.compute(videoPath, inputHash, sentences);
-        this.inFlight.set(videoPath, task);
-        try {
-            return await task;
-        } finally {
-            this.inFlight.delete(videoPath);
-        }
+        const payload = await this.loadOrComputePayload(videoPath);
+        return payload ? shiftsFromPayload(payload, sentences) : null;
     }
 
     public async invalidate(videoPath: string): Promise<number> {
+        this.invalidatedEpoch.set(videoPath, (this.invalidatedEpoch.get(videoPath) ?? 0) + 1);
+        this.inFlight.delete(videoPath);
         try {
             return await this.repository.deleteByVideo(videoPath);
         } catch (error) {
@@ -135,21 +110,60 @@ export class ProsodySignalServiceImpl implements ProsodySignalService {
         }
     }
 
+    private async loadOrComputePayload(videoPath: string): Promise<ProsodyPayload | null> {
+        const existing = this.inFlight.get(videoPath);
+        if (existing) {
+            return existing;
+        }
+        const task = this.resolvePayload(videoPath);
+        this.inFlight.set(videoPath, task);
+        try {
+            return await task;
+        } finally {
+            if (this.inFlight.get(videoPath) === task) {
+                this.inFlight.delete(videoPath);
+            }
+        }
+    }
+
+    private async resolvePayload(videoPath: string): Promise<ProsodyPayload | null> {
+        const epoch = this.invalidatedEpoch.get(videoPath) ?? 0;
+        const inputHash = await videoInputHash(videoPath);
+        if (!inputHash) {
+            return null;
+        }
+        try {
+            const cached = await this.repository.find(videoPath, PROSODY_SIGNAL_KIND, PROSODY_SIGNAL_VERSION);
+            if (cached && cached.input_hash === inputHash) {
+                const payload = parsePayload(cached.payload_json);
+                if (payload) {
+                    return payload;
+                }
+                this.logger.warn('prosody payload invalid, recomputing', { videoPath });
+            }
+        } catch (error) {
+            this.logger.warn('prosody signal read skipped', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+        return this.computePayload(videoPath, inputHash, epoch);
+    }
+
     /**
-     * 执行一次解码 + 包络 + 突变检测，并持久化包络。
+     * 执行一次解码 + 包络，并持久化包络。
      *
      * 任何失败都返回 `null`：韵律是场景提示的增强信号，缺音轨或解码失败
      * 不应该让播放页报错。
      */
-    private async compute(
+    private async computePayload(
         videoPath: string,
         inputHash: string,
-        sentences: readonly SceneSentence[],
-    ): Promise<ProsodyShift[] | null> {
+        epoch: number,
+    ): Promise<ProsodyPayload | null> {
         const tempDirectory = await this.directories.provideDirectory(StorageDirectoryTarget.TEMP);
         const wavPath = path.join(
             tempDirectory,
-            `prosody-${createHash('sha1').update(videoPath).digest('hex')}.wav`,
+            `prosody-${createHash('sha1').update(videoPath).digest('hex')}-${randomUUID()}.wav`,
         );
         try {
             await this.ffmpegService.convertToWav(videoPath, wavPath);
@@ -158,7 +172,9 @@ export class ProsodySignalServiceImpl implements ProsodySignalService {
                 return null;
             }
             const payload: ProsodyPayload = { frameSec: PROSODY_ENVELOPE_SEC, envelope };
-            const shifts = shiftsFromPayload(payload, sentences);
+            if ((this.invalidatedEpoch.get(videoPath) ?? 0) !== epoch) {
+                return null;
+            }
             try {
                 await this.repository.upsert({
                     videoId: videoPath,
@@ -173,7 +189,7 @@ export class ProsodySignalServiceImpl implements ProsodySignalService {
                     error: error instanceof Error ? error.message : String(error),
                 });
             }
-            return shifts;
+            return payload;
         } catch (error) {
             this.logger.warn('prosody signal skipped', {
                 videoPath,

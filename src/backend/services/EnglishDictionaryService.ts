@@ -1,10 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import https from 'node:https';
-import type { ClientRequest } from 'node:http';
 import zlib from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { Worker } from 'node:worker_threads';
 import { extract as tarExtract } from 'tar-fs';
@@ -60,7 +59,8 @@ export default class EnglishDictionaryService {
     private downloading = false;
     private downloadedBytes = 0;
     private lastError: string | null = null;
-    private activeRequest: ClientRequest | null = null;
+    private activeAbort: AbortController | null = null;
+    private activeRunPromise: Promise<void> | null = null;
     private activeTaskId: number | null = null;
     private readonly cancelledTasks = new Set<number>();
     private db: Database.Database | null = null;
@@ -105,11 +105,11 @@ export default class EnglishDictionaryService {
             cancel: () => {
                 if (this.activeTaskId === taskId) {
                     this.cancelledTasks.add(taskId);
-                    this.abortActiveRequest(new Error('cancelled'));
+                    this.abortActiveRequest(new CancelByUserError('任务已取消'));
                 }
             },
         });
-        void this.run(taskId);
+        this.activeRunPromise = this.run(taskId);
         return taskId;
     }
 
@@ -124,11 +124,27 @@ export default class EnglishDictionaryService {
         }
         this.cancelledTasks.add(taskId);
         this.dpTaskService.cancel(taskId);
-        this.abortActiveRequest(new Error('cancelled'));
+        this.abortActiveRequest(new CancelByUserError('任务已取消'));
     }
 
-    /** 删除已安装的增强包。 */
-    public remove(): void {
+    /** 删除已安装的增强包；若有在途安装任务则先取消并等待其收尾再清理目录。 */
+    public remove(): Promise<void> {
+        const inflight = this.activeRunPromise;
+        if (inflight) {
+            if (this.activeTaskId !== null) {
+                this.cancel(this.activeTaskId);
+            } else {
+                this.abortActiveRequest(new CancelByUserError('任务已取消'));
+            }
+            return inflight.catch(() => undefined).then(() => {
+                this.cleanupInstalledDirectory();
+            });
+        }
+        this.cleanupInstalledDirectory();
+        return Promise.resolve();
+    }
+
+    private cleanupInstalledDirectory(): void {
         this.closeDb();
         fs.rmSync(path.join(this.installRoot(), INSTALL_DIRECTORY), { recursive: true, force: true });
         this.downloadedBytes = 0;
@@ -184,8 +200,8 @@ export default class EnglishDictionaryService {
 
     /** 终止当前下载请求。 */
     private abortActiveRequest(error: Error): void {
-        this.activeRequest?.destroy(error);
-        this.activeRequest = null;
+        this.activeAbort?.abort(error);
+        this.activeAbort = null;
     }
 
     /** 安装任务主体。 */
@@ -238,7 +254,8 @@ export default class EnglishDictionaryService {
             this.dpTaskService.fail(taskId, { progress: '英英释义包安装失败', result: message });
         } finally {
             this.downloading = false;
-            this.activeRequest = null;
+            this.activeAbort = null;
+            this.activeRunPromise = null;
             this.activeTaskId = null;
             this.cancelledTasks.delete(taskId);
             try {
@@ -249,48 +266,35 @@ export default class EnglishDictionaryService {
         }
     }
 
-    /** 下载归档并回报进度。 */
-    private download(taskId: number, dest: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const request = (url: string, redirects: number): void => {
-                if (redirects > 5) {
-                    reject(new Error('下载重定向次数过多'));
-                    return;
-                }
-                const req = https.get(url, { headers: { 'User-Agent': 'CuminLang-dictionary-enhancement' } }, (res) => {
-                    if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                        res.resume();
-                        request(new URL(res.headers.location, url).toString(), redirects + 1);
-                        return;
-                    }
-                    if (res.statusCode !== 200) {
-                        res.resume();
-                        reject(new Error(`下载失败 HTTP ${res.statusCode}`));
-                        return;
-                    }
-                    const total = Number(res.headers['content-length'] ?? 0) || SOURCE_BYTES;
-                    let received = 0;
-                    let lastPercent = -1;
-                    const out = fs.createWriteStream(dest);
-                    res.on('data', (chunk: Buffer) => {
-                        received += chunk.length;
-                        this.downloadedBytes = received;
-                        const percent = Math.min(99, Math.floor((received / total) * 100));
-                        if (percent !== lastPercent) {
-                            lastPercent = percent;
-                            this.dpTaskService.process(taskId, { progress: `下载中 ${percent}%` });
-                        }
-                    });
-                    res.pipe(out);
-                    out.on('finish', () => resolve());
-                    out.on('error', reject);
-                    res.on('error', reject);
-                });
-                this.activeRequest = req;
-                req.on('error', reject);
-            };
-            request(SOURCE_URL, 0);
+    /** 下载归档并回报进度（走全局 fetch / ProxyService 代理链路）。 */
+    private async download(taskId: number, dest: string): Promise<void> {
+        const controller = new AbortController();
+        this.activeAbort = controller;
+        const response = await fetch(SOURCE_URL, {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'CuminLang-dictionary-enhancement' },
         });
+        if (!response.ok || !response.body) {
+            await response.body?.cancel();
+            throw new Error(`下载失败 HTTP ${response.status}`);
+        }
+        const total = Number(response.headers.get('content-length') ?? 0) || SOURCE_BYTES;
+        let received = 0;
+        let lastPercent = -1;
+        const bodyStream = Readable.fromWeb(
+            response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>,
+        );
+        bodyStream.on('data', (chunk: Buffer) => {
+            received += chunk.length;
+            this.downloadedBytes = received;
+            const percent = Math.min(99, Math.floor((received / total) * 100));
+            if (percent !== lastPercent) {
+                lastPercent = percent;
+                this.dpTaskService.process(taskId, { progress: `下载中 ${percent}%` });
+            }
+        });
+        const out = fs.createWriteStream(dest);
+        await pipeline(bodyStream, out, { signal: controller.signal });
     }
 
     /** 计算文件 sha256。 */
@@ -333,15 +337,27 @@ export default class EnglishDictionaryService {
             const finishWithError = (error: Error): void => {
                 if (settled) return;
                 settled = true;
-                fs.rmSync(dbPath, { force: true });
+                clearInterval(cancelCheckTimer);
+                try {
+                    fs.rmSync(dbPath, { force: true });
+                } catch {
+                    // ignore cleanup failures on locked db file
+                }
+                reject(error);
+            };
+
+            const terminateAndFail = async (error: Error): Promise<void> => {
+                if (settled) return;
+                settled = true;
+                clearInterval(cancelCheckTimer);
+                await worker.terminate().catch(() => undefined);
+                await fs.promises.rm(dbPath, { force: true }).catch(() => undefined);
                 reject(error);
             };
 
             const cancelCheckTimer = setInterval(() => {
                 if (this.cancelledTasks.has(taskId)) {
-                    clearInterval(cancelCheckTimer);
-                    void worker.terminate();
-                    finishWithError(new CancelByUserError('任务已取消'));
+                    void terminateAndFail(new CancelByUserError('任务已取消'));
                 }
             }, 250);
 
@@ -350,9 +366,7 @@ export default class EnglishDictionaryService {
                     try {
                         this.dpTaskService.checkCancel(taskId);
                     } catch (err) {
-                        clearInterval(cancelCheckTimer);
-                        void worker.terminate();
-                        finishWithError(err instanceof Error ? err : new CancelByUserError('任务已取消'));
+                        void terminateAndFail(err instanceof Error ? err : new CancelByUserError('任务已取消'));
                         return;
                     }
                     this.dpTaskService.process(taskId, { progress: `解析 ${msg.file}…` });

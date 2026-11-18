@@ -1,8 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import {
+    assertSubtitlePath,
     assertVocabularyPath,
     MAX_VOCABULARY_FILE_SIZE_BYTES,
 } from '@/backend/utils/file-path-guard';
+
+describe('字幕文件路径校验', () => {
+    it.each([
+        '/tmp/movie.srt',
+        '/tmp/movie.vtt',
+        '/tmp/movie.ass',
+        '/tmp/movie.SRT',
+        '/tmp/movie.ASS',
+    ])('接受支持的字幕格式 %s', (filePath) => {
+        expect(() => assertSubtitlePath(filePath)).not.toThrow();
+    });
+
+    it.each([
+        '/tmp/movie.txt',
+        '/tmp/movie.srt.exe',
+        '/tmp/movie',
+    ])('拒绝非字幕文件 %s', (filePath) => {
+        expect(() => assertSubtitlePath(filePath)).toThrow();
+    });
+});
 
 describe('词汇表文件路径校验', () => {
     it('接受 .xlsx 与 .csv', () => {

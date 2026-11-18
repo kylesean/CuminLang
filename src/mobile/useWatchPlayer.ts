@@ -238,18 +238,22 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
      *
      * @param force 是否忽略 5 秒间隔立即写入。
      */
-    const saveProgress = React.useCallback((force: boolean): void => {
-        const video = videoRef.current;
-        if (!video || !resumeDoneRef.current) {
+    const saveProgress = React.useCallback((force: boolean, targetVideo?: HTMLVideoElement | null): void => {
+        if (!resumeDoneRef.current) {
             return;
         }
-        const second = Math.max(0, Math.floor(video.currentTime || 0));
+        const video = targetVideo ?? videoRef.current;
+        const currentTime = video ? video.currentTime : positionStore.channel.getSnapshot();
+        if (!video && currentTime <= 0 && lastSavedRef.current < 0) {
+            return;
+        }
+        const second = Math.max(0, Math.floor(currentTime || 0));
         if (!force && lastSavedRef.current >= 0 && Math.abs(second - lastSavedRef.current) < 5) {
             return;
         }
         lastSavedRef.current = second;
         void mobileApi.saveProgress(detail.id, second, force).catch(() => undefined);
-    }, [detail.id]);
+    }, [detail.id, positionStore]);
 
     /** Virtuoso 的滚动容器引用；它的实际 DOM 类型是 HTMLElement。 */
     const handleScrollerRef = React.useCallback((ref: HTMLElement | Window | null): void => {
@@ -1032,7 +1036,7 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         // 进入播放页时把 video 节点固定下来：cleanup 里不再读可能已经变化的 ref。
         const video = videoRef.current;
         return () => {
-            saveProgress(true);
+            saveProgress(true, video);
             if (video) {
                 try {
                     video.pause();

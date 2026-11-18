@@ -8,6 +8,16 @@ import { useTrainingModeStore } from '@/frontend/features/player/trainingStore';
 import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 import PracticePanel from '@/frontend/features/practice/PracticePanel';
 
+const mockSentenceHistory = {
+    value: [] as Array<{
+        id: number;
+        mode: 'shadowing' | 'dictation';
+        score: number;
+        audioPath: string | null;
+        createdAt: string;
+    }>,
+};
+
 const mockAsrReady = { value: true };
 const mockFileSummaries = {
     value: [
@@ -89,7 +99,7 @@ vi.mock('swr', () => ({
             return { data: mockFileSummaries.value, mutate: vi.fn() };
         }
         if (Array.isArray(key) && String(key[0]).includes('practice/list-by-sentence')) {
-            return { data: [], mutate: vi.fn() };
+            return { data: mockSentenceHistory.value, mutate: vi.fn() };
         }
         return { data: { transcription: { ready: mockAsrReady.value } }, mutate: vi.fn() };
     },
@@ -368,5 +378,87 @@ describe('PracticeDock 重构工坊核心交互', () => {
         act(() => {
             useWordPopoverStore.setState({ open: false });
         });
+    });
+
+    it('词槽听写空格跳过后再回退到原空槽，仍能再次按空格跳往下一槽', async () => {
+        render(<PracticePanel />);
+
+        const input0 = screen.getByLabelText('dictation.placeholder') as HTMLInputElement;
+        fireEvent.keyDown(input0, { key: ' ' });
+
+        const input1 = await waitFor(() => {
+            const el = screen.getByLabelText('dictation.placeholder') as HTMLInputElement;
+            expect(el).not.toBe(input0);
+            return el;
+        });
+
+        fireEvent.keyDown(input1, { key: 'Backspace' });
+        const backTo0 = await waitFor(() => {
+            const el = screen.getByLabelText('dictation.placeholder') as HTMLInputElement;
+            expect(el).not.toBe(input1);
+            return el;
+        });
+
+        fireEvent.keyDown(backTo0, { key: ' ' });
+        await waitFor(() => {
+            const advancedAgain = screen.getByLabelText('dictation.placeholder') as HTMLInputElement;
+            expect(advancedAgain).not.toBe(backTo0);
+        });
+    });
+
+    it('历史录音回放中途切句或关闭练习工作台时必须释放 AudioContext', async () => {
+        const closeMock = vi.fn().mockResolvedValue(undefined);
+        const disconnectMock = vi.fn();
+        const audioPlayMock = vi.fn().mockResolvedValue(undefined);
+        const audioPauseMock = vi.fn();
+        class FakeAudioContext {
+            state = 'running';
+            destination = {};
+            close = closeMock;
+            resume = vi.fn().mockResolvedValue(undefined);
+            createMediaElementSource = () => ({ connect: vi.fn(), disconnect: disconnectMock });
+            createGain = () => ({ gain: { value: 1 }, connect: vi.fn(), disconnect: disconnectMock });
+            createDynamicsCompressor = () => ({
+                threshold: { value: 0 },
+                knee: { value: 0 },
+                ratio: { value: 0 },
+                attack: { value: 0 },
+                release: { value: 0 },
+                connect: vi.fn(),
+                disconnect: disconnectMock,
+            });
+        }
+        vi.stubGlobal('AudioContext', FakeAudioContext);
+        vi.stubGlobal('Audio', class FakeAudio {
+            volume = 1;
+            onended: (() => void) | null = null;
+            play = audioPlayMock;
+            pause = audioPauseMock;
+        });
+        mockSentenceHistory.value = [{
+            id: 1,
+            mode: 'shadowing',
+            score: 88,
+            audioPath: '/tmp/recording-1.wav',
+            createdAt: '2026-11-18 10:00:00',
+        }];
+
+        try {
+            render(<PracticePanel />);
+            fireEvent.click(screen.getByLabelText('result.history 1'));
+            fireEvent.click(await screen.findByLabelText('result.playMine'));
+            expect(audioPlayMock).toHaveBeenCalledTimes(1);
+
+            act(() => {
+                usePracticePanel.setState({ visible: false });
+            });
+
+            await waitFor(() => {
+                expect(closeMock).toHaveBeenCalledTimes(1);
+            });
+        } finally {
+            mockSentenceHistory.value = [];
+            vi.unstubAllGlobals();
+        }
     });
 });

@@ -121,4 +121,64 @@ describe('AudioPlayer epoch preemption', () => {
             spy.mockRestore();
         }
     });
+
+    it('playContextAudio 在原声片段加载失败时自动回退到 TTS 播放并返回 tts', async () => {
+        const fakeMedia = {
+            preload: '',
+            muted: false,
+            volume: 1,
+            playbackRate: 1,
+            currentTime: 0,
+            src: '',
+            listeners: new Map<string, Set<() => void>>(),
+            setAttribute: vi.fn(),
+            removeAttribute: vi.fn(),
+            load: vi.fn(),
+            pause: vi.fn(),
+            play: vi.fn().mockResolvedValue(undefined),
+            addEventListener(type: string, fn: () => void) {
+                if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+                this.listeners.get(type)!.add(fn);
+            },
+            removeEventListener(type: string, fn: () => void) {
+                this.listeners.get(type)?.delete(fn);
+            },
+            emit(type: string) {
+                this.listeners.get(type)?.forEach((fn) => fn());
+            },
+        };
+
+        const origCreateElement = document.createElement.bind(document);
+        const spy = vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => (
+            tag === 'video' ? (fakeMedia as unknown as HTMLVideoElement) : origCreateElement(tag)
+        )) as typeof document.createElement);
+        vi.mocked(backendClient.call).mockResolvedValueOnce('https://example.invalid/tts/hello.mp3');
+
+        try {
+            const pending = playContextAudio({
+                text: 'hello',
+                videoPath: '/videos/test.mp4',
+                startTime: 1,
+                endTime: 3,
+            });
+            fakeMedia.emit('error');
+            const source = await pending;
+
+            expect(source).toBe('tts');
+            expect(audioPlayMock).toHaveBeenCalledTimes(1);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it('playContextAudio 在 TTS Audio 播放失败时仍保留原代次并回退到 speechSynthesis', async () => {
+        vi.mocked(backendClient.call).mockResolvedValueOnce('https://example.invalid/tts/fallback.mp3');
+        audioPlayMock.mockRejectedValueOnce(new Error('NotAllowedError'));
+
+        const source = await playContextAudio({ text: 'fallback' });
+
+        expect(source).toBe('tts');
+        expect(audioPlayMock).toHaveBeenCalledTimes(1);
+        expect(speakMock).toHaveBeenCalledTimes(1);
+    });
 });

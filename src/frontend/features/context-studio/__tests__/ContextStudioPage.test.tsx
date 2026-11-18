@@ -488,4 +488,76 @@ describe('ContextStudioPage - Three-column workspace (Words & Sentences)', () =>
         fireEvent.keyDown(window, { key: '3' });
         expect(await screen.findByText('本轮金句表达回忆完成')).toBeDefined();
     });
+
+    it('直达 /context-studio?view=review 时等待资产加载完成后正确呈现待复习卡片', async () => {
+        let resolveQueue!: (value: Awaited<ReturnType<typeof mockGetReviewQueue>>) => void;
+        mockGetReviewQueue.mockImplementationOnce(
+            () => new Promise((resolve) => {
+                resolveQueue = resolve;
+            }),
+        );
+
+        render(
+            <MemoryRouter initialEntries={['/context-studio?view=review']}>
+                <ContextStudioPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(resolveQueue).toBeTypeOf('function');
+        });
+        expect(screen.queryByText('今日待复习已全部清零')).toBeNull();
+
+        resolveQueue({
+            items: [
+                {
+                    id: 1,
+                    word: 'serendipity',
+                    translate: 'n. 机缘巧合',
+                    status: 'learning',
+                    mastery: 0.2,
+                    confidence: 0.5,
+                    schedule: {
+                        dueAt: '2026-11-12T00:00:00Z',
+                        state: 'learning',
+                        reps: 1,
+                        lapses: 0,
+                        stability: 1.5,
+                        difficulty: 5,
+                        lastReviewAt: null,
+                        lastRating: null,
+                    },
+                    context: null,
+                },
+            ],
+            dueCount: 1,
+            nextDueAt: null,
+            stats: { last7Days: { reviewed: 0, retention: null }, last30Days: { reviewed: 0, retention: null } },
+        });
+
+        expect(await screen.findByText('serendipity')).toBeDefined();
+        expect(screen.queryByText('今日待复习已全部清零')).toBeNull();
+    });
+
+    it('工作台删除或标熟待复习单词后同步更新待复习计数与今日训练队列', async () => {
+        render(
+            <MemoryRouter>
+                <ContextStudioPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { name: 'serendipity' })).toBeDefined();
+        });
+        expect(screen.getByRole('radio', { name: /今日训练 \(1\)/i })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: '移除词条' }));
+        await waitFor(() => {
+            expect(screen.queryByRole('heading', { name: 'serendipity' })).toBeNull();
+        });
+
+        expect(screen.getByRole('radio', { name: '今日训练' })).toBeDefined();
+        fireEvent.click(screen.getByRole('radio', { name: '今日训练' }));
+        expect(await screen.findByText('今日待复习已全部清零')).toBeDefined();
+    });
 });

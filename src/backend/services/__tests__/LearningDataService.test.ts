@@ -636,6 +636,44 @@ describe('LearningDataService 导出与清除', () => {
         }
     });
 
+    it('恢复超过 999 个词汇时分批删除同名冲突词不会触发 SQLite 参数上限', async () => {
+        memoryDb = createMemoryDb();
+        const { service, repository } = buildService(memoryDb);
+        const bulkWords = Array.from({ length: 1200 }, (_, index) => ({
+            word: `word-${index}`,
+            translate: `词义-${index}`,
+            status: 'learning' as const,
+            source: 'default' as const,
+        }));
+        await seedWords(memoryDb, bulkWords);
+
+        const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dashplayer-learning-restore-words-'));
+        const filePath = path.join(directory, 'backup-words.json');
+        try {
+            const snapshot = await service.buildExport();
+            const nowIso = new Date().toISOString();
+            snapshot.words = bulkWords.map((item) => ({
+                word: item.word,
+                translate: `恢复-${item.translate}`,
+                status: 'known' as const,
+                source: 'manual' as const,
+                mastery: 0.9,
+                confidence: 0.9,
+                lastSeenAt: null,
+                masteredAt: nowIso,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+            }));
+            await fs.writeFile(filePath, JSON.stringify(snapshot), 'utf8');
+            const imported = await service.importFromJson(filePath);
+            expect(imported.success).toBe(true);
+            expect(imported.wordsRestored).toBe(1200);
+            expect((await repository.listUserWords())).toHaveLength(1200);
+        } finally {
+            await fs.rm(directory, { recursive: true, force: true });
+        }
+    });
+
     it('导出携带原始 mastery 证据值，备份往返不产生衰减复利', async () => {
         memoryDb = createMemoryDb();
         const { service, repository } = buildService(memoryDb);

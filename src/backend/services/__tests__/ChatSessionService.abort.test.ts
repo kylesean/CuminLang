@@ -133,4 +133,112 @@ describe('ChatSessionService 中止与关闭竞态', () => {
 
         expect(chunks.some((item) => item.chunk.type === 'error')).toBe(false);
     });
+
+    it('流式返回 error chunk 时不把空助手轮次写入会话历史与持久化记录', async () => {
+        const mockFetch: typeof fetch = async () => new Response(
+            JSON.stringify({ error: { message: 'bad request: invalid prompt' } }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+
+        const chunks: Array<{ sessionId: string; chunk: UIMessageChunk }> = [];
+        const store = new InMemoryChatSessionStore();
+        const session = store.create({
+            videoId: 'v1',
+            originalTopic: 'Yes.',
+            paragraphLines: ['Yes.'],
+            subtitleFileHash: 'h1',
+            anchorSentenceIndex: 0,
+        });
+        const rendererGateway = {
+            fireAndForget: vi.fn((_event: string, payload: { sessionId: string; chunk: UIMessageChunk }) => {
+                chunks.push(payload);
+            }),
+            call: vi.fn(),
+        } as unknown as RendererGateway;
+        const persistSpy = vi.fn(async () => undefined);
+
+        const model = createOpenAI({
+            baseURL: 'https://mock.abort.local/v1',
+            apiKey: 'test-key',
+            fetch: mockFetch,
+        }).chat('gpt-4o');
+
+        const service = new ChatSessionServiceImpl(
+            { getModel: vi.fn().mockReturnValue(model) } as unknown as AiProviderService,
+            rendererGateway,
+            store,
+            { get: vi.fn().mockReturnValue(null) } as unknown as CacheService,
+            { saveMessages: persistSpy } as never,
+        );
+
+        await service.sendMessage({ sessionId: session.id, content: 'hello' });
+        await vi.waitFor(() => expect(store.get(session.id).runs.size).toBe(0));
+
+        expect(chunks.some((item) => item.chunk.type === 'error')).toBe(true);
+        expect(session.messages.filter((m) => m.role === 'assistant')).toHaveLength(0);
+        expect(session.persistedMessages.filter((m) => m.role === 'assistant')).toHaveLength(0);
+        expect(persistSpy).not.toHaveBeenCalled();
+    });
+
+    it('在途流被 close 后即使新会话触发容量淘汰，finishRun 也不会抛出未捕获异常', async () => {
+        let abortSignalObserved: AbortSignal | undefined;
+        let rejectFetch!: (reason?: unknown) => void;
+        const mockFetch: typeof fetch = (_input, init) => {
+            abortSignalObserved = init?.signal ?? undefined;
+            return new Promise<Response>((_resolve, reject) => {
+                rejectFetch = reject;
+            });
+        };
+
+        const store = new InMemoryChatSessionStore();
+        const target = store.create({
+            videoId: 'v1',
+            originalTopic: 'Target.',
+            paragraphLines: ['Target.'],
+            subtitleFileHash: 'h1',
+            anchorSentenceIndex: 0,
+        });
+        const model = createOpenAI({
+            baseURL: 'https://mock.abort.local/v1',
+            apiKey: 'test-key',
+            fetch: mockFetch,
+        }).chat('gpt-4o');
+
+        const service = new ChatSessionServiceImpl(
+            { getModel: vi.fn().mockReturnValue(model) } as unknown as AiProviderService,
+            { fireAndForget: vi.fn(), call: vi.fn() } as unknown as RendererGateway,
+            store,
+            { get: vi.fn().mockReturnValue(null) } as unknown as CacheService,
+        );
+
+        await service.sendMessage({ sessionId: target.id, content: 'hello' });
+        await vi.waitFor(() => expect(abortSignalObserved).toBeDefined());
+
+        // 关闭并把会话数撑过 MAX_RETAINED_SESSIONS (50)，触发淘汰 target
+        store.close(target.id);
+        Array.from({ length: 52 }, (_, index) => index + 1).forEach((i) => {
+            store.create({
+                videoId: 'v1',
+                originalTopic: `Topic ${i}`,
+                paragraphLines: [`Line ${i}`],
+                subtitleFileHash: 'h1',
+                anchorSentenceIndex: i,
+            });
+        });
+        expect(() => store.get(target.id)).toThrow('chat session not found');
+
+        const finishSpy = vi.spyOn(store, 'finishRun');
+        const unhandled: unknown[] = [];
+        const onUnhandled = (reason: unknown) => unhandled.push(reason);
+        process.on('unhandledRejection', onUnhandled);
+        try {
+            rejectFetch(abortSignalObserved?.reason);
+            await vi.waitFor(() => {
+                expect(finishSpy).toHaveBeenCalledTimes(1);
+            });
+            expect(unhandled).toHaveLength(0);
+        } finally {
+            process.off('unhandledRejection', onUnhandled);
+        }
+    });
 });

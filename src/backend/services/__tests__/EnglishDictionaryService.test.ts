@@ -107,4 +107,50 @@ describe('EnglishDictionaryService', () => {
             service.remove();
         }
     });
+
+    it('install 下载期间调用 remove() 会取消在途任务并等待收尾，不残留半成品目录', async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-wordnet-cancel-'));
+        tempRoots.push(root);
+        mockAppStateRoot.current = root;
+
+        let aborted = false;
+        let rejectFetch!: (reason?: unknown) => void;
+        const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+            rejectFetch = reject;
+            init?.signal?.addEventListener('abort', () => {
+                aborted = true;
+                reject(init.signal?.reason ?? new Error('aborted'));
+            }, { once: true });
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+
+        const dpTaskService = {
+            create: vi.fn(async () => 42),
+            registerTask: vi.fn(),
+            process: vi.fn(),
+            checkCancel: vi.fn(),
+            finish: vi.fn(),
+            fail: vi.fn(),
+            update: vi.fn(),
+            cancel: vi.fn(),
+        } as unknown as DpTaskService;
+
+        const service = new EnglishDictionaryService(dpTaskService);
+        try {
+            const taskId = await service.install();
+            expect(taskId).toBe(42);
+            await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+            const removePromise = Promise.resolve(service.remove());
+            await vi.waitFor(() => expect(aborted).toBe(true));
+            rejectFetch(new Error('aborted'));
+            await removePromise;
+
+            expect(dpTaskService.cancel).toHaveBeenCalledWith(42);
+            expect(fs.existsSync(path.join(root, 'oewn-english'))).toBe(false);
+            expect(service.status().downloading).toBe(false);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
 });

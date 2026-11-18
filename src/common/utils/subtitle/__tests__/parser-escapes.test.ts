@@ -51,4 +51,14 @@ describe('字幕转义残留清理', () => {
 
         expect(parseSrt(srt)[0].contentEn).toBe('A normal sentence with no escapes.');
     });
+
+    it('剥离 SRT 内嵌的 ASS 样式控制标签（如 {\\an8}、{\\pos(100,200)}）', () => {
+        const srt = [
+            '1',
+            '00:00:01,000 --> 00:00:03,000',
+            '{\\an8}{\\pos(100,200)}Hello {\\i1}world{\\i0}!',
+        ].join('\n');
+
+        expect(parseSrt(srt)[0].contentEn).toBe('Hello world!');
+    });
 });

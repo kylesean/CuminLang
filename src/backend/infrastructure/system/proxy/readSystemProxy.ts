@@ -92,12 +92,15 @@ export const parseWindowsReg = (output: string): SystemProxyInfo | null => {
 
     const separatorIndex = proxyServer.indexOf(';');
     let serverPart = separatorIndex >= 0 ? proxyServer.slice(0, separatorIndex) : proxyServer;
-    // 处理 Windows 的多协议形式（http=host:port;https=host:port），去掉协议前缀。
+    // 处理 Windows 的多协议形式（http=host:port;https=host:port / socks=host:port），保留协议语义。
     const protocolPrefixMatch = serverPart.match(/^([a-zA-Z]+)=(.+)$/);
+    let scheme = 'http';
     if (protocolPrefixMatch) {
+        const prefix = protocolPrefixMatch[1].toLowerCase();
+        scheme = prefix === 'socks' ? 'socks5' : prefix;
         serverPart = protocolPrefixMatch[2];
     }
-    const proxyUrl = serverPart.includes('://') ? serverPart : `http://${serverPart}`;
+    const proxyUrl = serverPart.includes('://') ? serverPart : `${scheme}://${serverPart}`;
 
     const noProxy = (values.get('proxyoverride') ?? '')
         .split(';')
@@ -107,14 +110,30 @@ export const parseWindowsReg = (output: string): SystemProxyInfo | null => {
     return { proxyUrl, noProxy };
 };
 
+/** 应用启动时冻结操作系统注入的代理环境变量，避免 ProxyService 改写 process.env 后污染 system 模式检测。 */
+const INITIAL_PROXY_ENV = {
+    https_proxy: process.env.https_proxy,
+    HTTPS_PROXY: process.env.HTTPS_PROXY,
+    http_proxy: process.env.http_proxy,
+    HTTP_PROXY: process.env.HTTP_PROXY,
+    all_proxy: process.env.all_proxy,
+    ALL_PROXY: process.env.ALL_PROXY,
+    no_proxy: process.env.no_proxy,
+    NO_PROXY: process.env.NO_PROXY,
+};
+
 /** 从标准代理环境变量读取系统代理（Linux 桌面环境常用）。 */
 const readFromEnv = (): SystemProxyInfo | null => {
-    const env = process.env;
-    const proxyUrl = env.https_proxy ?? env.HTTPS_PROXY ?? env.http_proxy ?? env.HTTP_PROXY ?? env.all_proxy ?? env.ALL_PROXY;
+    const proxyUrl = INITIAL_PROXY_ENV.https_proxy
+        || INITIAL_PROXY_ENV.HTTPS_PROXY
+        || INITIAL_PROXY_ENV.http_proxy
+        || INITIAL_PROXY_ENV.HTTP_PROXY
+        || INITIAL_PROXY_ENV.all_proxy
+        || INITIAL_PROXY_ENV.ALL_PROXY;
     if (!proxyUrl) {
         return null;
     }
-    const noProxy = (env.no_proxy ?? env.NO_PROXY ?? '')
+    const noProxy = (INITIAL_PROXY_ENV.no_proxy ?? INITIAL_PROXY_ENV.NO_PROXY ?? '')
         .split(/[;,]/)
         .map((entry) => entry.trim())
         .filter(Boolean);

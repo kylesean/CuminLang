@@ -210,4 +210,32 @@ describe('mobile player & VideoBar state machines', () => {
         expect(parentRenders).toBe(rendersAfterSettlingSentence);
         expect(rendersAfterMount).toBeGreaterThanOrEqual(1);
     });
+
+    it('播放页卸载时即使 React 已清空 videoRef.current 仍保存最终播放进度', () => {
+        const detail = makeDetail(5);
+        const mockVideo = {
+            currentTime: 2.8,
+            duration: 100,
+            playbackRate: 1,
+            paused: false,
+            play: vi.fn().mockResolvedValue(undefined),
+            pause: vi.fn(),
+            removeAttribute: vi.fn(),
+            load: vi.fn(),
+        } as unknown as HTMLVideoElement;
+
+        const { result, unmount } = renderHook(() => useWatchPlayer(detail));
+        result.current.videoRef.current = mockVideo;
+
+        act(() => {
+            result.current.handleLoadedMetadata();
+            result.current.handleTimeUpdate();
+        });
+
+        // 模拟 React 在 commit 卸载阶段先将 videoRef.current 置空再执行 useEffect cleanup
+        result.current.videoRef.current = null;
+        unmount();
+
+        expect(mobileApi.saveProgress).toHaveBeenCalledWith(detail.id, 2, true);
+    });
 });

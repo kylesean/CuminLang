@@ -575,7 +575,7 @@ export class SettingServiceImpl implements SettingService {
             const allDisabledModels = allModels.filter((m) => !allEnabledModels.has(m));
 
             await this.setValue('models.openai.providers', JSON.stringify(nextProfiles));
-            await this.setValue('apiKeys.openAi.providerKeys', JSON.stringify(nextKeys));
+            await this.setValue('apiKeys.openAi.providerKeys', Object.keys(nextKeys).length > 0 ? JSON.stringify(nextKeys) : '');
             await this.setValue('models.openai.activeProviderId', activeProfile?.id ?? '');
             await this.setValue('apiKeys.openAi.key', activeProfile ? (nextKeys[activeProfile.id] ?? '') : '');
             await this.setValue('apiKeys.openAi.endpoint', activeProfile?.endpoint ?? '');

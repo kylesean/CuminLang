@@ -408,6 +408,27 @@ describe('YouTube 导入服务', () => {
             expect(watchHistoryService.createdPaths[0]).toEqual([targetPath]);
         });
 
+        it('复用库内已有视频时优先保留 .edited.srt / .local.srt 权威轨，不退回 .en.srt', async () => {
+            const base = `/storage/videos/YouTube/${VIDEO_BASE_NAME}`;
+            const targetPath = `${base}.mp4`;
+            const enSrtPath = `${base}.en.srt`;
+            const editedSrtPath = `${base}.edited.srt`;
+            fsGateway.files.set(path.normalize(targetPath), 'video');
+            fsGateway.files.set(path.normalize(enSrtPath), 'en');
+            fsGateway.files.set(path.normalize(editedSrtPath), 'edited');
+
+            const { taskId } = await service.start(VIDEO_URL);
+            const task = await waitForTerminalTask(dpTaskService, taskId);
+
+            expect(task.status).toBe(DpTaskState.DONE);
+            expect(watchHistoryService.attached).toEqual([
+                { videoPath: path.normalize(targetPath), srtPath: path.normalize(editedSrtPath) },
+            ]);
+            expect(JSON.parse(task.result ?? '{}')).toMatchObject({
+                attachedSrtFileName: `${VIDEO_BASE_NAME}.edited.srt`,
+            });
+        });
+
         it('功能开关关闭时拒绝导入', async () => {
             settingsValues.set('youtubeImport.enabled', 'false');
             await expect(service.start(VIDEO_URL)).rejects.toThrow('已在设置中关闭');
