@@ -1,3 +1,196 @@
 {
-    "generic": "Something went wrong. Please try again shortly."
+    "title": "Error",
+    "generic": "Something went wrong. Please try again shortly.",
+    "ipc": {
+        "untrustedOrigin": "Rejected IPC request from an untrusted page or subframe ({{path}})",
+        "validationFailed": "IPC request validation failed ({{path}}): {{detail}}",
+        "unknownFields": "IPC request contains undeclared fields ({{path}}): {{fields}}"
+    },
+    "validation": {
+        "endpointHttpsOrLan": "Endpoint URL must use https:// or a local/LAN inference http:// address",
+        "externalUrlHttpsOrLan": "Only HTTPS external links or local/LAN HTTP addresses are supported",
+        "videoIdOrFileHashRequired": "Provide at least videoId or fileHash",
+        "providerEndpointHttpsOrLan": "openai.providers.{{id}}.endpoint only supports https:// or a local/LAN http:// address",
+        "providerEmptyModelId": "openai.providers.{{id}}.models contains an empty model ID",
+        "providerDuplicateModelId": "openai.providers.{{id}}.models contains duplicate model IDs"
+    },
+    "asr": {
+        "recordingTooShort": "Recording is too short. Please speak a few words before stopping.",
+        "noEnglishSpeech": "No English speech detected. Make sure to speak English into the microphone and check that it is not muted.",
+        "noSpeech": "No speech detected. Move closer to the microphone and avoid background noise, then try again.",
+        "noSpeechDetected": "No speech detected",
+        "failed": "Speech recognition failed"
+    },
+    "ai": {
+        "notConfigured": "AI model is not configured. Go to Settings → Services & Resources to fill in Endpoint, API key (optional for local servers), and model, or click Use Preset.",
+        "noAvailableModels": "No available OpenAI models configured. Please add or enable a model in service settings first.",
+        "modelNotEnabled": "Model is not enabled in service settings: {{model}}",
+        "providerNotFoundForModel": "No AI provider profile found for model {{model}}",
+        "sentenceLearningDisabled": "Sentence learning is disabled. Enable it in Feature settings first."
+    },
+    "aiTest": {
+        "modelNotAdded": "Model is not added in provider settings",
+        "missingCredentials": "API key or API URL is not configured",
+        "openAiSuccess": "Connection test succeeded",
+        "emptyResponse": "Model returned an empty response",
+        "openAiFailed": "Test failed: {{detail}}",
+        "tencentIncomplete": "Tencent Cloud configuration is incomplete",
+        "tencentSuccess": "Tencent Cloud test succeeded",
+        "tencentEmptyResponse": "Tencent Cloud returned an empty response",
+        "tencentFailed": "Tencent Cloud test failed: {{detail}}"
+    },
+    "settings": {
+        "sentenceLearningModelRequired": "No cloud model selected for Sentence Explanation. Please pick one in Available Models first.",
+        "subtitleTranslationModelRequired": "No cloud model selected for Subtitle Translation. Please pick one in Available Models first.",
+        "dictionaryModelRequired": "No cloud model selected for Dictionary Lookup. Please pick one in Available Models first.",
+        "invalidValue": "Invalid setting {{field}}: {{value}}",
+        "emptyPromptPreset": "Setting learning.activePromptPresetId cannot be empty",
+        "readonlyRuntimeKey": "Runtime setting cannot be modified directly: {{key}}",
+        "emptyProviderId": "Provider ID cannot be empty",
+        "unknownTtsVoice": "Unknown TTS voice: {{voiceId}}",
+        "missingProxyUrl": "Proxy URL is required in custom proxy mode"
+    },
+    "mobileAccess": {
+        "invalidPort": "Port must be between 1 and 65535",
+        "portStartFailed": "Failed to start on port {{port}}: {{detail}}",
+        "missingAssets": "Mobile web assets missing: {{path}}",
+        "thumbnailQueueFull": "Thumbnail request queue is full. Please try again shortly."
+    },
+    "system": {
+        "openFolderFailed": "Failed to open folder: {{detail}}",
+        "openLogsDirFailed": "Failed to open logs folder: {{detail}}"
+    },
+    "media": {
+        "emptyPath": "Media path cannot be empty",
+        "fileNotFound": "Media file not found: {{path}}",
+        "unauthorizedPath": "Media path is not authorized: {{path}}",
+        "invalidDuration": "Failed to read a valid media duration: {{path}}",
+        "invalidThumbnailTime": "Thumbnail timestamp must be a finite number",
+        "thumbnailFailed": "Failed to generate thumbnail: {{path}}"
+    },
+    "watchHistory": {
+        "notFound": "Watch history record not found: {{id}}",
+        "videoNotFound": "Video file not found: {{path}}",
+        "deletedLibraryFile": "This file is inside your video library; the original file has been deleted"
+    },
+    "subtitle": {
+        "sessionCacheMissing": "Subtitle cache for the current session does not exist",
+        "indexNotFound": "Subtitle index not found: {{index}}",
+        "invalidIndex": "Invalid subtitle index: {{index}}",
+        "emptyHash": "Subtitle file hash cannot be empty",
+        "invalidDemandId": "Invalid subtitle demand ID: {{id}}",
+        "emptySessionId": "Renderer session ID cannot be empty",
+        "cacheMissing": "Subtitle cache not found. Please reload subtitles or reopen the video.",
+        "fileNotFound": "Subtitle file not found: {{path}}",
+        "cannotRestoreFromEdited": "Restore target cannot be the manually edited track itself",
+        "invalidEditedPath": "Invalid edited subtitle track path: {{path}}",
+        "missingSourceForEdited": "Missing video or source subtitle path; cannot save edited track",
+        "vocabContextMissing": "Subtitle vocabulary matching context not found: {{fileHash}}"
+    },
+    "subtitleTranslation": {
+        "disabled": "Subtitle translation service is not enabled",
+        "tencentNotInitialized": "Tencent Translate client is not initialized. Check your credentials.",
+        "styleConfigMissing": "OpenAI subtitle translation style configuration is missing",
+        "tencentGatewayMismatch": "Tencent Translate engine does not use the subtitle translation gateway"
+    },
+    "subtitleGeneration": {
+        "inProgress": "Subtitles are already being generated for this video. Please wait for completion.",
+        "fileExists": "Subtitle file already exists: {{path}}",
+        "invalidDuration": "Failed to read media duration: {{duration}}"
+    },
+    "videoLearning": {
+        "clipMetaMissing": "Clip metadata not found after uploading learning clip"
+    },
+    "dictionary": {
+        "disabled": "Dictionary service is not enabled",
+        "aiNotConfigured": "Dictionary AI model is not configured. Please configure it in Settings first.",
+        "emptyAiResult": "Dictionary AI did not return a valid definition"
+    },
+    "vocabulary": {
+        "emptyWord": "Word cannot be empty",
+        "wordTooLong": "Word is too long",
+        "emptySentence": "Sentence cannot be empty",
+        "entryNotFound": "Vocabulary entry not found",
+        "notInReviewQueue": "This word is not currently in the review queue",
+        "importNoWorksheet": "Import failed: no worksheet found",
+        "importSummary": "Import complete: {{total}} total, {{retained}} kept, {{added}} added, {{removed}} removed; word clips synced"
+    },
+    "wordInsight": {
+        "failed": "Failed to generate contextual insight: {{detail}}",
+        "emptyResult": "Model did not return a valid contextual meaning"
+    },
+    "importedDict": {
+        "missingDictFile": ".dict or .dict.dz file not found: {{path}}",
+        "missingEntriesTable": "SQLite dictionary is missing the entries table",
+        "missingWordTranslationColumns": "SQLite dictionary entries table requires word and translation columns",
+        "registryVersionMismatch": "Imported dictionary registry version mismatch: {{file}}",
+        "fileTooLarge": "Dictionary file exceeds the {{limitMb}} MB limit and cannot be imported",
+        "noUsableEntries": "No usable entries found in dictionary: {{path}}",
+        "notFound": "Dictionary not found: {{id}}",
+        "unsupportedFormat": "Unsupported dictionary format: {{ext}}. Supported: StarDict (.ifo), CSV (.csv), SQLite (.sqlite/.db)"
+    },
+    "englishDict": {
+        "alreadyInstalled": "English-English dictionary pack is already installed",
+        "downloading": "English-English dictionary pack is currently downloading",
+        "sha256Mismatch": "WordNet archive SHA-256 mismatch: {{hash}}",
+        "missingDictDir": "WordNet archive is missing the dict directory",
+        "missingDataFile": "Missing WordNet data file: {{file}}"
+    },
+    "download": {
+        "httpFailed": "Download failed (HTTP {{status}})",
+        "modelHttpFailed": "Model download request failed (HTTP {{status}} {{statusText}})",
+        "emptyResponseBody": "Model download response body is empty: {{url}}",
+        "insufficientDiskSpace": "Insufficient disk space: about {{requiredMb}} MB required, {{availableMb}} MB available",
+        "checksumMismatch": "{{model}} integrity check failed ({{file}} SHA-256 mismatch)",
+        "archiveMissingFiles": "{{model}} archive is missing files: {{files}}",
+        "archiveExtractFailed": "Failed to extract {{model}} archive: {{detail}}",
+        "archiveMissingModelDir": "Complete model directory not found in {{model}} archive",
+        "cancelled": "{{model}} download cancelled",
+        "failed": "Download failed"
+    },
+    "model": {
+        "deleted": "{{model}} deleted",
+        "ready": "{{model}} is ready",
+        "installed": "{{model}} installed",
+        "names": {
+            "phonemeGop": "Phoneme GOP model",
+            "ytDlp": "yt-dlp binary",
+            "senseVoice": "SenseVoice bilingual speech model",
+            "speakerSegmentation": "Speaker segmentation model",
+            "speakerEmbedding": "Speaker embedding model",
+            "speakerDiarization": "Speaker diarization model"
+        }
+    },
+    "youtube": {
+        "unsupportedPlatform": "YouTube import is not yet supported on platform: {{platform}}",
+        "disabled": "YouTube import is disabled in Settings. Enable it first.",
+        "invalidUrl": "Unrecognized YouTube URL. Please paste a full video URL (e.g. https://www.youtube.com/watch?v=xxx)",
+        "invalidCookiesExtension": "Cookies file must use the .txt extension"
+    },
+    "tts": {
+        "emptyText": "TTS text cannot be empty",
+        "sherpaNotDownloaded": "Sherpa TTS model is not downloaded yet. Please download it in Settings first."
+    },
+    "learningData": {
+        "invalidBackupJson": "Backup file is not valid JSON",
+        "invalidSessionStart": "Invalid session start time"
+    },
+    "compass": {
+        "emptyVideo": "Recommended video cannot be empty"
+    },
+    "chat": {
+        "missingPreset": "Built-in preset not found: {{id}}"
+    },
+    "recap": {
+        "emptySourceSentence": "Source sentence cannot be empty",
+        "emptyParaphrase": "Paraphrase content cannot be empty",
+        "emptyPrompt": "Opening line cannot be empty",
+        "emptyResponse": "Response content cannot be empty",
+        "emptySessionKey": "Session key cannot be empty",
+        "emptyPartnerLine": "Partner line cannot be empty",
+        "missingTargetWords": "AI recap did not use any session words",
+        "missingSubtitleLines": "AI recap had no available subtitle lines",
+        "invalidParaphraseReview": "Model did not return a valid paraphrase review",
+        "invalidRolePlayReview": "Model did not return a valid role-play review"
+    }
 }

@@ -1,3 +1,196 @@
 {
-    "generic": "出现了一个异常，请稍后重试。"
+    "title": "错误",
+    "generic": "出现了一个异常，请稍后重试。",
+    "ipc": {
+        "untrustedOrigin": "拒绝来自不可信页面或子帧的 IPC 请求 ({{path}})",
+        "validationFailed": "IPC 请求参数校验失败 ({{path}}): {{detail}}",
+        "unknownFields": "IPC 请求参数包含未声明字段 ({{path}}): {{fields}}"
+    },
+    "validation": {
+        "endpointHttpsOrLan": "接口地址必须使用 https://，或使用本机/局域网推理服务的 http:// 地址",
+        "externalUrlHttpsOrLan": "仅支持 HTTPS 外部链接或本机/局域网 HTTP 地址",
+        "videoIdOrFileHashRequired": "videoId 或 fileHash 至少提供一个",
+        "providerEndpointHttpsOrLan": "openai.providers.{{id}}.endpoint 仅支持 https:// 或本机/局域网推理 http:// 地址",
+        "providerEmptyModelId": "openai.providers.{{id}}.models 包含空模型标识",
+        "providerDuplicateModelId": "openai.providers.{{id}}.models 包含重复模型标识"
+    },
+    "asr": {
+        "recordingTooShort": "录音时间过短，请多说几个词再结束录音",
+        "noEnglishSpeech": "没有识别到英文语音。请确认对着麦克风用英语朗读，且麦克风没有被静音。",
+        "noSpeech": "没有识别到语音。请靠近麦克风、避开环境噪音后重试。",
+        "noSpeechDetected": "未识别到任何语音内容",
+        "failed": "语音识别失败"
+    },
+    "ai": {
+        "notConfigured": "AI 模型未配置：请到「设置 → 服务与资源」填写接口地址、API Key（本地服务可留空）与模型，或点「使用预设」快速填入",
+        "noAvailableModels": "OpenAI 可用模型列表为空，请先在服务配置中添加或启用模型",
+        "modelNotEnabled": "当前模型未在服务配置中启用: {{model}}",
+        "providerNotFoundForModel": "未找到模型 {{model}} 所属的 AI 服务商配置",
+        "sentenceLearningDisabled": "整句学习功能未启用，请先在功能设置中启用"
+    },
+    "aiTest": {
+        "modelNotAdded": "模型未在服务配置中添加",
+        "missingCredentials": "API Key 或 API URL 未配置",
+        "openAiSuccess": "测试成功",
+        "emptyResponse": "返回了空响应",
+        "openAiFailed": "测试失败: {{detail}}",
+        "tencentIncomplete": "腾讯云配置不完整",
+        "tencentSuccess": "腾讯云配置测试成功",
+        "tencentEmptyResponse": "腾讯云返回了空响应",
+        "tencentFailed": "腾讯云测试失败: {{detail}}"
+    },
+    "settings": {
+        "sentenceLearningModelRequired": "整句讲解还没选好云端模型，请先在「可用模型」里选一个",
+        "subtitleTranslationModelRequired": "字幕翻译还没选好云端模型，请先在「可用模型」里选一个",
+        "dictionaryModelRequired": "词典查词还没选好云端模型，请先在「可用模型」里选一个",
+        "invalidValue": "设置项 {{field}} 非法: {{value}}",
+        "emptyPromptPreset": "设置项 learning.activePromptPresetId 不能为空",
+        "readonlyRuntimeKey": "不允许直接修改运行时设置: {{key}}",
+        "emptyProviderId": "服务商标识不能为空",
+        "unknownTtsVoice": "未知的朗读音色：{{voiceId}}",
+        "missingProxyUrl": "自定义代理模式必须填写代理地址"
+    },
+    "mobileAccess": {
+        "invalidPort": "端口需在 1-65535 之间",
+        "portStartFailed": "端口 {{port}} 启动失败：{{detail}}",
+        "missingAssets": "手机页资源缺失：{{path}}",
+        "thumbnailQueueFull": "缩略图请求排队已满，请稍后重试"
+    },
+    "system": {
+        "openFolderFailed": "打开文件夹失败：{{detail}}",
+        "openLogsDirFailed": "打开日志目录失败：{{detail}}"
+    },
+    "media": {
+        "emptyPath": "媒体路径不能为空",
+        "fileNotFound": "媒体文件不存在：{{path}}",
+        "unauthorizedPath": "媒体路径未授权：{{path}}",
+        "invalidDuration": "无法读取有效的媒体时长：{{path}}",
+        "invalidThumbnailTime": "缩略图时间必须是有限数字",
+        "thumbnailFailed": "缩略图生成失败：{{path}}"
+    },
+    "watchHistory": {
+        "notFound": "观看记录不存在：{{id}}",
+        "videoNotFound": "视频文件不存在：{{path}}",
+        "deletedLibraryFile": "该文件位于视频库中，已为您删除原文件"
+    },
+    "subtitle": {
+        "sessionCacheMissing": "当前会话的字幕缓存不存在",
+        "indexNotFound": "字幕索引不存在：{{index}}",
+        "invalidIndex": "字幕索引无效: {{index}}",
+        "emptyHash": "字幕文件哈希不能为空",
+        "invalidDemandId": "字幕需求标记无效: {{id}}",
+        "emptySessionId": "renderer 会话标识不能为空",
+        "cacheMissing": "未找到字幕缓存，请重新加载字幕或重新打开视频",
+        "fileNotFound": "字幕文件不存在：{{path}}",
+        "cannotRestoreFromEdited": "目标恢复轨不能是人工编辑轨本身",
+        "invalidEditedPath": "非法的人工编辑轨路径：{{path}}",
+        "missingSourceForEdited": "缺少视频或源字幕路径，无法保存人工编辑轨",
+        "vocabContextMissing": "字幕生词匹配上下文不存在：{{fileHash}}"
+    },
+    "subtitleTranslation": {
+        "disabled": "未启用字幕翻译服务",
+        "tencentNotInitialized": "腾讯翻译客户端未初始化，请检查密钥配置",
+        "styleConfigMissing": "OpenAI 字幕翻译风格配置缺失",
+        "tencentGatewayMismatch": "腾讯翻译引擎不经过字幕翻译网关"
+    },
+    "subtitleGeneration": {
+        "inProgress": "该视频正在生成字幕中，请等待完成后再试",
+        "fileExists": "字幕文件已存在：{{path}}",
+        "invalidDuration": "无法读取媒体时长：{{duration}}"
+    },
+    "videoLearning": {
+        "clipMetaMissing": "上传学习片段后未找到片段元数据"
+    },
+    "dictionary": {
+        "disabled": "未启用词典服务",
+        "aiNotConfigured": "词典 AI 模型未配置，请先在设置中完成模型配置",
+        "emptyAiResult": "词典 AI 未返回有效释义"
+    },
+    "vocabulary": {
+        "emptyWord": "单词不能为空",
+        "wordTooLong": "单词过长",
+        "emptySentence": "句子不能为空",
+        "entryNotFound": "词条不存在",
+        "notInReviewQueue": "该词当前不在复习队列",
+        "importNoWorksheet": "导入失败：未找到第一个工作表",
+        "importSummary": "导入完成：共 {{total}} 条，保留 {{retained}} 条，新增 {{added}} 条，删除 {{removed}} 条，已同步单词管理片段"
+    },
+    "wordInsight": {
+        "failed": "语境解读生成失败：{{detail}}",
+        "emptyResult": "模型未返回有效的语境含义"
+    },
+    "importedDict": {
+        "missingDictFile": "找不到 .dict 或 .dict.dz 文件: {{path}}",
+        "missingEntriesTable": "SQLite 词典缺少 entries 表",
+        "missingWordTranslationColumns": "SQLite 词典的 entries 表需要 word 与 translation 字段",
+        "registryVersionMismatch": "导入词典注册表版本不匹配: {{file}}",
+        "fileTooLarge": "词典文件超过 {{limitMb}} MB 上限，拒绝导入",
+        "noUsableEntries": "词典没有可用词条：{{path}}",
+        "notFound": "词典不存在：{{id}}",
+        "unsupportedFormat": "不支持的词典格式：{{ext}}。支持 StarDict(.ifo)、CSV(.csv)、SQLite(.sqlite/.db)"
+    },
+    "englishDict": {
+        "alreadyInstalled": "英英释义包已安装",
+        "downloading": "英英释义包正在下载",
+        "sha256Mismatch": "WordNet 归档 sha256 不匹配：{{hash}}",
+        "missingDictDir": "WordNet 归档缺少 dict 目录",
+        "missingDataFile": "WordNet 数据文件缺失：{{file}}"
+    },
+    "download": {
+        "httpFailed": "下载失败 HTTP {{status}}",
+        "modelHttpFailed": "模型下载请求失败（HTTP {{status}} {{statusText}}）",
+        "emptyResponseBody": "模型下载响应体为空：{{url}}",
+        "insufficientDiskSpace": "磁盘空间不足：需要约 {{requiredMb}} MB，可用 {{availableMb}} MB",
+        "checksumMismatch": "{{model}}文件完整性校验失败 ({{file}} SHA256 不一致)",
+        "archiveMissingFiles": "{{model}} 模型归档缺少文件：{{files}}",
+        "archiveExtractFailed": "{{model}} 模型归档解压失败：{{detail}}",
+        "archiveMissingModelDir": "{{model}} 模型归档中未找到完整模型目录",
+        "cancelled": "{{model}}下载已取消",
+        "failed": "下载失败"
+    },
+    "model": {
+        "deleted": "{{model}}已删除",
+        "ready": "{{model}}已就绪",
+        "installed": "{{model}}安装完成",
+        "names": {
+            "phonemeGop": "音素 GOP 模型",
+            "ytDlp": "yt-dlp 组件",
+            "senseVoice": "SenseVoice 中英双语语音模型",
+            "speakerSegmentation": "说话人分割模型",
+            "speakerEmbedding": "声纹嵌入模型",
+            "speakerDiarization": "说话人分离模型"
+        }
+    },
+    "youtube": {
+        "unsupportedPlatform": "YouTube 导入暂不支持当前平台：{{platform}}",
+        "disabled": "YouTube 导入功能已在设置中关闭，请先在设置页开启",
+        "invalidUrl": "无法识别的 YouTube 链接，请粘贴完整的视频观看地址（如 https://www.youtube.com/watch?v=xxx）",
+        "invalidCookiesExtension": "Cookies 文件只接受 .txt 格式"
+    },
+    "tts": {
+        "emptyText": "TTS 文本不能为空",
+        "sherpaNotDownloaded": "Sherpa TTS 模型尚未下载，请先到设置中心下载模型"
+    },
+    "learningData": {
+        "invalidBackupJson": "备份文件不是合法的 JSON",
+        "invalidSessionStart": "会话开始时间无效"
+    },
+    "compass": {
+        "emptyVideo": "推荐视频不能为空"
+    },
+    "chat": {
+        "missingPreset": "不存在内置预设：{{id}}"
+    },
+    "recap": {
+        "emptySourceSentence": "原句不能为空",
+        "emptyParaphrase": "复述内容不能为空",
+        "emptyPrompt": "场景开场白不能为空",
+        "emptyResponse": "回应内容不能为空",
+        "emptySessionKey": "会话键不能为空",
+        "emptyPartnerLine": "对方台词不能为空",
+        "missingTargetWords": "AI 复盘没有使用任何会话词",
+        "missingSubtitleLines": "AI 复盘没有可用的真实字幕句",
+        "invalidParaphraseReview": "模型未返回有效的复述点评",
+        "invalidRolePlayReview": "模型未返回有效的场景回应点评"
+    }
 }

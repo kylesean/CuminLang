@@ -2,6 +2,7 @@ import React from 'react';
 import useSWR from 'swr';
 import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
+import { localizeBackendMessage } from '@/frontend/i18n/backendErrorLocalizer';
 import { toast } from 'react-hot-toast';
 import { Copy, ExternalLink, Smartphone, Wifi } from 'lucide-react';
 
@@ -193,7 +194,7 @@ const MobileAccessSetting: React.FC = () => {
         setPendingLanConfirm(null);
     };
 
-    const errorText = saveError ?? detail.lastError;
+    const errorText = saveError ?? (detail.lastError ? localizeBackendMessage(detail.lastError) : null);
     const statusText = detail.running
         ? t('mobile.statusRunning')
         : detail.lastError

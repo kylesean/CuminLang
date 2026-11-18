@@ -60,6 +60,7 @@ import BlindDictation from './BlindDictation';
 import ShadowingStudio from './ShadowingStudio';
 import type { RhythmTrendVO } from '@/common/learning/rhythmTrend';
 import { describeAsrFailure } from '@/common/utils/practice/asr-error';
+import { localizeBackendMessage } from '@/frontend/i18n/backendErrorLocalizer';
 import WordSlotDictation from './WordSlotDictation';
 
 const logger = getRendererLogger('PracticeDock');
@@ -498,7 +499,7 @@ export default function PracticeDock() {
         } catch (error) {
             logger.error('听写评分失败', { error });
             // 与跟读评分失败共用同一条通道与去重键，避免同一错误弹两种样式的提示
-            const message = describeAsrFailure(error);
+            const message = localizeBackendMessage(describeAsrFailure(error));
             showNotification({ message, variant: 'error', dedupeKey: `ipc-error:${message}` });
             return false;
         }

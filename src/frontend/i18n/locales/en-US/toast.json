@@ -1,4 +1,5 @@
 {
+    "infoTitle": "Info",
     "updateAvailableTitle": "New version {{version}} is available",
     "updateAvailableAction": "View details",
     "modeSwitchedPodcast": "Switched to podcast mode automatically",

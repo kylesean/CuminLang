@@ -1,6 +1,10 @@
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { rendererEvents } from '@/frontend/infrastructure/electron/rendererEvents';
 import { showNotification } from '@/frontend/components/shared/toasts/notification';
+import {
+    getLocalizedToastTitle,
+    localizeBackendMessage,
+} from '@/frontend/i18n/backendErrorLocalizer';
 
 /** renderer 全局提示事件的展示参数。 */
 type ToastVariant = 'default' | 'success' | 'info' | 'warning' | 'error';
@@ -63,9 +67,9 @@ export function initIpcMessageToasts(): () => void {
     const unsubs: Array<() => void> = [];
 
     unsubs.push(rendererEvents.onErrorMessage((error) => {
-        const message = normalizeErrorMessage(error);
+        const message = localizeBackendMessage(normalizeErrorMessage(error));
         emitToast({
-            title: 'Error',
+            title: getLocalizedToastTitle('error'),
             message,
             variant: 'error',
             dedupeKey: `ipc-error:${message}`,
@@ -73,11 +77,12 @@ export function initIpcMessageToasts(): () => void {
     }));
 
     unsubs.push(rendererEvents.onInfoMessage((info) => {
+        const message = localizeBackendMessage(info);
         emitToast({
-            title: 'Info',
-            message: info,
+            title: getLocalizedToastTitle('info'),
+            message,
             variant: 'info',
-            dedupeKey: `ipc-info:${info}`,
+            dedupeKey: `ipc-info:${message}`,
         });
     }));
 

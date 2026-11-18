@@ -1,5 +1,22 @@
 import type { MobileRecentItem, MobileWatchDetail } from '@/common/contracts/mobile-web';
 import type { OpenAIDictionaryResult } from '@/common/types/DictionaryResult';
+import {
+    createBundleTranslator,
+    translateBackendMessage,
+} from '@/common/i18n/backendErrorMatcher';
+import enErrors from '@/frontend/i18n/locales/en-US/errors.json';
+import zhErrors from '@/frontend/i18n/locales/zh-CN/errors.json';
+import { resolveMobileLang } from '@/mobile/lib';
+
+const zhMobileTranslate = createBundleTranslator(zhErrors as Record<string, unknown>);
+const enMobileTranslate = createBundleTranslator(enErrors as Record<string, unknown>);
+
+function localizeMobileApiError(rawMessage: string): string {
+    return translateBackendMessage(
+        rawMessage,
+        resolveMobileLang() === 'zh-CN' ? zhMobileTranslate : enMobileTranslate,
+    );
+}
 
 /**
  * 请求手机页 JSON 接口。
@@ -18,10 +35,10 @@ const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
         payload = null;
     }
     if (!response.ok) {
-        const message = payload && typeof payload === 'object' && 'error' in payload
+        const rawMessage = payload && typeof payload === 'object' && 'error' in payload
             ? String((payload as { error: unknown }).error)
             : `HTTP ${response.status}`;
-        throw new Error(message);
+        throw new Error(localizeMobileApiError(rawMessage));
     }
     return payload as T;
 };

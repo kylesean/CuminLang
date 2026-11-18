@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { describeAsrFailure } from '@/common/utils/practice/asr-error';
+import { localizeBackendMessage } from '@/frontend/i18n/backendErrorLocalizer';
 import { practiceApi } from './practiceApi';
 import usePracticePanel from './practiceStore';
 import {
@@ -273,7 +274,7 @@ export function usePracticeRecorder({
         } catch (error) {
             logger.error('跟读评分失败', { error });
             // 直接透传会让 parakeet 的整段 C++ stderr 铺满屏幕；这里只给可操作提示。
-            const message = describeAsrFailure(error);
+            const message = localizeBackendMessage(describeAsrFailure(error));
             showNotification({
                 message,
                 variant: 'error',

@@ -1,4 +1,5 @@
 {
+    "infoTitle": "提示",
     "updateAvailableTitle": "发现新版本 {{version}}",
     "updateAvailableAction": "查看详情",
     "modeSwitchedPodcast": "已自动切换至播客模式",
