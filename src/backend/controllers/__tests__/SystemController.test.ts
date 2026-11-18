@@ -214,5 +214,9 @@ describe('SystemController', () => {
 
         await captured.get('system/clipboard/write')!(null, 'copied text');
         expect(electronMocks.writeText).toHaveBeenCalledWith('copied text');
+
+        await expect(captured.get('system/open-url')!(null, 'https://github.com/kylesean/CuminLang')).resolves.toBeUndefined();
+        await expect(captured.get('system/open-url')!(null, 'http://127.0.0.1:27182/?t=abc')).resolves.toBeUndefined();
+        await expect(captured.get('system/open-url')!(null, 'http://example.com/phish')).rejects.toThrow('参数校验失败');
     });
 });

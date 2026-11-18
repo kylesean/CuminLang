@@ -49,6 +49,16 @@ export const ensureListHistory = (): void => {
 export const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5] as const;
 
 /**
+ * 解析当前手机浏览器语言对应的 HTML `lang` 属性值。
+ *
+ * @returns `'zh-CN'` 或 `'en'`。
+ */
+export const resolveMobileLang = (): 'zh-CN' | 'en' => {
+    const language = (navigator.language || '').toLowerCase();
+    return language.startsWith('zh') ? 'zh-CN' : 'en';
+};
+
+/**
  * 按手机语言选择中英文文案。
  *
  * @param zh 中文文案。
@@ -56,8 +66,7 @@ export const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5] as const;
  * @returns 当前语言下的文案。
  */
 export const t = (zh: string, en: string): string => {
-    const language = (navigator.language || '').toLowerCase();
-    return language.startsWith('zh') ? zh : en;
+    return resolveMobileLang() === 'zh-CN' ? zh : en;
 };
 
 /**

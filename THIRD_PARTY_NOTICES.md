@@ -9,7 +9,7 @@ CuminLang 基于 [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) �
 ## 随包资源与数据
 
 - **[ECDICT](https://github.com/skywind3000/ECDICT)**（MIT License）：内置英语词典基础词汇库（`resources/dictionary.sqlite`）。
-- **开源字体（OFL-1.1）**：随应用内嵌用于各设计主题（位于 `src/frontend/styles/fonts/`，各自目录内附完整 `OFL.txt` 声明），包括 Figtree、Montserrat、DM Sans、Poppins、Outfit、Fraunces、Albert Sans、Crimson Text、Fustat、JetBrains Mono、Playwrite US Trad、Manufacturing Consent。
+- **开源字体（OFL-1.1）**：随应用内嵌用于各设计主题（位于 `src/frontend/styles/fonts/`，各自目录内附完整 `OFL.txt` 声明），包括 Figtree、Montserrat、DM Sans、Poppins、Outfit、Fraunces、Albert Sans、Crimson Text、Fustat、JetBrains Mono、Playwrite US Trad、Manufacturing Consent、Sarina、UnifrakturMaguntia。
 
 ## 运行时二进制与按需下载组件
 

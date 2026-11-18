@@ -98,13 +98,22 @@ export const resolveLocaleFromSetting = (
     return I18N_FALLBACK_LOCALE;
 };
 
+const syncDocumentLang = (locale: AppLocale): void => {
+    if (typeof document !== 'undefined') {
+        document.documentElement.lang = locale;
+    }
+};
+
 export const applyLanguageSetting = async (setting: string | undefined | null): Promise<AppLocale> => {
     const locale = resolveLocaleFromSetting(setting);
     if (i18n.resolvedLanguage !== locale) {
         await changeLanguage(locale);
     }
+    syncDocumentLang(locale);
     return locale;
 };
+
+syncDocumentLang(I18N_FALLBACK_LOCALE);
 
 void i18nextUse(initReactI18next)
     .init({

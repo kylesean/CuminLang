@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import registerRoute from '@/backend/controllers/ipc/registerRoute';
 import { nonEmptyStringSchema, windowStateSchema } from '@/backend/controllers/ipc/routeSchemas';
+import { isLocalLlmEndpoint } from '@/common/constants/cloud-ai-provider-presets';
 import { app, clipboard, dialog, shell, systemPreferences } from 'electron';
 import path from 'path';
 import type { WindowState } from '@/common/types/Types';
@@ -300,7 +301,14 @@ export default class SystemController implements Controller {
             broadcastError: false,
         });
         registerRoute('system/open-url', (p) => this.openUrl(p), {
-            schema: z.url({ protocol: /^https?$/ }),
+            schema: z.url({ protocol: /^https?$/ }).refine((value) => {
+                try {
+                    const parsed = new URL(value);
+                    return parsed.protocol === 'https:' || isLocalLlmEndpoint(value);
+                } catch {
+                    return false;
+                }
+            }, { message: '仅支持 HTTPS 外部链接或本机/局域网 HTTP 地址' }),
             broadcastError: false,
         });
         registerRoute('system/clipboard/write', async (text) => {

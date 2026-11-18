@@ -78,7 +78,7 @@ export const isAppPageUrl = (
  *    窗口一旦导航到外部页面，那个页面同样能调用全部 IPC 路由（含读云端凭据的
  *    `settings/service-credentials/detail`）。
  * 2. **开窗守卫**：`window.open` 一律拒绝。应用要打开外部链接走
- *    `system/open-url`，那条路由带 https-only 的 schema 校验。
+ *    `system/open-url`，那条路由仅放行 HTTPS 外部链接与本机/局域网 HTTP 地址。
  * 3. **权限守卫**：只放行录音（跟读练习要录麦克风），其余权限请求一律拒绝。
  *    Electron 默认会批准大部分权限请求。
  *

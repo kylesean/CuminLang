@@ -40,6 +40,8 @@ export interface MultiFileModelSpec {
     primaryFileName: string;
 }
 
+class InsufficientDiskSpaceError extends Error {}
+
 type DownloadLifecycle =
     | { kind: 'idle' }
     | { kind: 'downloading'; task: Promise<{ success: boolean; message: string }>; abort: AbortController; percent: number }
@@ -198,6 +200,15 @@ export default abstract class MultiFileModelService implements LocalModelService
                     throw new Error(`HTTP ${response.status}`);
                 }
                 const totalBytes = Number(response.headers.get('content-length') ?? '0');
+                if (totalBytes > 0) {
+                    const diskCheck = await this.checkDiskSpace(path.dirname(targetPath), totalBytes);
+                    if (!diskCheck.enough) {
+                        void response.body.cancel().catch(() => undefined);
+                        throw new InsufficientDiskSpaceError(
+                            `磁盘空间不足：需要约 ${diskCheck.requiredMb} MB，可用 ${diskCheck.availableMb} MB`,
+                        );
+                    }
+                }
                 let receivedBytes = 0;
                 const bodyStream = Readable.fromWeb(
                     response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>,
@@ -218,12 +229,34 @@ export default abstract class MultiFileModelService implements LocalModelService
             } catch (error) {
                 await this.fileSystemGateway.removeFileIfExists(targetPath).catch(() => undefined);
                 lastError = error;
-                if (signal.aborted) {
+                if (signal.aborted || error instanceof InsufficientDiskSpaceError) {
                     throw error;
                 }
             }
         }
         throw lastError instanceof Error ? lastError : new Error('下载失败');
+    }
+
+    private async checkDiskSpace(
+        targetDir: string,
+        totalBytes: number,
+    ): Promise<{ enough: boolean; requiredMb: number; availableMb: number }> {
+        const requiredBytes = Math.ceil(totalBytes * 1.1);
+        try {
+            const stats = await fs.promises.statfs(targetDir);
+            const availableBytes = Number(stats.bavail) * Number(stats.bsize);
+            if (!Number.isFinite(availableBytes)) {
+                return { enough: true, requiredMb: 0, availableMb: 0 };
+            }
+            const mb = 1024 * 1024;
+            return {
+                enough: availableBytes >= requiredBytes,
+                requiredMb: Math.max(1, Math.ceil(requiredBytes / mb)),
+                availableMb: Math.floor(availableBytes / mb),
+            };
+        } catch {
+            return { enough: true, requiredMb: 0, availableMb: 0 };
+        }
     }
 
     private async verifyFileSha256(filePath: string, expectedSha256: string, signal: AbortSignal): Promise<void> {

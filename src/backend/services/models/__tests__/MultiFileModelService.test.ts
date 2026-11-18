@@ -251,4 +251,27 @@ describe('MultiFileModelService 下载并发与流错误处理', () => {
         expect(result.success).toBe(true);
         await expect(fs.access(downloadWorkDir)).rejects.toThrow();
     });
+
+    it('磁盘可用空间不足时立即中止而不重复尝试备用镜像', async () => {
+        const { tempDir: root, service } = await setupService(sha256Hex('ok-model-bytes'), [
+            'https://mirror-1.invalid/weights.bin',
+            'https://mirror-2.invalid/weights.bin',
+        ]);
+        const fetchMock = vi.fn(async () => new Response(Buffer.from('ok-model-bytes'), {
+            status: 200,
+            headers: { 'content-length': String(100 * 1024 * 1024) },
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        vi.spyOn(fs, 'statfs').mockResolvedValue({
+            bavail: 1024,
+            bsize: 1024,
+        } as Awaited<ReturnType<typeof fs.statfs>>);
+
+        const result = await service.download();
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('磁盘空间不足');
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await expect(fs.access(path.join(root, 'test-model.downloading'))).rejects.toThrow();
+    });
 });

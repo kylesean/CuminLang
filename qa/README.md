@@ -28,7 +28,7 @@ pnpm run qa:check-scroll              # 播放器滚动锚定差分检查（JSON
 
 ## 3. 工作原理
 
-- **源构建态 vs 打包态**：正式打包产物关闭了 `--inspect`，日常开发用 `electron .` 读取 `.vite/` 生产 bundle 运行；打包产物由 `qa/playwright.packaged.config.ts` + `forge.qa.config.ts`（仅开启 `EnableNodeCliInspectArguments` fuse，其余 ASAR/extraResource 与发布一致）单独覆盖。
+- **源构建态 vs 打包态**：正式打包产物关闭了 `--inspect`，源构建 E2E 用 `electron .` 读取 `.vite/` 生产 bundle 运行（日常交互开发用 `pnpm run start`）；打包产物由 `qa/playwright.packaged.config.ts` + `forge.qa.config.ts`（仅开启 `EnableNodeCliInspectArguments` fuse，其余 ASAR/extraResource 与发布一致）单独覆盖。
 - **数据隔离与唯一 bootstrap 例外**：每个用例独占临时 `--user-data-dir=${dir}` 并于启动后校验隔离生效；设置页/播放器用例通过真实 IPC `system/config/set` 写入引导完成标记并 `page.reload()` 跳过引导（引导 UI 本身由 `SET-ONB-01` 真实覆盖）。
 
 | 目录项 | 打包生产态 | 源构建 E2E（开发态） |
