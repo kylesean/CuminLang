@@ -291,6 +291,7 @@
         "autoAsrHint": "Using platform auto-captions; timing or words may be rough",
         "timingAnomalyHint": "Stretched cues or gaps detected; re-transcribe locally for accuracy",
         "autoAsrWithLocalReady": "Using platform auto-captions; local ASR track is ready",
+        "timingAnomalyWithLocalReady": "Stretched cues or gaps detected; a more accurate local ASR track is ready",
         "regenerate": "Re-transcribe",
         "switchToLocal": "Use local",
         "trackSwitched": "Switched subtitle track",

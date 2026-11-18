@@ -917,11 +917,15 @@ export default function Subtitle() {
                     <span className="min-w-0 flex-1 text-secondary truncate">
                         {trackActions.isGenerating
                             ? (trackActions.generationProgress ?? t('subtitleGeneration.running'))
-                            : trackActions.localAsrTrack
-                                ? t('subtitleOrigin.autoAsrWithLocalReady')
-                                : trackActions.subtitleQualityIssue === 'timing_anomaly'
-                                    ? t('subtitleOrigin.timingAnomalyHint')
-                                    : t('subtitleOrigin.autoAsrHint')}
+                            /* 文案必须按「当前轨的真实来源」分流：
+                               作者轨也可能带 timing_anomaly，此时说成「平台自动字幕」是错的。 */
+                            : trackActions.subtitleOrigin === 'auto_asr'
+                                ? (trackActions.localAsrTrack
+                                    ? t('subtitleOrigin.autoAsrWithLocalReady')
+                                    : t('subtitleOrigin.autoAsrHint'))
+                                : (trackActions.localAsrTrack
+                                    ? t('subtitleOrigin.timingAnomalyWithLocalReady')
+                                    : t('subtitleOrigin.timingAnomalyHint'))}
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
                         {trackActions.isGenerating ? (

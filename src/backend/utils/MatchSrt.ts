@@ -38,9 +38,18 @@ function subtitleFormatRank(filePath: string): number {
     return 3;
 }
 
+/**
+ * 语言后缀的入池优先级：只决定「是否作为该视频的候选字幕」以及同一档位内的排序权重。
+ *
+ * 注意与 {@link languageTier} 的分工：这里返回的是候选入池分数（必须 > 0），
+ * 最终排序由 `languageTier` 决定。`edited` / `local` 是应用产出的权威轨，
+ * 不属于「语言变体」，这里给最高分只为让它们不被过滤掉。
+ */
 function getLanguagePriority(langSuffix: string): number {
     const lang = langSuffix.toLowerCase();
     const languagePriorities: { [key: string]: number } = {
+        'edited': 120,
+        'local': 110,
         'eng': 100,
         'en': 100,
         'english': 100,
@@ -58,9 +67,15 @@ function getLanguagePriority(langSuffix: string): number {
 
 /**
  * 语言匹配档位（数值越大越优先）：
+ * 7 = 用户手工编辑的权威轨（`.edited.srt`）；
+ * 6 = 应用本地识别/音文对账产出的权威轨（`.local.srt`）；
  * 5 = 显式英语；4 = 无语言后缀的纯同名（默认为主字幕）；3 = 中文；
  * 2 = 其它已知语言；1 = 未知语言后缀。
- * 英语学习场景下，显式英语字幕与纯同名主字幕均优先于中文。
+ *
+ * `.edited.srt` / `.local.srt` 不是「某种语言变体」，而是应用自己产出的权威轨：
+ * 前者是用户手改，后者是本地声学精修（已按需融合作者轨的专有名词拼写）。
+ * 它们必须排在外部下载轨之前——否则本地精修成果会被同名的 `.en.srt` 顶掉，
+ * 表现为「明明生成过更好的字幕，播放时却还挂着平台自动字幕」。
  */
 function languageTier(langSuffix: string | null): number {
     if (langSuffix === null) {
@@ -68,13 +83,13 @@ function languageTier(langSuffix: string | null): number {
     }
     const lang = langSuffix.toLowerCase();
     if (lang === 'edited') {
+        return 7;
+    }
+    if (lang === 'local') {
         return 6;
     }
     if (lang === 'eng' || lang === 'en' || lang === 'english') {
         return 5;
-    }
-    if (lang === 'local') {
-        return 4;
     }
     if (lang === 'zh' || lang === 'zh-cn' || lang === 'zh-tw') {
         return 3;

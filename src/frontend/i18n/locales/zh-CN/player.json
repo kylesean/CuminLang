@@ -291,6 +291,7 @@
         "autoAsrHint": "当前为平台自动字幕，时间轴或拼写可能不够准确",
         "timingAnomalyHint": "检测到当前字幕存在超长跨度或疑似缺段，建议本地重识",
         "autoAsrWithLocalReady": "当前为平台自动字幕，已有更准确的本地识别轨",
+        "timingAnomalyWithLocalReady": "当前字幕存在超长跨度或疑似缺段，已有更准确的本地识别轨",
         "regenerate": "本地重识",
         "switchToLocal": "切到本地",
         "trackSwitched": "已切换字幕轨道",

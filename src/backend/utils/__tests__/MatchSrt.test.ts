@@ -67,4 +67,45 @@ describe('MatchSrt', () => {
         const matches = MatchSrt.matchAll(videoPath, subs);
         expect(matches[0]).toBe('/tmp/movie_2026.srt');
     });
+
+    /*
+     * `.local.srt` / `.edited.srt` 是应用自己产出的权威轨，不是「某种语言变体」。
+     * 它们必须排在外部下载轨之前，否则本地精修成果会被同名的 `.en.srt` 顶掉，
+     * 用户会看到「明明生成过更好的字幕，播放时却还挂着平台自动字幕」。
+     */
+    it('本地精修轨优先于作者轨与平台自动轨', () => {
+        const videoPath = '/tmp/movie.mp4';
+        const subs = [
+            '/tmp/movie.en.srt',
+            '/tmp/movie.en-orig.srt',
+            '/tmp/movie.local.srt',
+        ];
+
+        const matches = MatchSrt.matchAll(videoPath, subs);
+        expect(matches[0]).toBe('/tmp/movie.local.srt');
+    });
+
+    it('用户手工编辑轨优先于本地精修轨', () => {
+        const videoPath = '/tmp/movie.mp4';
+        const subs = [
+            '/tmp/movie.local.srt',
+            '/tmp/movie.edited.srt',
+        ];
+
+        const matches = MatchSrt.matchAll(videoPath, subs);
+        expect(matches[0]).toBe('/tmp/movie.edited.srt');
+    });
+
+    it('本地精修轨排在候选列表首位，即便作者轨也在同一目录', () => {
+        const videoPath = '/tmp/movie.mp4';
+        const subs = [
+            '/tmp/movie.en.srt',
+            '/tmp/movie.local.srt',
+            '/tmp/movie.zh.srt',
+        ];
+
+        const exact = MatchSrt.matchExactTracks(videoPath, subs);
+        expect(exact[0]).toBe('/tmp/movie.local.srt');
+        expect(exact).toContain('/tmp/movie.en.srt');
+    });
 });
