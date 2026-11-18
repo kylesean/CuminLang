@@ -51,11 +51,30 @@ const createService = (store: ReturnType<typeof createStore>): SettingServiceImp
     );
 };
 
+const DEFAULT_PROVIDERS = JSON.stringify([
+    {
+        id: 'deepseek',
+        name: 'DeepSeek',
+        apiFormat: 'openai',
+        endpoint: 'https://api.example.com/v1',
+        models: ['gpt-4o-mini'],
+        disabledModels: [],
+    },
+]);
+
 const baseSave = {
     openai: {
-        endpoint: 'https://api.example.com/v1',
-        apiFormat: 'openai' as const,
-        models: ['gpt-4o-mini'],
+        activeProviderId: 'deepseek',
+        providers: [
+            {
+                id: 'deepseek',
+                name: 'DeepSeek',
+                endpoint: 'https://api.example.com/v1',
+                apiFormat: 'openai' as const,
+                models: ['gpt-4o-mini'],
+                disabledModels: [],
+            },
+        ],
     },
     tencent: {},
 };
@@ -66,10 +85,9 @@ describe('服务凭据：不把明文送进渲染进程', () => {
 
     beforeEach(() => {
         store = createStore({
-            'apiKeys.openAi.key': OPENAI_KEY,
-            'apiKeys.openAi.endpoint': 'https://api.example.com/v1',
-            'apiKeys.openAi.apiFormat': 'openai',
-            'models.openai.available': 'gpt-4o-mini',
+            'apiKeys.openAi.providerKeys': JSON.stringify({ deepseek: OPENAI_KEY }),
+            'models.openai.activeProviderId': 'deepseek',
+            'models.openai.providers': DEFAULT_PROVIDERS,
             'apiKeys.tencent.secretId': TENCENT_ID,
             'apiKeys.tencent.secretKey': TENCENT_KEY,
         });
@@ -79,8 +97,8 @@ describe('服务凭据：不把明文送进渲染进程', () => {
     it('详情只给末四位提示，不含密钥本体', async () => {
         const detail = await service.getServiceCredentialsDetail();
 
-        expect(detail.openai.hasKey).toBe(true);
-        expect(detail.openai.keyHint).toBe('••••1234');
+        expect(detail.openai.providers[0]?.hasKey).toBe(true);
+        expect(detail.openai.providers[0]?.keyHint).toBe('••••1234');
         const serialized = JSON.stringify(detail);
         expect(serialized).not.toContain(OPENAI_KEY);
         expect(serialized).not.toContain(TENCENT_ID);
@@ -89,12 +107,13 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         expect(detail.tencent.secretIdHint).toBe(`••••${TENCENT_ID.slice(-4)}`);
     });
 
-    it('未配置时 hasKey 为 false 且提示为空', async () => {
+    it('未配置时 hasKey 为 false 且提示为空，并返回默认服务商档案', async () => {
         const empty = createService(createStore());
         const detail = await empty.getServiceCredentialsDetail();
 
-        expect(detail.openai.hasKey).toBe(false);
-        expect(detail.openai.keyHint).toBe('');
+        expect(detail.openai.providers).toHaveLength(1);
+        expect(detail.openai.providers[0]?.hasKey).toBe(false);
+        expect(detail.openai.providers[0]?.keyHint).toBe('');
         expect(detail.tencent.hasCredentials).toBe(false);
     });
 
@@ -103,28 +122,42 @@ describe('服务凭据：不把明文送进渲染进程', () => {
      * 空值必须理解成「沿用」，否则一次无关的编辑就把凭据抹掉了。
      */
     it('密钥留空时保留已保存的值', async () => {
-        await service.saveServiceCredentials({ ...baseSave, openai: { ...baseSave.openai, key: '' } });
+        await service.saveServiceCredentials({
+            ...baseSave,
+            openai: {
+                ...baseSave.openai,
+                providers: [{ ...baseSave.openai.providers[0], key: '' }],
+            },
+        });
 
-        expect(store.values.get('apiKeys.openAi.key')).toBe(OPENAI_KEY);
+        expect(JSON.parse(store.values.get('apiKeys.openAi.providerKeys')!)).toEqual({ deepseek: OPENAI_KEY });
         expect(store.values.get('apiKeys.tencent.secretKey')).toBe(TENCENT_KEY);
     });
 
     it('填了新密钥才覆盖', async () => {
         await service.saveServiceCredentials({
             ...baseSave,
-            openai: { ...baseSave.openai, key: 'sk-test-newkey-0000000000009999' },
+            openai: {
+                ...baseSave.openai,
+                providers: [{ ...baseSave.openai.providers[0], key: 'sk-test-newkey-0000000000009999' }],
+            },
         });
 
-        expect(store.values.get('apiKeys.openAi.key')).toBe('sk-test-newkey-0000000000009999');
+        expect(JSON.parse(store.values.get('apiKeys.openAi.providerKeys')!)).toEqual({
+            deepseek: 'sk-test-newkey-0000000000009999',
+        });
     });
 
     it('显式 clearKey 才清空', async () => {
         await service.saveServiceCredentials({
             ...baseSave,
-            openai: { ...baseSave.openai, clearKey: true },
+            openai: {
+                ...baseSave.openai,
+                providers: [{ ...baseSave.openai.providers[0], clearKey: true }],
+            },
         });
 
-        expect(store.values.get('apiKeys.openAi.key')).toBe('');
+        expect(JSON.parse(store.values.get('apiKeys.openAi.providerKeys')!)).toEqual({ deepseek: '' });
     });
 
     it('支持保存和回读云端向量模型及本地整句讲解路由', async () => {
@@ -163,16 +196,12 @@ describe('服务凭据：不把明文送进渲染进程', () => {
 
     it('providerKeys 读取为空（含密文暂时无法解密场景）且未显式改动密钥时，写入空串而非 "{}" 以免覆盖磁盘密文', async () => {
         const emptyKeysStore = createStore({
-            'apiKeys.openAi.key': '',
             'apiKeys.openAi.providerKeys': '',
         });
         const svc = createService(emptyKeysStore);
 
         await svc.saveServiceCredentials({
             openai: {
-                endpoint: 'https://api.example.com/v1',
-                apiFormat: 'openai',
-                models: ['gpt-4o-mini'],
                 activeProviderId: 'openai',
                 providers: [{
                     id: 'openai',

@@ -2,10 +2,9 @@ import { eq } from 'drizzle-orm';
 
 import { systemConfigs } from '@/backend/infrastructure/db/tables/sysConf';
 import { OPENAI_SUBTITLE_CUSTOM_STYLE_KEY } from '@/common/constants/openaiSubtitlePrompts';
-import type { SettingKey } from '@/common/types/store_schema';
 import type { Db } from '@/backend/infrastructure/db/createDb';
 
-import type { CustomMigration } from '../types';
+import type { CustomMigration, MigrationWritableSettingKey } from '../types';
 
 const DEFAULT_OPENAI_MODEL = 'gpt-5.4-nano';
 
@@ -33,7 +32,7 @@ export interface ProviderMigrationReads {
 
 /** 迁移产出的单个写入项。 */
 export interface ProviderMigrationWrite {
-    key: SettingKey;
+    key: MigrationWritableSettingKey;
     value: string;
 }
 

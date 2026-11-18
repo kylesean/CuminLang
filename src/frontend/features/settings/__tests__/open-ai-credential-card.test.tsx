@@ -63,18 +63,34 @@ vi.mock('react-i18next', () => ({
 }));
 
 const buildDefaultValues = (
-    openai?: Partial<ServiceCredentialSettingFormValues['openai']>,
+    override?: Partial<{
+        activeProviderId: string;
+        embeddingModel: string;
+        endpoint: string;
+        models: string[];
+        disabledModels: string[];
+        hasKey: boolean;
+        keyHint: string;
+        providers: ServiceCredentialSettingFormValues['openai']['providers'];
+    }>,
 ): ServiceCredentialSettingFormValues => ({
     openai: {
-        hasKey: false,
-        keyHint: '',
-        key: '',
-        clearKey: false,
-        endpoint: '',
-        apiFormat: 'openai',
-        models: [],
-        disabledModels: [],
-        ...openai,
+        embeddingModel: override?.embeddingModel ?? '',
+        activeProviderId: override?.activeProviderId ?? 'deepseek',
+        providers: override?.providers ?? [
+            {
+                id: override?.activeProviderId ?? 'deepseek',
+                name: 'DeepSeek',
+                apiFormat: 'openai',
+                endpoint: override?.endpoint ?? '',
+                hasKey: override?.hasKey ?? false,
+                keyHint: override?.keyHint ?? '',
+                key: '',
+                clearKey: false,
+                models: override?.models ?? [],
+                disabledModels: override?.disabledModels ?? [],
+            },
+        ],
     },
     tencent: {
         hasCredentials: false,
@@ -280,7 +296,7 @@ describe('OpenAiCredentialCard', () => {
         await waitFor(() => expect(errorSpy).toHaveBeenCalledTimes(1));
         expect(successSpy).not.toHaveBeenCalled();
         expect(keyInput).toHaveValue('sk-pending-1234');
-        expect(getValues().openai.hasKey).toBe(false);
+        expect(getValues().openai.providers[0]?.hasKey).toBe(false);
 
         // 重试并落盘成功：落盘完成前仍未弹成功，落盘完成后清空草稿并弹成功提示
         await user.click(screen.getByRole('button', { name: '保存' }));
@@ -288,7 +304,7 @@ describe('OpenAiCredentialCard', () => {
         resolveFlush();
         await waitFor(() => expect(successSpy).toHaveBeenCalledWith('API Key 已保存'));
         expect(keyInput).toHaveValue('');
-        expect(getValues().openai.hasKey).toBe(true);
+        expect(getValues().openai.providers[0]?.hasKey).toBe(true);
 
         // 清除 Key 同样等待落盘完成，失败时不误报已清除
         callCount = 0;
@@ -297,7 +313,7 @@ describe('OpenAiCredentialCard', () => {
         rejectFlush(new Error('save failed'));
         await waitFor(() => expect(errorSpy).toHaveBeenCalledTimes(2));
         expect(successSpy).toHaveBeenCalledTimes(1);
-        expect(getValues().openai.hasKey).toBe(true);
+        expect(getValues().openai.providers[0]?.hasKey).toBe(true);
     });
 
     it('输入 API Key 后直接点击测试会先提交草稿并等待落盘，再触发模型连通性测试', async () => {
@@ -306,7 +322,7 @@ describe('OpenAiCredentialCard', () => {
         let flushedKey = '';
         let getValuesRef: (() => ServiceCredentialSettingFormValues) | null = null;
         const onFlushCredentials = vi.fn(async () => {
-            flushedKey = getValuesRef?.().openai.key ?? '';
+            flushedKey = getValuesRef?.().openai.providers[0]?.key ?? '';
             events.push(`flush:${flushedKey}`);
         });
         const onTestModel = vi.fn((model: string) => {
@@ -325,7 +341,7 @@ describe('OpenAiCredentialCard', () => {
         const row = screen.getByTestId('model-row-deepseek-chat');
         await user.click(within(row).getByRole('button', { name: '测试' }));
 
-        await waitFor(() => expect(onTestModel).toHaveBeenCalledWith('deepseek-chat', undefined));
+        await waitFor(() => expect(onTestModel).toHaveBeenCalledWith('deepseek-chat', 'deepseek'));
         expect(events).toEqual(['flush:sk-direct-test-9999', 'test:deepseek-chat']);
         expect(keyInput).toHaveValue('');
     });
@@ -388,13 +404,12 @@ describe('OpenAiCredentialCard', () => {
 
         const values = getValues();
         expect(values.openai.activeProviderId).toBe('openai');
-        expect(values.openai.endpoint).toBe('https://proxy.openai.example/v1');
-        expect(values.openai.hasKey).toBe(true);
-        expect(values.openai.keyHint).toBe('••••8888');
         const deepseek = values.openai.providers?.find((p) => p.id === 'deepseek');
         const openai = values.openai.providers?.find((p) => p.id === 'openai');
         expect(deepseek?.hasKey).toBe(false);
         expect(deepseek?.key).toBe('');
+        expect(openai?.hasKey).toBe(true);
+        expect(openai?.keyHint).toBe('••••8888');
         expect(openai?.endpoint).toBe('https://proxy.openai.example/v1');
         expect(screen.getByDisplayValue('https://proxy.openai.example/v1')).toBeInTheDocument();
     });

@@ -2,7 +2,11 @@ import { injectable } from 'inversify';
 import { storeGet } from '@/backend/infrastructure/settings/store';
 import type { AiModelScene } from '@/backend/services/AiProviderService';
 import type { SettingKey } from '@/common/types/store_schema';
-import { parseStoredProviderProfiles, findProviderForModel } from '@/common/utils/cloud-ai-providers';
+import {
+    findProviderForModel,
+    flattenEnabledProviderModels,
+    parseStoredProviderProfiles,
+} from '@/common/utils/cloud-ai-providers';
 
 const API_FORMAT_LABELS: Record<string, string> = {
     anthropic: 'Anthropic',
@@ -42,36 +46,13 @@ export class ModelRoutingServiceImpl implements ModelRoutingService {
     }
 
     /**
-     * 解析服务配置中的 OpenAI 模型清单。
-     * @param raw 逗号或换行分隔的模型配置。
-     * @returns 去空、去重后的模型标识列表；空配置保持为空，不做默认模型回退。
-     */
-    private parseModels(raw: string): string[] {
-        const parsed = raw
-            .split(/[\n,]/)
-            .map((item) => item.trim())
-            .filter((item) => item.length > 0);
-
-        return Array.from(new Set(parsed));
-    }
-
-    /**
      * 解析场景当前选择的 OpenAI 模型，并严格校验它仍在服务配置清单中。
      * @param scene 当前 AI 使用场景。
      * @returns 已校验的模型路由；配置缺失或失效时直接抛错。
      */
     public resolveOpenAiModel(scene: AiModelScene): RoutedModel {
-        const profiles = parseStoredProviderProfiles(storeGet('models.openai.providers'));
-        const availableModels = profiles && profiles.length > 0
-            ? Array.from(new Set(profiles.flatMap((profile) => {
-                const disabled = new Set(profile.disabledModels);
-                return profile.models.filter((model) => !disabled.has(model));
-            })))
-            : (() => {
-                const disabledModels = new Set(this.parseModels(storeGet('models.openai.disabled')));
-                return this.parseModels(storeGet('models.openai.available'))
-                    .filter((model) => !disabledModels.has(model));
-            })();
+        const profiles = parseStoredProviderProfiles(storeGet('models.openai.providers')) ?? [];
+        const availableModels = flattenEnabledProviderModels(profiles);
         if (availableModels.length === 0) {
             throw new Error('OpenAI 可用模型列表为空，请先在服务配置中添加或启用模型');
         }
@@ -94,15 +75,12 @@ export class ModelRoutingServiceImpl implements ModelRoutingService {
     public resolveProviderLabel(scene: AiModelScene): string {
         try {
             const routed = this.resolveOpenAiModel(scene);
-            const profiles = parseStoredProviderProfiles(storeGet('models.openai.providers'));
-            if (profiles && profiles.length > 0) {
-                const matched = findProviderForModel(profiles, routed.modelId);
-                if (matched) {
-                    return matched.name.trim() || (API_FORMAT_LABELS[matched.apiFormat] ?? 'AI');
-                }
+            const profiles = parseStoredProviderProfiles(storeGet('models.openai.providers')) ?? [];
+            const matched = findProviderForModel(profiles, routed.modelId);
+            if (matched) {
+                return matched.name.trim() || (API_FORMAT_LABELS[matched.apiFormat] ?? 'AI');
             }
-            const format = storeGet('apiKeys.openAi.apiFormat');
-            return API_FORMAT_LABELS[format] ?? 'OpenAI';
+            return 'AI';
         } catch {
             return 'AI';
         }

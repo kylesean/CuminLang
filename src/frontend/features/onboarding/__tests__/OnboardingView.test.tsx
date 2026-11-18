@@ -128,12 +128,20 @@ describe('OnboardingView Component', () => {
         vi.mocked(settingsApi.getEmbeddingModelStatus).mockResolvedValue(makeEmbeddingStatus(false));
         vi.mocked(settingsApi.getServiceCredentials).mockResolvedValue({
             openai: {
-                hasKey: false,
-                keyHint: '',
-                endpoint: 'https://api.openai.com/v1',
-                apiFormat: 'openai',
-                models: [],
                 embeddingModel: '',
+                activeProviderId: 'openai',
+                providers: [
+                    {
+                        id: 'openai',
+                        name: 'OpenAI',
+                        apiFormat: 'openai',
+                        endpoint: 'https://api.openai.com/v1',
+                        hasKey: false,
+                        keyHint: '',
+                        models: [],
+                        disabledModels: [],
+                    },
+                ],
             },
             tencent: {
                 hasCredentials: false,
@@ -358,23 +366,39 @@ describe('OnboardingView Component', () => {
         vi.mocked(settingsApi.getServiceCredentials)
             .mockResolvedValueOnce({
                 openai: {
-                    hasKey: false,
-                    keyHint: '',
-                    endpoint: 'https://api.openai.com/v1',
-                    apiFormat: 'openai',
-                    models: [],
                     embeddingModel: '',
+                    activeProviderId: 'deepseek',
+                    providers: [
+                        {
+                            id: 'deepseek',
+                            name: 'DeepSeek',
+                            apiFormat: 'openai',
+                            endpoint: 'https://api.deepseek.com/v1',
+                            hasKey: false,
+                            keyHint: '',
+                            models: [],
+                            disabledModels: [],
+                        },
+                    ],
                 },
                 tencent: { hasCredentials: false, secretIdHint: '' },
             })
             .mockResolvedValue({
                 openai: {
-                    hasKey: true,
-                    keyHint: '...9999',
-                    endpoint: 'https://api.deepseek.com/v1',
-                    apiFormat: 'openai',
-                    models: ['deepseek-chat'],
                     embeddingModel: '',
+                    activeProviderId: 'deepseek',
+                    providers: [
+                        {
+                            id: 'deepseek',
+                            name: 'DeepSeek',
+                            apiFormat: 'openai',
+                            endpoint: 'https://api.deepseek.com/v1',
+                            hasKey: true,
+                            keyHint: '...9999',
+                            models: ['deepseek-chat'],
+                            disabledModels: [],
+                        },
+                    ],
                 },
                 tencent: { hasCredentials: false, secretIdHint: '' },
             });
@@ -398,10 +422,16 @@ describe('OnboardingView Component', () => {
             expect(settingsApi.saveServiceCredentials).toHaveBeenCalledWith(
                 expect.objectContaining({
                     openai: expect.objectContaining({
-                        key: 'sk-test-9999',
-                        endpoint: 'https://api.deepseek.com/v1',
-                        apiFormat: 'openai',
-                        models: ['deepseek-chat'],
+                        activeProviderId: 'deepseek',
+                        providers: [
+                            expect.objectContaining({
+                                id: 'deepseek',
+                                key: 'sk-test-9999',
+                                endpoint: 'https://api.deepseek.com/v1',
+                                apiFormat: 'openai',
+                                models: ['deepseek-chat'],
+                            }),
+                        ],
                     }),
                 }),
             );
@@ -428,23 +458,39 @@ describe('OnboardingView Component', () => {
         vi.mocked(settingsApi.getServiceCredentials)
             .mockResolvedValueOnce({
                 openai: {
-                    hasKey: true,
-                    keyHint: '...1111',
-                    endpoint: 'https://api.deepseek.com/v1',
-                    apiFormat: 'openai',
-                    models: ['old-model'],
                     embeddingModel: '',
+                    activeProviderId: 'deepseek',
+                    providers: [
+                        {
+                            id: 'deepseek',
+                            name: 'DeepSeek',
+                            apiFormat: 'openai',
+                            endpoint: 'https://api.deepseek.com/v1',
+                            hasKey: true,
+                            keyHint: '...1111',
+                            models: ['old-model'],
+                            disabledModels: [],
+                        },
+                    ],
                 },
                 tencent: { hasCredentials: false, secretIdHint: '' },
             })
             .mockResolvedValue({
                 openai: {
-                    hasKey: true,
-                    keyHint: '...9999',
-                    endpoint: 'https://api.deepseek.com/v1',
-                    apiFormat: 'openai',
-                    models: ['new-model', 'old-model'],
                     embeddingModel: '',
+                    activeProviderId: 'deepseek',
+                    providers: [
+                        {
+                            id: 'deepseek',
+                            name: 'DeepSeek',
+                            apiFormat: 'openai',
+                            endpoint: 'https://api.deepseek.com/v1',
+                            hasKey: true,
+                            keyHint: '...9999',
+                            models: ['new-model', 'old-model'],
+                            disabledModels: [],
+                        },
+                    ],
                 },
                 tencent: { hasCredentials: false, secretIdHint: '' },
             });
@@ -466,7 +512,13 @@ describe('OnboardingView Component', () => {
             expect(settingsApi.saveServiceCredentials).toHaveBeenCalledWith(
                 expect.objectContaining({
                     openai: expect.objectContaining({
-                        models: ['new-model', 'old-model'],
+                        activeProviderId: 'deepseek',
+                        providers: [
+                            expect.objectContaining({
+                                id: 'deepseek',
+                                models: ['new-model', 'old-model'],
+                            }),
+                        ],
                     }),
                 }),
             );

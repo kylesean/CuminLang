@@ -2,6 +2,11 @@ import type { MainLogger } from '@/backend/infrastructure/logger';
 import type { Db } from '@/backend/infrastructure/db/createDb';
 import type { SettingKey } from '@/common/types/store_schema';
 
+/** 已从当前 schema 清理、但早期历史迁移步骤仍需写入的历史键。 */
+export type HistoricalMigrationSettingKey = 'apiKeys.openAi.endpoint' | 'models.openai.available';
+
+export type MigrationWritableSettingKey = SettingKey | HistoricalMigrationSettingKey;
+
 /**
  * 迁移专用的配置存储通道。
  *
@@ -15,7 +20,7 @@ export interface CustomMigrationSettings {
     /** 判断键是否被真实持久化过（配置文件里存在该键），与 schema 默认值无关。 */
     hasPersisted(key: string): boolean;
     /** 通过单例写入设置值；空值按「回落 schema 默认值」语义处理。 */
-    set(key: SettingKey, value: string | null | undefined): boolean;
+    set(key: MigrationWritableSettingKey, value: string | null | undefined): boolean;
     /** 通过单例删除设置项（含历史键），避免跨实例快照把已删键写回磁盘。 */
     delete(key: string): void;
 }

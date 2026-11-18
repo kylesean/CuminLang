@@ -2,6 +2,11 @@ import { test as base, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+    parseStoredProviderKeys,
+    parseStoredProviderProfiles,
+    type PersistedCloudAiProvider,
+} from '../../src/common/utils/cloud-ai-providers';
+import {
     assertFileProtocolEntry,
     buildCleanElectronEnv,
     buildElectronLaunchArgs,
@@ -74,12 +79,43 @@ export function readConfigValue(userDataDir: string, key: string): unknown {
  * Linux 取决于有没有系统密钥环），不可用时才是明文。
  *
  * @param userDataDir 用例独占的 userData 目录。
- * @param key 形如 apiKeys.openAi.key 的点号路径。
+ * @param key 形如 proxy.url 的点号路径。
  * @param plaintext 期望的明文值。
  * @returns 已写入（明文或密文）时为 true。
  */
 export function isSecretPersisted(userDataDir: string, key: string, plaintext: string): boolean {
     return isSecretValuePersisted(userDataDir, CONFIG_FILE_NAME, key, plaintext);
+}
+
+/** 读取 `models.openai.providers` 中指定服务商档案，未持久化或不存在时返回 undefined。 */
+export function readProviderProfile(
+    userDataDir: string,
+    providerId = 'deepseek',
+): PersistedCloudAiProvider | undefined {
+    const raw = readConfigValue(userDataDir, 'models.openai.providers');
+    if (typeof raw !== 'string') {
+        return undefined;
+    }
+    return parseStoredProviderProfiles(raw)?.find((item) => item.id === providerId);
+}
+
+/**
+ * 判断 `apiKeys.openAi.providerKeys` 中指定服务商的密钥是否已落盘
+ * （加密环境断言密文前缀，无密钥环环境解析 JSON 比对对应键明文）。
+ */
+export function isProviderSecretPersisted(
+    userDataDir: string,
+    providerId: string,
+    plaintext: string,
+): boolean {
+    const raw = readConfigValue(userDataDir, 'apiKeys.openAi.providerKeys');
+    if (typeof raw !== 'string' || raw.length === 0) {
+        return false;
+    }
+    if (raw.startsWith('dp-enc:')) {
+        return true;
+    }
+    return parseStoredProviderKeys(raw)[providerId] === plaintext;
 }
 
 /**

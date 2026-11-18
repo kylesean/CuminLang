@@ -43,24 +43,12 @@ export type CloudAiProviderProfileFormValue = CloudAiProviderProfileDetailVO & {
  */
 export type ServiceCredentialSettingDetailVO = {
     openai: {
-        /** 是否已保存过 API Key。 */
-        hasKey: boolean;
-        /** 已保存 Key 的末四位；未配置时为空串。 */
-        keyHint: string;
-        /** 云端接口完整 base URL（含 /v1 等版本路径）。 */
-        endpoint: string;
-        /** API 兼容格式：openai / anthropic / gemini。 */
-        apiFormat: AiApiFormat;
-        /** OpenAI 可用模型标识列表。 */
-        models: string[];
-        /** 已关闭（不在本地资源可选清单展示）的模型标识列表。 */
-        disabledModels?: string[];
         /** 可选云端语义向量模型标识（用于 Embedding 回退）。 */
         embeddingModel?: string;
-        /** 当前选中的服务商配置 ID（多服务商并存时使用）。 */
-        activeProviderId?: string;
+        /** 当前选中的服务商配置 ID。 */
+        activeProviderId: string;
         /** 多服务商配置列表（每家独立密钥、协议、URL 与模型清单）。 */
-        providers?: CloudAiProviderProfileDetailVO[];
+        providers: CloudAiProviderProfileDetailVO[];
     };
     tencent: {
         /** 是否已保存腾讯云凭据。 */
@@ -79,24 +67,12 @@ export type ServiceCredentialSettingDetailVO = {
  */
 export type ServiceCredentialSettingSaveVO = {
     openai: {
-        /** 新的 API Key；留空表示沿用已保存的值。 */
-        key?: string;
-        /** 显式清除已保存的 API Key。 */
-        clearKey?: boolean;
-        /** 云端接口完整 base URL（含 /v1 等版本路径）。 */
-        endpoint: string;
-        /** API 兼容格式：openai / anthropic / gemini。 */
-        apiFormat: AiApiFormat;
-        /** OpenAI 可用模型标识列表。 */
-        models: string[];
-        /** 已关闭（不在本地资源可选清单展示）的模型标识列表。 */
-        disabledModels?: string[];
         /** 可选云端语义向量模型标识（用于 Embedding 回退）。 */
         embeddingModel?: string;
-        /** 当前选中的服务商配置 ID（多服务商并存时使用）。 */
+        /** 当前选中的服务商配置 ID。 */
         activeProviderId?: string;
         /** 多服务商配置列表（每家独立密钥、协议、URL 与模型清单）。 */
-        providers?: CloudAiProviderProfileSaveVO[];
+        providers: CloudAiProviderProfileSaveVO[];
     };
     tencent: {
         /** 新的腾讯云 SecretId；留空表示沿用已保存的值。 */
@@ -117,11 +93,8 @@ export type ServiceCredentialSettingSaveVO = {
  */
 export type ServiceCredentialSettingFormValues = {
     openai: Omit<ServiceCredentialSettingDetailVO['openai'], 'providers'> & {
-        /** 本次要写入的新 Key；空串表示沿用已保存的值。 */
-        key: string;
-        /** 显式清除已保存的 Key。 */
-        clearKey: boolean;
-        providers?: CloudAiProviderProfileFormValue[];
+        embeddingModel: string;
+        providers: CloudAiProviderProfileFormValue[];
     };
     tencent: ServiceCredentialSettingDetailVO['tencent'] & {
         /** 本次要写入的新 SecretId；空串表示沿用。 */

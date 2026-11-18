@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { isSecretPersisted, readConfigValue, test } from '../../support/fixtures';
+import { isProviderSecretPersisted, readConfigValue, readProviderProfile, test } from '../../support/fixtures';
 import { openSettingsSection, reloadSettingsPage, switchSettingsSection, chooseInRow, selectInRow } from '../../support/settings-page';
 import {
     SETTING_ITEM_TESTIDS,
@@ -82,10 +82,11 @@ test.describe('服务与资源设置', () => {
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toBeVisible();
 
-        await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
-        await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(ENDPOINT);
-        // 模型清单以换行文本落盘；断言包含而不是全等，避免绑死内置默认模型
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(NEW_MODEL);
+        await expect.poll(() => isProviderSecretPersisted(userDataDir, 'deepseek', API_KEY)).toBe(true);
+        await expect.poll(() => readProviderProfile(userDataDir)?.endpoint).toBe(ENDPOINT);
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).toContain(NEW_MODEL);
+        expect(readConfigValue(userDataDir, 'apiKeys.openAi.key')).toBeUndefined();
+        expect(readConfigValue(userDataDir, 'models.openai.available')).toBeUndefined();
 
         // 重进页面：密钥不再明文下发，只展示脱敏提示；地址与模型清单仍来自后端回读
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
@@ -100,8 +101,8 @@ test.describe('服务与资源设置', () => {
         // 留空保存必须沿用旧 key：只改接口地址触发一次自动保存，密钥输入框保持为空
         const rotatedEndpoint = 'https://api.e2e.test/v2';
         await apiUrlInput(page).fill(rotatedEndpoint);
-        await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(rotatedEndpoint);
-        await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
+        await expect.poll(() => readProviderProfile(userDataDir)?.endpoint).toBe(rotatedEndpoint);
+        await expect.poll(() => isProviderSecretPersisted(userDataDir, 'deepseek', API_KEY)).toBe(true);
 
         // 再重进一次：密钥仍是「已保存」的脱敏态，说明留空保存没有把旧 key 当成清空
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
@@ -123,7 +124,7 @@ test.describe('服务与资源设置', () => {
         await openResourcesTab(page, '云端服务');
         await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(NEW_MODEL);
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).toContain(NEW_MODEL);
 
         await openResourcesTab(page, '本地资源');
         await chooseInRow(page, 'dictionary', NEW_MODEL);
@@ -172,8 +173,8 @@ test.describe('服务与资源设置', () => {
 
         const presetApiFormat = API_FORMAT_BY_LABEL[presetFormatLabel];
         expect(presetApiFormat, `未映射的 API 类型标签：${presetFormatLabel}`).toBeTruthy();
-        await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(presetEndpoint);
-        await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.apiFormat')).toBe(presetApiFormat);
+        await expect.poll(() => readProviderProfile(userDataDir)?.endpoint).toBe(presetEndpoint);
+        await expect.poll(() => readProviderProfile(userDataDir)?.apiFormat).toBe(presetApiFormat);
 
         // 当前页面即时回显
         await expect(apiUrlInput(page)).toHaveValue(presetEndpoint);
@@ -192,35 +193,35 @@ test.describe('服务与资源设置', () => {
 
         await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(NEW_MODEL);
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).toContain(NEW_MODEL);
 
         const modelRow = page.getByTestId(modelRowTestId(NEW_MODEL));
         await expect(modelRow).toBeVisible();
 
-        // 关闭模型启用开关：写入 models.openai.disabled 并在列表显示「已关闭」
+        // 关闭模型启用开关：写入 models.openai.providers[].disabledModels 并在列表显示「已关闭」
         const enableSwitch = modelRow.getByRole('switch', { name: `启用模型 ${NEW_MODEL}` });
         await expect(enableSwitch).toBeChecked();
         await enableSwitch.click();
         await expect(enableSwitch).not.toBeChecked();
         await expect(modelRow.getByText('已关闭')).toBeVisible();
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.disabled')).toContain(NEW_MODEL);
+        await expect.poll(() => readProviderProfile(userDataDir)?.disabledModels).toContain(NEW_MODEL);
 
         // 重新启用并添加临时模型，验证删除同样持久化
         await enableSwitch.click();
         await expect(enableSwitch).toBeChecked();
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.disabled')).toBe('');
+        await expect.poll(() => readProviderProfile(userDataDir)?.disabledModels).toEqual([]);
 
         const temporaryModel = 'e2e-model-temp';
         await addModelInput(page).fill(temporaryModel);
         await page.getByRole('button', { name: '添加', exact: true }).click();
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(temporaryModel);
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).toContain(temporaryModel);
 
         const temporaryRow = page.getByTestId(modelRowTestId(temporaryModel));
         await expect(temporaryRow.getByRole('button', { name: '删除' })).toBeEnabled();
         await deleteModelRow(page, temporaryRow);
 
         // 删除同样要写回配置，且重进页面后不会复现
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).not.toContain(temporaryModel);
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).not.toContain(temporaryModel);
         await expect(page.getByTestId(modelRowTestId(temporaryModel))).toHaveCount(0);
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
@@ -235,7 +236,7 @@ test.describe('服务与资源设置', () => {
 
         await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(NEW_MODEL);
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).toContain(NEW_MODEL);
 
         // 功能下拉里的模型清单来自详情缓存，保存成功后缓存会立刻刷新，新模型无需重进页面即可选中
         await openResourcesTab(page, '本地资源');
@@ -334,7 +335,7 @@ test.describe('服务与资源设置', () => {
         await expect(modelRow.getByRole('button', { name: '删除' })).toBeEnabled();
 
         await deleteModelRow(page, modelRow);
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).not.toContain(NEW_MODEL);
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).not.toContain(NEW_MODEL);
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
 
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
@@ -348,7 +349,7 @@ test.describe('服务与资源设置', () => {
         await openResourcesTab(first.page, '云端服务');
         await apiKeyInput(first.page).fill(API_KEY);
         await first.page.getByRole('button', { name: '保存' }).click();
-        await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
+        await expect.poll(() => isProviderSecretPersisted(userDataDir, 'deepseek', API_KEY)).toBe(true);
         await first.close();
 
         // 重启后不做任何操作：密钥必须来自持久化配置，且只以脱敏提示呈现、不回传明文
@@ -373,7 +374,7 @@ test.describe('服务与资源设置', () => {
         await deleteModelRow(page, addedRow);
 
         // 清空就是清空：清单在磁盘上留空，不会又被兜底模型塞回来
-        await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toBe('');
+        await expect.poll(() => readProviderProfile(userDataDir)?.models).toEqual([]);
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
         await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
@@ -396,7 +397,7 @@ test.describe('服务与资源设置', () => {
         // 关键：填完立刻离开，不给 600ms 防抖留时间，验证离开栏目时自动保存冲刷不丢配置
         await switchSettingsSection(page, 'appearance', page.getByRole('radio', { name: '深色' }));
 
-        await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(ENDPOINT);
+        await expect.poll(() => readProviderProfile(userDataDir)?.endpoint).toBe(ENDPOINT);
 
         // 回到该页：接口地址来自后端回读
         await switchSettingsSection(page, 'resources', page.getByRole('heading', { name: '服务与资源' }));

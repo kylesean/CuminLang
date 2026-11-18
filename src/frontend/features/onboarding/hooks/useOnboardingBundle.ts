@@ -344,13 +344,36 @@ export function useOnboardingBundle() {
         setCloudSaving(true);
         try {
             const current = await settingsApi.getServiceCredentials();
-            const mergedModels = Array.from(new Set([trimmedModel, ...current.openai.models]));
+            const existingProviders = current.openai.providers ?? [];
+            const existingTarget = existingProviders.find((item) => item.id === preset.id);
+            const mergedModels = Array.from(new Set([trimmedModel, ...(existingTarget?.models ?? [])]));
+            const updatedTarget = {
+                id: preset.id,
+                name: existingTarget?.name ?? preset.name,
+                apiFormat: preset.apiFormat,
+                endpoint: preset.endpoint,
+                ...(trimmedKey ? { key: trimmedKey } : {}),
+                models: mergedModels,
+                disabledModels: (existingTarget?.disabledModels ?? []).filter((m) => m !== trimmedModel),
+            };
+            const nextProviders = existingTarget
+                ? existingProviders.map((item) => (item.id === preset.id ? updatedTarget : item))
+                : [
+                    ...existingProviders.map((item) => ({
+                        id: item.id,
+                        name: item.name,
+                        apiFormat: item.apiFormat,
+                        endpoint: item.endpoint,
+                        models: item.models,
+                        disabledModels: item.disabledModels ?? [],
+                    })),
+                    updatedTarget,
+                ];
             await settingsApi.saveServiceCredentials({
                 openai: {
-                    key: trimmedKey,
-                    endpoint: preset.endpoint,
-                    apiFormat: preset.apiFormat,
-                    models: mergedModels,
+                    embeddingModel: current.openai.embeddingModel,
+                    activeProviderId: preset.id,
+                    providers: nextProviders,
                 },
                 tencent: {},
             });
@@ -589,12 +612,14 @@ export function useOnboardingBundle() {
                 await settingsApi.saveTranscriptionEngine('sherpa-onnx');
             }
 
-            const hasCloudCreds = Boolean(
-                credentials?.openai.endpoint
-                && credentials.openai.models.length > 0
-                && (credentials.openai.hasKey || isLocalLlmEndpoint(credentials.openai.endpoint)),
+            const configuredProviders = credentials?.openai.providers ?? [];
+            const readyProvider = configuredProviders.find(
+                (item) => Boolean(item.endpoint)
+                    && item.models.length > 0
+                    && (item.hasKey || isLocalLlmEndpoint(item.endpoint)),
             );
-            const fallbackCloudModel = cloudSavedModelRef.current || credentials?.openai.models[0] || '';
+            const hasCloudCreds = Boolean(readyProvider);
+            const fallbackCloudModel = cloudSavedModelRef.current || readyProvider?.models[0] || '';
             const useCloudForAi = Boolean(cloudSavedProvider && hasCloudCreds);
 
             if (useCloudForAi) {

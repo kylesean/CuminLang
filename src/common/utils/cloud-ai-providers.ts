@@ -33,9 +33,43 @@ export function parseStoredProviderKeys(raw: string): Record<string, string> {
     }
 }
 
+/** 新安装尚未持久化多服务商列表时的默认服务商 ID。 */
+export const DEFAULT_CLOUD_AI_PROVIDER_ID = 'deepseek';
+
+/** 生成新安装用户的默认云端服务商配置（DeepSeek 预设，空模型列表）。 */
+export function createDefaultProviderProfile(): PersistedCloudAiProvider {
+    const preset = CLOUD_AI_PROVIDER_PRESETS.find((item) => item.id === DEFAULT_CLOUD_AI_PROVIDER_ID)
+        ?? CLOUD_AI_PROVIDER_PRESETS[0];
+    return {
+        id: preset?.id ?? DEFAULT_CLOUD_AI_PROVIDER_ID,
+        name: preset?.name ?? 'DeepSeek',
+        apiFormat: preset?.apiFormat ?? 'openai',
+        endpoint: preset?.endpoint ?? 'https://api.deepseek.com/v1',
+        models: [],
+        disabledModels: [],
+    };
+}
+
+/** 汇总所有服务商配置中的全部模型标识（含已关闭模型，去重保序）。 */
+export function flattenAllProviderModels(providers: readonly PersistedCloudAiProvider[]): string[] {
+    return Array.from(new Set(providers.flatMap((provider) => provider.models)));
+}
+
+/** 汇总所有服务商配置中的已启用模型标识（去重保序）。 */
+export function flattenEnabledProviderModels(
+    providers: ReadonlyArray<{ models: readonly string[]; disabledModels?: readonly string[] }>,
+): string[] {
+    return Array.from(new Set(
+        providers.flatMap((provider) => {
+            const disabled = new Set(provider.disabledModels ?? []);
+            return provider.models.filter((model) => !disabled.has(model));
+        }),
+    ));
+}
+
 /**
  * 解析持久化存储的多厂商配置列表。
- * 若尚未写入多厂商配置，返回 null（调用方回退到传统单配置字段）。
+ * 尚未初始化过（空字符串或非法载荷）返回 null；显式清空则返回 []。
  */
 export function parseStoredProviderProfiles(raw: string): PersistedCloudAiProvider[] | null {
     if (!raw.trim()) return null;

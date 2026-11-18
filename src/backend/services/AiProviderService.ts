@@ -1,6 +1,6 @@
 import { storeGet } from '@/backend/infrastructure/settings/store';
 import { isLocalLlmEndpoint } from '@/common/constants/cloud-ai-provider-presets';
-import { AI_API_FORMATS, type AiApiFormat } from '@/common/utils/cloud-ai-api-format';
+import type { AiApiFormat } from '@/common/utils/cloud-ai-api-format';
 import {
     findProviderForModel,
     parseStoredProviderKeys,
@@ -55,34 +55,35 @@ export class AiProviderServiceImpl implements AiProviderService {
         return isLocalLlmEndpoint(endpoint) ? 'local' : '';
     }
 
+    private findConfiguredProviderConfig(modelId: string, providerId?: string): {
+        endpoint: string;
+        apiKey: string;
+        apiFormat: AiApiFormat;
+    } | null {
+        const profiles = parseStoredProviderProfiles(storeGet('models.openai.providers')) ?? [];
+        const matched = findProviderForModel(profiles, modelId, providerId);
+        if (!matched) {
+            return null;
+        }
+        const keyMap = parseStoredProviderKeys(storeGet('apiKeys.openAi.providerKeys'));
+        const rawKey = keyMap[matched.id] ?? '';
+        return {
+            endpoint: matched.endpoint,
+            apiKey: this.resolveEffectiveApiKey(rawKey, matched.endpoint),
+            apiFormat: matched.apiFormat,
+        };
+    }
+
     private resolveProviderConfig(modelId: string, providerId?: string): {
         endpoint: string;
         apiKey: string;
         apiFormat: AiApiFormat;
     } {
-        const profiles = parseStoredProviderProfiles(storeGet('models.openai.providers'));
-        if (profiles && profiles.length > 0) {
-            const matched = findProviderForModel(profiles, modelId, providerId);
-            if (matched) {
-                const keyMap = parseStoredProviderKeys(storeGet('apiKeys.openAi.providerKeys'));
-                const rawKey = keyMap[matched.id] ?? '';
-                return {
-                    endpoint: matched.endpoint,
-                    apiKey: this.resolveEffectiveApiKey(rawKey, matched.endpoint),
-                    apiFormat: matched.apiFormat,
-                };
-            }
+        const config = this.findConfiguredProviderConfig(modelId, providerId);
+        if (!config) {
+            throw new Error(`未找到模型 ${modelId} 所属的 AI 服务商配置`);
         }
-        const endpoint = storeGet('apiKeys.openAi.endpoint');
-        const apiFormat = storeGet('apiKeys.openAi.apiFormat');
-        if (!AI_API_FORMATS.includes(apiFormat as AiApiFormat)) {
-            throw new Error(`设置项 apiKeys.openAi.apiFormat 非法: ${apiFormat}`);
-        }
-        return {
-            endpoint,
-            apiKey: this.resolveEffectiveApiKey(storeGet('apiKeys.openAi.key'), endpoint),
-            apiFormat: apiFormat as AiApiFormat,
-        };
+        return config;
     }
 
     /**
@@ -97,8 +98,8 @@ export class AiProviderServiceImpl implements AiProviderService {
             }
         }
         const routedModel = this.modelRoutingService.resolveOpenAiModel(scene);
-        const config = this.resolveProviderConfig(routedModel.modelId);
-        if (StrUtil.hasBlank(config.apiKey, config.endpoint)) {
+        const config = this.findConfiguredProviderConfig(routedModel.modelId);
+        if (!config || StrUtil.hasBlank(config.apiKey, config.endpoint)) {
             return null;
         }
         return this.createModelById(routedModel.modelId);

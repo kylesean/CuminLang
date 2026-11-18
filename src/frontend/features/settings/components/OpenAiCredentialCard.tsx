@@ -106,45 +106,6 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         };
     }, []);
 
-    const openAiKeyHint = useWatch({ control: form.control, name: 'openai.keyHint' }) ?? '';
-    const hasOpenAiKey = useWatch({ control: form.control, name: 'openai.hasKey' }) === true;
-    const legacyEndpoint = useWatch({ control: form.control, name: 'openai.endpoint' }) ?? '';
-    const legacyApiFormat = useWatch({ control: form.control, name: 'openai.apiFormat' }) ?? 'openai';
-    const legacyModels = useWatch({ control: form.control, name: 'openai.models' });
-    const legacyDisabledModels = useWatch({ control: form.control, name: 'openai.disabledModels' });
-    const watchedProviders = useWatch({ control: form.control, name: 'openai.providers' });
-    const watchedActiveProviderId = useWatch({ control: form.control, name: 'openai.activeProviderId' });
-
-    const hasProvidersList = Array.isArray(watchedProviders);
-    const hasExplicitProviders = hasProvidersList && watchedProviders.length > 0;
-    const providers: CloudAiProviderProfileFormValue[] = React.useMemo(() => {
-        if (hasProvidersList) {
-            return watchedProviders as CloudAiProviderProfileFormValue[];
-        }
-        return [{
-            id: watchedActiveProviderId ?? 'default',
-            name: 'Default',
-            apiFormat: legacyApiFormat,
-            endpoint: legacyEndpoint,
-            hasKey: hasOpenAiKey,
-            keyHint: openAiKeyHint,
-            key: '',
-            clearKey: false,
-            models: legacyModels ?? [],
-            disabledModels: legacyDisabledModels ?? [],
-        }];
-    }, [
-        hasProvidersList,
-        watchedProviders,
-        watchedActiveProviderId,
-        legacyApiFormat,
-        legacyEndpoint,
-        hasOpenAiKey,
-        openAiKeyHint,
-        legacyModels,
-        legacyDisabledModels,
-    ]);
-
     const emptyFallbackProvider: CloudAiProviderProfileFormValue = React.useMemo(() => ({
         id: '',
         name: '',
@@ -158,18 +119,24 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         disabledModels: [],
     }), []);
 
+    const watchedProviders = useWatch({ control: form.control, name: 'openai.providers' });
+    const watchedActiveProviderId = useWatch({ control: form.control, name: 'openai.activeProviderId' });
+
+    const providers: CloudAiProviderProfileFormValue[] = React.useMemo(
+        () => watchedProviders ?? [],
+        [watchedProviders],
+    );
+    const hasProviders = providers.length > 0;
+
     const activeProvider = React.useMemo(
         () => providers.find((item) => item.id === watchedActiveProviderId) ?? providers[0] ?? emptyFallbackProvider,
         [providers, watchedActiveProviderId, emptyFallbackProvider],
     );
 
     const resolveCurrentActiveId = (): string => {
-        const currentProviders = form.getValues('openai.providers');
+        const currentProviders = form.getValues('openai.providers') ?? [];
         const currentActiveId = form.getValues('openai.activeProviderId');
-        if (Array.isArray(currentProviders) && currentProviders.length > 0) {
-            return currentProviders.find((item) => item.id === currentActiveId)?.id ?? currentProviders[0]?.id ?? '';
-        }
-        return currentActiveId ?? 'default';
+        return currentProviders.find((item) => item.id === currentActiveId)?.id ?? currentProviders[0]?.id ?? '';
     };
 
     const endpoint = activeProvider.endpoint;
@@ -195,56 +162,11 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         targetId: string,
         updater: (current: CloudAiProviderProfileFormValue) => CloudAiProviderProfileFormValue,
     ) => {
-        const currentProviders = form.getValues('openai.providers');
-        const currentActiveId = form.getValues('openai.activeProviderId');
-        if (Array.isArray(currentProviders) && currentProviders.length > 0) {
-            const currentTarget = currentProviders.find((item) => item.id === targetId);
-            if (!currentTarget) return;
-            const nextProvider = updater(currentTarget);
-            const nextProviders = currentProviders.map((item) => (item.id === targetId ? nextProvider : item));
-            setValue('openai.providers', nextProviders, { shouldDirty: true });
-            const allModels = Array.from(new Set(nextProviders.flatMap((p) => p.models)));
-            const allEnabled = new Set(
-                nextProviders.flatMap((p) => {
-                    const disabledSet = new Set(p.disabledModels ?? []);
-                    return p.models.filter((m) => !disabledSet.has(m));
-                }),
-            );
-            setValue('openai.models', allModels, { shouldDirty: true });
-            setValue('openai.disabledModels', allModels.filter((m) => !allEnabled.has(m)), { shouldDirty: true });
-            const resolvedActiveId = nextProviders.find((item) => item.id === currentActiveId)?.id ?? nextProviders[0]?.id;
-            if (targetId === resolvedActiveId) {
-                setValue('openai.endpoint', nextProvider.endpoint, { shouldDirty: true });
-                setValue('openai.apiFormat', nextProvider.apiFormat, { shouldDirty: true });
-                setValue('openai.hasKey', nextProvider.hasKey, { shouldDirty: true });
-                setValue('openai.keyHint', nextProvider.keyHint, { shouldDirty: true });
-                setValue('openai.key', nextProvider.key, { shouldDirty: true });
-                setValue('openai.clearKey', nextProvider.clearKey, { shouldDirty: true });
-            }
-            return;
-        }
-        const currentOpenAi = form.getValues('openai');
-        const currentSingle: CloudAiProviderProfileFormValue = {
-            id: currentActiveId ?? 'default',
-            name: 'Default',
-            apiFormat: currentOpenAi?.apiFormat ?? 'openai',
-            endpoint: currentOpenAi?.endpoint ?? '',
-            hasKey: currentOpenAi?.hasKey === true,
-            keyHint: currentOpenAi?.keyHint ?? '',
-            key: currentOpenAi?.key ?? '',
-            clearKey: currentOpenAi?.clearKey === true,
-            models: currentOpenAi?.models ?? [],
-            disabledModels: currentOpenAi?.disabledModels ?? [],
-        };
-        const nextProvider = updater(currentSingle);
-        setValue('openai.models', nextProvider.models, { shouldDirty: true });
-        setValue('openai.disabledModels', nextProvider.disabledModels ?? [], { shouldDirty: true });
-        setValue('openai.endpoint', nextProvider.endpoint, { shouldDirty: true });
-        setValue('openai.apiFormat', nextProvider.apiFormat, { shouldDirty: true });
-        setValue('openai.hasKey', nextProvider.hasKey, { shouldDirty: true });
-        setValue('openai.keyHint', nextProvider.keyHint, { shouldDirty: true });
-        setValue('openai.key', nextProvider.key, { shouldDirty: true });
-        setValue('openai.clearKey', nextProvider.clearKey, { shouldDirty: true });
+        const currentProviders = form.getValues('openai.providers') ?? [];
+        const currentTarget = currentProviders.find((item) => item.id === targetId);
+        if (!currentTarget) return;
+        const nextProviders = currentProviders.map((item) => (item.id === targetId ? updater(item) : item));
+        setValue('openai.providers', nextProviders, { shouldDirty: true });
     };
 
     const updateActiveProvider = (updater: (current: CloudAiProviderProfileFormValue) => CloudAiProviderProfileFormValue) => {
@@ -255,12 +177,6 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
         const target = providers.find((item) => item.id === targetId);
         if (!target) return;
         setValue('openai.activeProviderId', target.id, { shouldDirty: true });
-        setValue('openai.endpoint', target.endpoint, { shouldDirty: true });
-        setValue('openai.apiFormat', target.apiFormat, { shouldDirty: true });
-        setValue('openai.hasKey', target.hasKey, { shouldDirty: true });
-        setValue('openai.keyHint', target.keyHint, { shouldDirty: true });
-        setValue('openai.key', target.key, { shouldDirty: true });
-        setValue('openai.clearKey', target.clearKey, { shouldDirty: true });
         setKeyDraft('');
         setNewModel('');
         setPendingDeleteModel(null);
@@ -292,15 +208,8 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
             models: [],
             disabledModels: [],
         };
-        const nextProviders = [...providers, created];
-        setValue('openai.providers', nextProviders, { shouldDirty: true });
+        setValue('openai.providers', [...providers, created], { shouldDirty: true });
         setValue('openai.activeProviderId', created.id, { shouldDirty: true });
-        setValue('openai.endpoint', created.endpoint, { shouldDirty: true });
-        setValue('openai.apiFormat', created.apiFormat, { shouldDirty: true });
-        setValue('openai.hasKey', false, { shouldDirty: true });
-        setValue('openai.keyHint', '', { shouldDirty: true });
-        setValue('openai.key', '', { shouldDirty: true });
-        setValue('openai.clearKey', false, { shouldDirty: true });
         setKeyDraft('');
         setNewModel('');
         setPendingDeleteModel(null);
@@ -308,26 +217,10 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
     };
 
     const handleRemoveActiveProvider = () => {
-        if (!hasExplicitProviders) return;
+        if (!hasProviders) return;
         const remaining = providers.filter((item) => item.id !== activeProvider.id);
-        const fallback = remaining[0];
         setValue('openai.providers', remaining, { shouldDirty: true });
-        const allModels = Array.from(new Set(remaining.flatMap((p) => p.models)));
-        const allEnabled = new Set(
-            remaining.flatMap((p) => {
-                const disabledSet = new Set(p.disabledModels ?? []);
-                return p.models.filter((m) => !disabledSet.has(m));
-            }),
-        );
-        setValue('openai.models', allModels, { shouldDirty: true });
-        setValue('openai.disabledModels', allModels.filter((m) => !allEnabled.has(m)), { shouldDirty: true });
-        setValue('openai.activeProviderId', fallback?.id ?? '', { shouldDirty: true });
-        setValue('openai.endpoint', fallback?.endpoint ?? '', { shouldDirty: true });
-        setValue('openai.apiFormat', fallback?.apiFormat ?? 'openai', { shouldDirty: true });
-        setValue('openai.hasKey', fallback?.hasKey ?? false, { shouldDirty: true });
-        setValue('openai.keyHint', fallback?.keyHint ?? '', { shouldDirty: true });
-        setValue('openai.key', fallback?.key ?? '', { shouldDirty: true });
-        setValue('openai.clearKey', fallback?.clearKey ?? false, { shouldDirty: true });
+        setValue('openai.activeProviderId', remaining[0]?.id ?? '', { shouldDirty: true });
         setKeyDraft('');
         setNewModel('');
         setPendingDeleteModel(null);
@@ -437,7 +330,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
     };
 
     const handleTestModel = async (model: string) => {
-        const providerId = hasExplicitProviders ? activeProvider.id : undefined;
+        const providerId = activeProvider.id || undefined;
         const trimmedDraft = keyDraft.trim();
         if (trimmedDraft.length > 0) {
             if (keyActionPending !== null) return;
@@ -515,7 +408,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
             models: current.models.filter((item) => item !== model),
             disabledModels: (current.disabledModels ?? []).filter((item) => item !== model),
         }));
-        onModelRemoved(model, hasExplicitProviders ? activeProvider.id : undefined);
+        onModelRemoved(model, activeProvider.id || undefined);
     };
 
     return (
@@ -526,7 +419,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                     <Text type="supporting" color="secondary">
                         {t('serviceCredentials.openai.providersLabel')}
                     </Text>
-                    {hasExplicitProviders && (
+                    {hasProviders && (
                         <Button
                             label={t('serviceCredentials.openai.deleteProvider')}
                             size="sm"
@@ -563,7 +456,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                 </HStack>
             </VStack>
 
-            {hasProvidersList && providers.length === 0 ? (
+            {!hasProviders ? (
                 <Card variant="muted" padding={3} className="rounded-lg">
                     <Text type="supporting" color="secondary">
                         {t('serviceCredentials.openai.noProvidersHint')}
@@ -571,25 +464,21 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                 </Card>
             ) : (
                 <>
-                    {hasExplicitProviders && (
-                        <>
-                            <Divider variant="subtle" />
-                            <SettingField title={t('serviceCredentials.openai.providerNameLabel')}>
-                                <TextInput
-                                    label={t('serviceCredentials.openai.providerNameLabel')}
-                                    isLabelHidden
-                                    value={activeProvider.name}
-                                    onChange={(val) => updateActiveProvider((current) => ({
-                                        ...current,
-                                        name: val,
-                                    }))}
-                                    placeholder={t('serviceCredentials.openai.providerNamePlaceholder')}
-                                    size="sm"
-                                    width={260}
-                                />
-                            </SettingField>
-                        </>
-                    )}
+                    <Divider variant="subtle" />
+                    <SettingField title={t('serviceCredentials.openai.providerNameLabel')}>
+                        <TextInput
+                            label={t('serviceCredentials.openai.providerNameLabel')}
+                            isLabelHidden
+                            value={activeProvider.name}
+                            onChange={(val) => updateActiveProvider((current) => ({
+                                ...current,
+                                name: val,
+                            }))}
+                            placeholder={t('serviceCredentials.openai.providerNamePlaceholder')}
+                            size="sm"
+                            width={260}
+                        />
+                    </SettingField>
 
             <Divider variant="subtle" />
 
@@ -715,7 +604,7 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                     <Card variant="default" padding={0}>
                         <VStack gap={0} width="100%">
                             {openAiModels.map((model, index) => {
-                                const resultKey = hasExplicitProviders ? `${activeProvider.id}:${model}` : model;
+                                const resultKey = `${activeProvider.id}:${model}`;
                                 const isTestingThisModel = testingModel === resultKey || testingModel === model;
                                 const result = testResults[resultKey] ?? testResults[model];
                                 const isEnabled = !disabledModels.includes(model);

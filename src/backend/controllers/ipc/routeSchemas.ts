@@ -96,16 +96,9 @@ const providerProfileSaveSchema = z.object({
 /** 云端服务凭据保存请求校验架构。 */
 export const serviceCredentialSaveSchema: z.ZodType<ServiceCredentialSettingSaveVO> = z.object({
     openai: z.object({
-        // 缺省/空串 = 沿用已保存的值；详情接口不再下发明文，表单里本来就是空的。
-        key: z.string().optional(),
-        clearKey: z.boolean().optional(),
-        endpoint: z.string(),
-        apiFormat: aiApiFormatSchema,
-        models: z.array(z.string()),
-        disabledModels: z.array(z.string()).optional(),
         embeddingModel: z.string().optional(),
         activeProviderId: z.string().optional(),
-        providers: z.array(providerProfileSaveSchema).optional(),
+        providers: z.array(providerProfileSaveSchema),
     }),
     tencent: z.object({
         secretId: z.string().optional(),

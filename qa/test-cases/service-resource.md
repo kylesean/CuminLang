@@ -15,7 +15,7 @@
 
 - 该看到：重进页面后密钥、接口地址都回显，刚添加的模型行还在表格里。
 - 用例：**[SET-SVC-01]** 云端服务填写的密钥、接口地址与模型清单会落盘，重进页面仍回显
-- 落盘断言：`apiKeys.openAi.key`、`apiKeys.openAi.endpoint`、`models.openai.available`
+- 落盘断言：`apiKeys.openAi.providerKeys`、`models.openai.providers`
 
 ## 识别方式与词典补充方式
 
@@ -38,7 +38,7 @@
 
 - 该看到：接口地址与 API 类型当场回填，重进页面仍是这一套。
 - 用例：**[SET-SVC-04]** 使用厂商预设会回填接口地址与 API 类型并落盘，重进页面仍回显
-- 落盘断言：`apiKeys.openAi.endpoint`、`apiKeys.openAi.apiFormat`
+- 落盘断言：`models.openai.providers`（`endpoint`、`apiFormat`）
 - 断言不从弹窗里写死厂商参数，而是现读预设卡片上的地址与类型，避免厂商参数一改用例就废。
 
 ## 模型启用开关与删除
@@ -47,7 +47,7 @@
 
 - 该看到：新增行开关可切换并落盘，删除后配置与列表均不再保留该模型。
 - 用例：**[SET-SVC-05]** 模型可自由启用/关闭与删除
-- 落盘断言：`models.openai.disabled`、`models.openai.available`
+- 落盘断言：`models.openai.providers`（`disabledModels`、`models`）
 
 ## 新增云端模型后把字幕翻译指过去
 
@@ -80,23 +80,23 @@
 
 - 该看到：切回来时接口地址输入框回显刚才填的值（来自后端回读）。
 - 用例：**[SET-SVC-17]** 填完接口地址立刻切到别的设置栏目，改动仍会落盘并在重进后回显
-- 落盘断言：`apiKeys.openAi.endpoint`
+- 落盘断言：`models.openai.providers`（`endpoint`）
 
 ## 已绑定功能的云端模型也可直接删除
 
 模型管理列表支持自由删除，不再因功能引用而禁用删除按钮。即使用户此前把字幕翻译等
 功能绑定到某个云端模型，仍可直接在列表里删除它，重进页面后它不会再回来。
 
-- 该看到：字幕翻译指着某个模型时，该行删除按钮仍可点击；点击删除后 `models.openai.available`
-  不再包含该模型，页面与重进后的列表中也不再保留该模型。
+- 该看到：字幕翻译指着某个模型时，该行删除按钮仍可点击；点击删除后 `models.openai.providers`
+  中该服务商的模型列表不再包含该模型，页面与重进后的列表中也不再保留该模型。
 - 用例：**[SET-SVC-10]** 已绑定功能的云端模型也可直接删除，删除后列表与配置不再保留该模型
-- 落盘断言：`models.openai.available`
+- 落盘断言：`models.openai.providers`
 
 ## 云端密钥跨重启
 
 - 该看到：关掉应用再打开，密钥框不回传明文，只显示已保存的脱敏占位提示。
 - 用例：**[SET-SVC-11]** 关掉应用再打开，云端密钥仍原样回读
-- 落盘断言：`apiKeys.openAi.key`
+- 落盘断言：`apiKeys.openAi.providerKeys`
 
 ## 把云端模型清单删空
 
@@ -105,7 +105,7 @@
 - 该看到：删掉列表中新增的最后一个模型后，磁盘上的清单保持为空，重进页面它也不会再出现；
   在这种状态下改「识别方式」这类不使用云端的偏好，仍然正常保存。
 - 用例：**[SET-SVC-13]** 把云端模型清单删空后清单保持为空，此时改动偏好仍会正常落盘
-- 落盘断言：`models.openai.available`、`transcription.engine`
+- 落盘断言：`models.openai.providers`、`transcription.engine`
 
 ## 还没覆盖的场景
 

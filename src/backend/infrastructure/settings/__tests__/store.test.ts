@@ -59,7 +59,7 @@ vi.mock('electron', () => ({
     },
 }));
 
-const SECRET_KEY = 'apiKeys.openAi.key';
+const SECRET_KEY = 'apiKeys.tencent.secretId';
 const PLAIN_SECRET = 'sk-very-secret-value-0123456789';
 
 const importStore = async () => {
@@ -152,5 +152,12 @@ describe('设置存储的凭据加密', () => {
         storeSet('apiKeys.openAi.providerKeys', '');
         expect(persisted.get('apiKeys.openAi.providerKeys')).toBe('');
         expect(storeGet('apiKeys.openAi.providerKeys')).toBe('');
+    });
+
+    it('storeGetPersisted 对已废弃的传统密文键 apiKeys.openAi.key 仍能还原明文以支持启动迁移', async () => {
+        persisted.set('apiKeys.openAi.key', `dp-enc:${Buffer.from(`enc:${PLAIN_SECRET}`, 'utf8').toString('base64')}`);
+        const { storeGetPersisted } = await importStore();
+
+        expect(storeGetPersisted('apiKeys.openAi.key')).toBe(PLAIN_SECRET);
     });
 });

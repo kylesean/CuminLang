@@ -1,5 +1,4 @@
 import type { SettingKey } from '@/common/types/store_schema';
-import { storeGet } from '@/backend/infrastructure/settings/store';
 import { inject, injectable } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import { generateText } from 'ai';
@@ -18,16 +17,14 @@ import type {
     ServiceCredentialSettingSaveVO,
 } from '@/common/types/vo/service-credentials-setting-vo';
 import {
+    createDefaultProviderProfile,
     findProviderForModel,
-    inferProviderProfileFromLegacy,
+    flattenEnabledProviderModels,
     parseStoredProviderKeys,
     parseStoredProviderProfiles,
     type PersistedCloudAiProvider,
 } from '@/common/utils/cloud-ai-providers';
-import {
-    type CloudModelUsage,
-    computeCloudModelUsage,
-} from '@/common/utils/cloud-model-usage';
+import type { StorageSettingVO } from '@/common/contracts/storage-setting-vo';
 import type { EngineSelectionSettingVO } from '@/common/types/vo/engine-selection-setting-vo';
 import type { ShortcutSettingDetailVO, ShortcutSettingSaveVO } from '@/common/types/vo/shortcut-setting-vo';
 import type { ProxySettingDetailVO, ProxySettingSaveVO } from '@/common/contracts/proxy-setting-vo';
@@ -36,7 +33,6 @@ import {
     APPEARANCE_THEME_FAMILIES,
     type AppearanceSettingVO,
 } from '@/common/contracts/appearance-setting-vo';
-import type { StorageSettingVO } from '@/common/contracts/storage-setting-vo';
 import { VOCABULARY_GUIDANCE_LEVELS } from '@/common/types/vocabulary';
 import { getSubtitleDefaultStyle } from '@/common/constants/openaiSubtitlePrompts';
 import { readSystemProxy } from '@/backend/infrastructure/system/proxy/readSystemProxy';
@@ -197,40 +193,15 @@ export class SettingServiceImpl implements SettingService {
     }
 
     /**
-     * 将用户输入的模型列表文本解析为可用模型数组。
-     *
-     * 解析规则：
-     * - 同时支持逗号与换行分隔；
-     * - 会去掉首尾空白并移除空项；
-     * - 不做默认值回退，空列表直接返回空数组。
+     * 读取持久化存储的多服务商列表。
+     * 新安装尚未持久化过 `models.openai.providers` 时按需返回默认 DeepSeek 预设。
      */
-    private parseOpenAiModels(raw: string): string[] {
-        const parsed = raw
-            .split(/[\n,]/)
-            .map((item) => item.trim())
-            .filter((item) => item.length > 0);
-        return Array.from(new Set(parsed));
-    }
-
-    /**
-     * 现算当前真正落到云端模型上的功能占用关系。
-     *
-     * 说明：功能模型槽位只是「上次选的模型」备忘，功能切走引擎或关闭后不会
-     * 被清理，直接读槽位会把残留值当成占用、导致模型删不掉。占用是引擎
-     * 配置与功能开关推导出的事实，规则在 computeCloudModelUsage 一份纯函数
-     * 里，与前端「使用中」角标共用。
-     */
-    private getOpenAiFeatureModelUsage(): CloudModelUsage {
-        return computeCloudModelUsage({
-            sentenceLearningEnabled: this.getValue('features.openai.enableSentenceLearning') === 'true',
-            subtitleTranslationEngine: this.getValue('providers.subtitleTranslation'),
-            dictionaryEngine: this.getValue('providers.dictionary'),
-            modelSlots: {
-                sentenceLearning: this.getValue('models.openai.sentenceLearning'),
-                subtitleTranslation: this.getValue('models.openai.subtitleTranslation'),
-                dictionary: this.getValue('models.openai.dictionary'),
-            },
-        });
+    private getStoredProviderProfiles(fallbackToDefault = false): PersistedCloudAiProvider[] {
+        const stored = parseStoredProviderProfiles(this.getValue('models.openai.providers'));
+        if (stored !== null) {
+            return stored;
+        }
+        return fallbackToDefault ? [createDefaultProviderProfile()] : [];
     }
 
     /**
@@ -439,38 +410,18 @@ export class SettingServiceImpl implements SettingService {
     }
 
     /**
-     * 查询服务凭据设置。
+     * 查询服务凭据设置（包含 OpenAI 多服务商配置与腾讯云配置状态）。
      *
-     * 返回说明：模型列表只含标识；占用由前端按引擎选择现算（computeCloudModelUsage），
-     * 不随详情快照下发，其他字段按当前存储值映射为设置页表单结构。
+     * 注意这里只返回布尔标记和末四位脱敏提示，明文密钥由主进程独占、
+     * 不随详情快照下发。
      */
     public async getServiceCredentialsDetail(): Promise<ServiceCredentialSettingDetailVO> {
-        const availableModels = this.parseOpenAiModels(this.getValue('models.openai.available'));
-        const disabledModels = this.parseOpenAiModels(this.getValue('models.openai.disabled'))
-            .filter((model) => availableModels.includes(model));
-        const openAiKey = this.getValue('apiKeys.openAi.key');
-        const endpoint = this.getValue('apiKeys.openAi.endpoint');
-        const apiFormat = this.requireEnumValue(
-            this.getValue('apiKeys.openAi.apiFormat'),
-            AI_API_FORMATS,
-            'apiKeys.openAi.apiFormat',
-        );
-        const storedProfiles = parseStoredProviderProfiles(this.getValue('models.openai.providers'));
-        const storedKeyMap = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
-        const profiles: PersistedCloudAiProvider[] = storedProfiles ?? [
-            inferProviderProfileFromLegacy({
-                endpoint,
-                apiFormat,
-                models: availableModels,
-                disabledModels,
-            }),
-        ];
+        const profiles = this.getStoredProviderProfiles(true);
+        const keyMap = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
         const rawActiveId = this.getValue('models.openai.activeProviderId').trim();
         const activeProvider = profiles.find((item) => item.id === rawActiveId) ?? profiles[0];
         const providers: CloudAiProviderProfileDetailVO[] = profiles.map((profile) => {
-            const rawKey = storedProfiles
-                ? (storedKeyMap[profile.id] ?? '')
-                : openAiKey;
+            const rawKey = keyMap[profile.id] ?? '';
             return {
                 id: profile.id,
                 name: profile.name,
@@ -486,14 +437,8 @@ export class SettingServiceImpl implements SettingService {
         const tencentSecretKey = this.getValue('apiKeys.tencent.secretKey');
         return {
             openai: {
-                hasKey: !StrUtil.isBlank(openAiKey),
-                keyHint: maskSecret(openAiKey),
-                endpoint,
-                apiFormat,
-                models: availableModels,
-                disabledModels,
                 embeddingModel: this.getValue('models.openai.embedding'),
-                activeProviderId: activeProvider?.id,
+                activeProviderId: activeProvider?.id ?? '',
                 providers,
             },
             tencent: {
@@ -504,97 +449,58 @@ export class SettingServiceImpl implements SettingService {
     }
 
     /**
-     * 更新服务凭据设置。
-     *
-     * 行为说明：
-     * - 支持多厂商配置并存（`openai.providers`），每家独立密钥、协议、URL 与模型清单；
-     * - 同步镜像当前活跃厂商与全量启用模型到传统 `apiKeys.openAi.*` / `models.openai.*` 键以保持兼容。
+     * 更新服务凭据设置（统一持久化为 `models.openai.providers` 与 `apiKeys.openAi.providerKeys`）。
      */
     public async saveServiceCredentials(settings: ServiceCredentialSettingSaveVO): Promise<void> {
-        const apiFormat = this.requireEnumValue(settings.openai.apiFormat, AI_API_FORMATS, 'openai.apiFormat');
-        const parsedModels = settings.openai.models.map((item) => item.trim());
-        if (parsedModels.some((item) => item.length === 0)) {
-            throw new Error('openai.models 包含空模型标识');
-        }
-        const dedupedModels = Array.from(new Set(parsedModels));
-        if (dedupedModels.length !== parsedModels.length) {
-            throw new Error('openai.models 包含重复模型标识');
-        }
+        const existingKeys = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
+        const nextKeys: Record<string, string> = {};
+        const nextProfiles: PersistedCloudAiProvider[] = [];
 
-        const rawDisabled = settings.openai.disabledModels !== undefined
-            ? settings.openai.disabledModels.map((item) => item.trim()).filter((item) => item.length > 0)
-            : this.parseOpenAiModels(this.getValue('models.openai.disabled'));
-        const nextDisabled = Array.from(new Set(rawDisabled)).filter((item) => dedupedModels.includes(item));
+        for (const item of settings.openai.providers) {
+            const id = item.id.trim();
+            if (!id) {
+                throw new Error('服务商标识不能为空');
+            }
+            const itemFormat = this.requireEnumValue(item.apiFormat, AI_API_FORMATS, `openai.providers.${id}.apiFormat`);
+            const parsedModels = item.models.map((m) => m.trim());
+            if (parsedModels.some((m) => m.length === 0)) {
+                throw new Error(`openai.providers.${id}.models 包含空模型标识`);
+            }
+            const itemModels = Array.from(new Set(parsedModels));
+            if (itemModels.length !== parsedModels.length) {
+                throw new Error(`openai.providers.${id}.models 包含重复模型标识`);
+            }
+            const modelSet = new Set(itemModels);
+            const itemDisabled = Array.from(new Set(
+                (item.disabledModels ?? []).map((m) => m.trim()).filter((m) => modelSet.has(m)),
+            ));
 
-        if (settings.openai.providers !== undefined) {
-            const existingKeys = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
-            const legacyKey = this.getValue('apiKeys.openAi.key');
-            const nextKeys: Record<string, string> = {};
-            const nextProfiles: PersistedCloudAiProvider[] = [];
-
-            for (const item of settings.openai.providers) {
-                const id = item.id.trim();
-                if (!id) {
-                    throw new Error('服务商标识不能为空');
-                }
-                const itemFormat = this.requireEnumValue(item.apiFormat, AI_API_FORMATS, `openai.providers.${id}.apiFormat`);
-                const itemModels = Array.from(new Set(item.models.map((m) => m.trim()).filter(Boolean)));
-                const modelSet = new Set(itemModels);
-                const itemDisabled = Array.from(new Set(
-                    (item.disabledModels ?? []).map((m) => m.trim()).filter((m) => modelSet.has(m)),
-                ));
-
-                const fallbackExistingKey = existingKeys[id] ?? (nextProfiles.length === 0 ? legacyKey : '');
-                if (item.clearKey) {
-                    nextKeys[id] = '';
-                } else if (!StrUtil.isBlank(item.key)) {
-                    nextKeys[id] = item.key as string;
-                } else if (fallbackExistingKey) {
-                    nextKeys[id] = fallbackExistingKey;
-                }
-
-                nextProfiles.push({
-                    id,
-                    name: item.name.trim() || id,
-                    apiFormat: itemFormat,
-                    endpoint: item.endpoint.trim(),
-                    models: itemModels,
-                    disabledModels: itemDisabled,
-                });
+            const existingKey = existingKeys[id] ?? '';
+            if (item.clearKey) {
+                nextKeys[id] = '';
+            } else if (!StrUtil.isBlank(item.key)) {
+                nextKeys[id] = item.key as string;
+            } else if (existingKey) {
+                nextKeys[id] = existingKey;
             }
 
-            const activeId = settings.openai.activeProviderId?.trim();
-            const activeProfile = nextProfiles.find((p) => p.id === activeId) ?? nextProfiles[0];
-            const allModels = Array.from(new Set(nextProfiles.flatMap((p) => p.models)));
-            const allEnabledModels = new Set(
-                nextProfiles.flatMap((p) => {
-                    const disabled = new Set(p.disabledModels);
-                    return p.models.filter((m) => !disabled.has(m));
-                }),
-            );
-            const allDisabledModels = allModels.filter((m) => !allEnabledModels.has(m));
-
-            await this.setValue('models.openai.providers', JSON.stringify(nextProfiles));
-            await this.setValue('apiKeys.openAi.providerKeys', Object.keys(nextKeys).length > 0 ? JSON.stringify(nextKeys) : '');
-            await this.setValue('models.openai.activeProviderId', activeProfile?.id ?? '');
-            await this.setValue('apiKeys.openAi.key', activeProfile ? (nextKeys[activeProfile.id] ?? '') : '');
-            await this.setValue('apiKeys.openAi.endpoint', activeProfile?.endpoint ?? '');
-            await this.setValue('apiKeys.openAi.apiFormat', activeProfile?.apiFormat ?? apiFormat);
-            await this.setValue('models.openai.available', allModels.join('\n'));
-            await this.setValue('models.openai.disabled', allDisabledModels.join('\n'));
-        } else {
-            // 密钥字段缺省/留空 = 保持原值：设置页自动保存，改接口地址时表单里的密钥
-            // 本来就是空的（详情不再下发明文），把「没填」当成「清空」会静默抹掉凭据。
-            if (settings.openai.clearKey) {
-                await this.setValue('apiKeys.openAi.key', '');
-            } else if (!StrUtil.isBlank(settings.openai.key)) {
-                await this.setValue('apiKeys.openAi.key', settings.openai.key as string);
-            }
-            await this.setValue('apiKeys.openAi.endpoint', settings.openai.endpoint);
-            await this.setValue('apiKeys.openAi.apiFormat', apiFormat);
-            await this.setValue('models.openai.available', dedupedModels.join('\n'));
-            await this.setValue('models.openai.disabled', nextDisabled.join('\n'));
+            nextProfiles.push({
+                id,
+                name: item.name.trim() || id,
+                apiFormat: itemFormat,
+                endpoint: item.endpoint.trim(),
+                models: itemModels,
+                disabledModels: itemDisabled,
+            });
         }
+
+        const activeId = settings.openai.activeProviderId?.trim();
+        const activeProfile = nextProfiles.find((p) => p.id === activeId) ?? nextProfiles[0];
+
+        await this.setValue('models.openai.providers', JSON.stringify(nextProfiles));
+        await this.setValue('apiKeys.openAi.providerKeys', Object.keys(nextKeys).length > 0 ? JSON.stringify(nextKeys) : '');
+        await this.setValue('models.openai.activeProviderId', activeProfile?.id ?? '');
+
         if (settings.openai.embeddingModel !== undefined) {
             await this.setValue('models.openai.embedding', settings.openai.embeddingModel.trim());
         }
@@ -610,8 +516,6 @@ export class SettingServiceImpl implements SettingService {
                 await this.setValue('apiKeys.tencent.secretKey', settings.tencent.secretKey as string);
             }
         }
-
-
     }
 
     /**
@@ -720,7 +624,7 @@ export class SettingServiceImpl implements SettingService {
                 ['zh', 'simple_en', 'custom'] as const,
                 'openai.subtitleTranslationMode',
             );
-        const availableModels = this.parseOpenAiModels(this.getValue('models.openai.available'));
+        const availableModels = flattenEnabledProviderModels(this.getStoredProviderProfiles());
         const sentenceLearningSlot = this.resolveFeatureModelSlot(
             settings.openai.featureModels.sentenceLearning,
             availableModels,
@@ -1061,26 +965,17 @@ export class SettingServiceImpl implements SettingService {
     public async testOpenAi(modelId: string, providerId?: string): Promise<{ success: boolean, message: string }> {
         try {
             this.logger.info('testing openai connection', { model: modelId, providerId });
-            const storedProfiles = parseStoredProviderProfiles(this.getValue('models.openai.providers'));
-            let endpoint = storeGet('apiKeys.openAi.endpoint');
-            let apiKey = storeGet('apiKeys.openAi.key');
-            let availableModels = this.parseOpenAiModels(this.getValue('models.openai.available'));
+            const profiles = this.getStoredProviderProfiles();
+            const matched = findProviderForModel(profiles, modelId, providerId);
+            const keyMap = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
+            const endpoint = matched?.endpoint ?? '';
+            const apiKey = matched ? (keyMap[matched.id] ?? '') : '';
 
-            if (storedProfiles && storedProfiles.length > 0) {
-                const matched = findProviderForModel(storedProfiles, modelId, providerId);
-                if (matched) {
-                    const keyMap = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
-                    endpoint = matched.endpoint;
-                    apiKey = keyMap[matched.id] ?? '';
-                    availableModels = matched.models;
-                }
+            if (!matched || !matched.models.includes(modelId)) {
+                return { success: false, message: '模型未在服务配置中添加' };
             }
-
             if (StrUtil.isBlank(endpoint) || (StrUtil.isBlank(apiKey) && !isLocalLlmEndpoint(endpoint))) {
                 return { success: false, message: 'API Key 或 API URL 未配置' };
-            }
-            if (!availableModels.includes(modelId)) {
-                return { success: false, message: '模型未在服务配置中添加' };
             }
             const model = this.aiProviderService.createModelById(modelId, providerId);
             // 推理类模型（如 deepseek-flash）会先把额度花在 reasoning_content 上，

@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
 // electron-store 是外部化 CJS 依赖，vitest 里 vi.mock('electron') 拦不到它内部的 require，
 // 会导致它回落到 ~/Library/Preferences 等真实目录写入配置（曾把开发 Key 写出去）。
 // 因此把应用 store 模块整体 mock 成内存实现，测试数据只存在于内存，绝不落盘。
-// 与生产 storeGet 行为一致：未写入的键回落到 SettingKeyObj 里的默认值（如 apiKeys.openAi.apiFormat 默认 'openai'）。
+// 与生产 storeGet 行为一致：未写入的键回落到 SettingKeyObj 里的默认值。
 import { SettingKeyObj } from '@/common/types/store_schema';
 import type { SettingKey } from '@/common/types/store_schema';
 const storeState = vi.hoisted(() => ({ values: new Map<string, string>() }));
@@ -70,11 +70,9 @@ const buildLiveModel = (modelId: string): LanguageModel => {
 
 const seedLiveProviderStore = async (): Promise<void> => {
     const { storeSet } = await import('@/backend/infrastructure/settings/store');
-    storeSet('apiKeys.openAi.key', testConfig!.key);
-    storeSet('apiKeys.openAi.endpoint', testConfig!.endpoint);
-    if (testConfig!.availableModels.length > 0) {
-        storeSet('models.openai.available', testConfig!.availableModels.join('\n'));
-    }
+    storeSet('models.openai.providers', JSON.stringify([testConfig!.provider]));
+    storeSet('models.openai.activeProviderId', testConfig!.provider.id);
+    storeSet('apiKeys.openAi.providerKeys', JSON.stringify({ [testConfig!.provider.id]: testConfig!.key }));
     if (testConfig!.sentenceLearningModel) {
         storeSet('models.openai.sentenceLearning', testConfig!.sentenceLearningModel);
     }

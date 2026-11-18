@@ -22,12 +22,6 @@ afterEach(() => {
 
 const baseCredentialsDetail = {
     openai: {
-        hasKey: false,
-        keyHint: '',
-        endpoint: 'https://api.deepseek.com/v1',
-        apiFormat: 'openai' as const,
-        models: ['deepseek-chat'],
-        disabledModels: [],
         embeddingModel: '',
         activeProviderId: 'deepseek',
         providers: [
@@ -144,8 +138,8 @@ describe('ServiceResourceSetting 云端服务交互', () => {
                 if (path === 'settings/resource-status/detail') return Promise.resolve(baseResourceStatus);
                 if (path === 'settings/embedding-model/status') return Promise.resolve({ ready: false, multimodalReady: false });
                 if (path === 'settings/service-credentials/save') {
-                    const payload = params as { openai: { key?: string } };
-                    savedKey = payload.openai.key;
+                    const payload = params as { openai: { providers: Array<{ key?: string }> } };
+                    savedKey = payload.openai.providers[0]?.key;
                     callOrder.push(`save:${savedKey ?? ''}`);
                     return Promise.resolve(undefined);
                 }

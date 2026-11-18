@@ -37,6 +37,7 @@ import { SETTINGS_DETAIL_SWR_OPTIONS, settingsApi } from '@/frontend/features/se
 import { useAutoSaveSettingsForm } from '@/frontend/features/settings/useAutoSaveSettingsForm';
 import { useServiceResourceActions } from '@/frontend/features/settings/hooks/useServiceResourceActions';
 import { SETTING_ROW_TESTIDS } from '@/common/constants/qa-testids';
+import { flattenEnabledProviderModels } from '@/common/utils/cloud-ai-providers';
 import type { EngineSelectionSettingVO } from '@/common/types/vo/engine-selection-setting-vo';
 import type { ServiceCredentialSettingFormValues } from '@/common/types/vo/service-credentials-setting-vo';
 
@@ -110,28 +111,18 @@ const ServiceResourceSetting: React.FC = () => {
         onSave: async (values) => {
             await settingsApi.saveServiceCredentials({
                 openai: {
-                    ...(values.openai.key ? { key: values.openai.key } : {}),
-                    ...(values.openai.clearKey ? { clearKey: true } : {}),
-                    endpoint: values.openai.endpoint,
-                    apiFormat: values.openai.apiFormat,
-                    models: values.openai.models,
-                    disabledModels: values.openai.disabledModels ?? [],
                     embeddingModel: values.openai.embeddingModel ?? '',
-                    ...(values.openai.activeProviderId !== undefined ? { activeProviderId: values.openai.activeProviderId } : {}),
-                    ...(values.openai.providers !== undefined
-                        ? {
-                            providers: values.openai.providers.map((item) => ({
-                                id: item.id,
-                                name: item.name,
-                                apiFormat: item.apiFormat,
-                                endpoint: item.endpoint,
-                                ...(item.key ? { key: item.key } : {}),
-                                ...(item.clearKey ? { clearKey: true } : {}),
-                                models: item.models,
-                                disabledModels: item.disabledModels ?? [],
-                            })),
-                        }
-                        : {}),
+                    activeProviderId: values.openai.activeProviderId,
+                    providers: values.openai.providers.map((item) => ({
+                        id: item.id,
+                        name: item.name,
+                        apiFormat: item.apiFormat,
+                        endpoint: item.endpoint,
+                        ...(item.key ? { key: item.key } : {}),
+                        ...(item.clearKey ? { clearKey: true } : {}),
+                        models: item.models,
+                        disabledModels: item.disabledModels ?? [],
+                    })),
                 },
                 tencent: {
                     ...(values.tencent.secretId ? { secretId: values.tencent.secretId } : {}),
@@ -201,11 +192,9 @@ const ServiceResourceSetting: React.FC = () => {
         if (!settings) return;
         initializeCredentials({
             openai: {
-                ...settings.openai,
                 embeddingModel: settings.openai.embeddingModel ?? '',
-                key: '',
-                clearKey: false,
-                providers: settings.openai.providers?.map((item) => ({
+                activeProviderId: settings.openai.activeProviderId,
+                providers: settings.openai.providers.map((item) => ({
                     ...item,
                     key: '',
                     clearKey: false,
@@ -231,23 +220,11 @@ const ServiceResourceSetting: React.FC = () => {
         });
     }, [engineSettings, initializePreferences]);
 
-    const watchedCredentials = useWatch({ control: credentialForm.control, name: 'openai' });
-    const watchedProviders = watchedCredentials?.providers ?? settings?.openai.providers;
-    const watchedCredentialModels = watchedCredentials?.models ?? settings?.openai.models;
-    const watchedDisabledModels = watchedCredentials?.disabledModels ?? settings?.openai.disabledModels;
-    const availableModels = React.useMemo(() => {
-        if (watchedProviders && watchedProviders.length > 0) {
-            return Array.from(new Set(
-                watchedProviders.flatMap((provider) => {
-                    const disabledSet = new Set(provider.disabledModels ?? []);
-                    return provider.models.filter((model) => !disabledSet.has(model));
-                }),
-            ));
-        }
-        const models = watchedCredentialModels ?? [];
-        const disabled = new Set(watchedDisabledModels ?? []);
-        return models.filter((model) => !disabled.has(model));
-    }, [watchedProviders, watchedCredentialModels, watchedDisabledModels]);
+    const watchedProviders = useWatch({ control: credentialForm.control, name: 'openai.providers' }) ?? settings?.openai.providers;
+    const availableModels = React.useMemo(
+        () => flattenEnabledProviderModels(watchedProviders ?? []),
+        [watchedProviders],
+    );
 
     const applyEngineValue = (
         value: string,
