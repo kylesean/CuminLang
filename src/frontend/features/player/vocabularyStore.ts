@@ -18,9 +18,11 @@ interface VocabularyState {
     wordStatuses: Record<string, WordStatus>;
     /** 不同形态 -> 基础形态的映射。 */
     vocabularyForms: VocabularyFormsMap;
+    /** 最近一次已完成后端词表匹配的字幕文件哈希；与当前字幕哈希一致时说明词表状态已就绪。 */
+    matchedFileHash: string | null;
     version: number;
     setVocabularyWords: (words: string[]) => void;
-    setVocabularyStates: (states: Record<string, WordStatus>) => void;
+    setVocabularyStates: (states: Record<string, WordStatus>, fileHash?: string | null) => void;
     setVocabularyForms: (forms: VocabularyFormsMap) => void;
     addVocabularyWords: (words: string[]) => void;
     setWordStatus: (word: string, status: WordStatus) => void;
@@ -53,6 +55,7 @@ const useVocabularyStore = create<VocabularyState>((set, get) => ({
     vocabularyWords: new Set<string>(),
     wordStatuses: {},
     vocabularyForms: {},
+    matchedFileHash: null,
     version: 0,
 
     setVocabularyWords: (words: string[]) => {
@@ -72,7 +75,7 @@ const useVocabularyStore = create<VocabularyState>((set, get) => ({
         }));
     },
 
-    setVocabularyStates: (states: Record<string, WordStatus>) => {
+    setVocabularyStates: (states: Record<string, WordStatus>, fileHash?: string | null) => {
         const statuses: Record<string, WordStatus> = {};
         for (const [word, status] of Object.entries(states ?? {})) {
             const cleaned = normalizeWord(word);
@@ -83,6 +86,7 @@ const useVocabularyStore = create<VocabularyState>((set, get) => ({
         set((state) => ({
             wordStatuses: statuses,
             vocabularyWords: activeWordsFromStatuses(statuses),
+            matchedFileHash: fileHash !== undefined ? fileHash : state.matchedFileHash,
             version: state.version + 1,
         }));
     },
@@ -189,6 +193,7 @@ const useVocabularyStore = create<VocabularyState>((set, get) => ({
             vocabularyWords: new Set<string>(),
             wordStatuses: {},
             vocabularyForms: {},
+            matchedFileHash: null,
             version: state.version + 1
         }));
     },

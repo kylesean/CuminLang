@@ -178,7 +178,7 @@ export function usePlayerBridge(navigate: (path: string) => void) {
                 ) {
                     return;
                 }
-                useVocabularyStore.getState().setVocabularyStates(result.wordStates ?? {});
+                useVocabularyStore.getState().setVocabularyStates(result.wordStates ?? {}, currentFileHash);
             } catch (error) {
                 logger.error('failed to match subtitle vocabulary', {
                     error: error instanceof Error ? error.message : String(error),

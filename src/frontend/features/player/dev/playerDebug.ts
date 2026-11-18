@@ -18,7 +18,7 @@ import {
     type HoldRecord,
     type ScrollWriteEntry,
 } from '@/frontend/features/player/dev/scrollWriteLog';
-import { resolveDevMode } from '@/frontend/lib/devMode';
+import { isDevMode, resolveDevMode } from '@/frontend/lib/devMode';
 
 /** 「保持阅读位置」策略：a = 补偿（默认），b = 对照（不补偿）。 */
 export type HoldPolicy = 'a' | 'b';
@@ -57,9 +57,14 @@ declare global {
 /**
  * 读取当前生效的 hold 策略。
  *
+ * 打包态（非 devMode）恒返回默认 'a'，防止外部注入 window.__dpPolicy 关闭生产滚屏补偿。
+ *
  * @returns 'a'（补偿）或 'b'（对照）；非法值一律按默认 'a'。
  */
 export function readHoldPolicy(): HoldPolicy {
+    if (!import.meta.env.DEV && !isDevMode()) {
+        return 'a';
+    }
     return window.__dpPolicy === 'b' ? 'b' : 'a';
 }
 

@@ -75,11 +75,13 @@ describe('字幕生词分析：被取代任务的活跃判定', () => {
         await resumed;
     });
 
-    it('invalidate 时联动通知下游监听器清理派生缓存', () => {
+    it('invalidate 时联动通知下游监听器清理派生缓存，监听器重入 invalidate 不会无限递归', () => {
         const service = makeService(vi.fn().mockResolvedValue([]));
-        const listener = vi.fn();
+        const listener = vi.fn(() => {
+            service.invalidate();
+        });
         service.onInvalidate(listener);
-        service.invalidate();
+        expect(() => service.invalidate()).not.toThrow();
         expect(listener).toHaveBeenCalledTimes(1);
     });
 

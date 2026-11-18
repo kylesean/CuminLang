@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { isSecretPersisted, launchAppSession, readConfigValue, test } from '../../support/fixtures';
+import { isSecretPersisted, readConfigValue, test } from '../../support/fixtures';
 import { openSettingsSection, reloadSettingsPage, switchSettingsSection, chooseInRow, selectInRow } from '../../support/settings-page';
 
 /** 进入服务与资源设置页。 */
@@ -315,30 +315,23 @@ test.describe('服务与资源设置', () => {
         await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toHaveCount(0);
     });
 
-    test('[SET-SVC-11] 关掉应用再打开，云端密钥仍原样回读', async ({ userDataDir }) => {
-        const first = await launchAppSession(userDataDir);
-        try {
-            await openResourcesSetting(first.page);
-            await openResourcesTab(first.page, '云端服务');
-            await first.page.getByPlaceholder('sk-...').fill(API_KEY);
-            await first.page.getByRole('button', { name: '保存' }).click();
-            await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
-        } finally {
-            await first.close();
-        }
+    test('[SET-SVC-11] 关掉应用再打开，云端密钥仍原样回读', async ({ openSession, userDataDir }) => {
+        const first = await openSession();
+        await openResourcesSetting(first.page);
+        await openResourcesTab(first.page, '云端服务');
+        await first.page.getByPlaceholder('sk-...').fill(API_KEY);
+        await first.page.getByRole('button', { name: '保存' }).click();
+        await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
+        await first.close();
 
         // 重启后不做任何操作：密钥必须来自持久化配置，且只以脱敏提示呈现、不回传明文
-        const restarted = await launchAppSession(userDataDir);
-        try {
-            await openResourcesSetting(restarted.page);
-            await openResourcesTab(restarted.page, '云端服务');
-            const savedKeyInput = restarted.page.getByPlaceholder(SAVED_KEY_PLACEHOLDER);
-            await expect(savedKeyInput).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
-            await expect(savedKeyInput).toHaveValue('');
-            await expect(savedKeyInput).not.toHaveAttribute('placeholder', new RegExp(API_KEY));
-        } finally {
-            await restarted.close();
-        }
+        const restarted = await openSession();
+        await openResourcesSetting(restarted.page);
+        await openResourcesTab(restarted.page, '云端服务');
+        const savedKeyInput = restarted.page.getByPlaceholder(SAVED_KEY_PLACEHOLDER);
+        await expect(savedKeyInput).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
+        await expect(savedKeyInput).toHaveValue('');
+        await expect(savedKeyInput).not.toHaveAttribute('placeholder', new RegExp(API_KEY));
     });
 
     test('[SET-SVC-13] 把云端模型清单删空后清单保持为空，此时改动偏好仍会正常落盘', async ({ session, userDataDir }) => {

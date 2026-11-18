@@ -30,8 +30,8 @@ const PlayerWithControlsPage = () => {
     const [_searchParams, setSearchParams] = useSearchParams();
     // dev/qa 入口：`?file=` 直接把路径换成观看记录，跳过「入库 → 点进去」的前置（打包版忽略）
     const devEntry = useDevPlayerEntry(_searchParams);
-    // 请求了 dev 入口就必须等它给出记录 ID，不能拿路由里的占位 ID 去查详情
-    const rawVideoId = devEntry.requested ? devEntry.videoId : videoId;
+    // 请求了 dev 入口且未退回 idle（打包版忽略 ?file= 并降为 idle）时，等待它给出记录 ID
+    const rawVideoId = devEntry.requested && devEntry.status !== 'idle' ? devEntry.videoId : videoId;
     const effectiveVideoId = rawVideoId && rawVideoId !== 'undefined' ? rawVideoId : undefined;
     const {data: video} = useSWR(
         effectiveVideoId ? [SWR_KEY.PLAYER_P, effectiveVideoId] : null,

@@ -123,6 +123,7 @@ export interface SubtitleVocabularyAnalysisService {
 export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabularyAnalysisService {
     private readonly states = new Map<string, AnalysisState>();
     private readonly invalidateListeners = new Set<() => void>();
+    private invalidating = false;
     private readonly scheduler = concurrency.scheduler('default');
     /** 当前全局唯一的字幕分析任务。 */
     private activeAnalysis?: ActiveAnalysis;
@@ -272,8 +273,16 @@ export class SubtitleVocabularyAnalysisServiceImpl implements SubtitleVocabulary
     public invalidate(): void {
         this.activeAnalysis = undefined;
         this.states.clear();
-        for (const listener of this.invalidateListeners) {
-            listener();
+        if (this.invalidating) {
+            return;
+        }
+        this.invalidating = true;
+        try {
+            for (const listener of this.invalidateListeners) {
+                listener();
+            }
+        } finally {
+            this.invalidating = false;
         }
     }
 

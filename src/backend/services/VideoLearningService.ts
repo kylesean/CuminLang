@@ -193,7 +193,8 @@ export class VideoLearningServiceImpl implements VideoLearningService {
             },
         });
         this.subtitleVocabularyAnalysisService.onInvalidate?.(() => {
-            this.invalidateClipAnalysisCache();
+            this.clipAnalysis.clearCandidates();
+            this.clipStatusNotifier.clear();
         });
     }
 

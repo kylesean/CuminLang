@@ -9,6 +9,7 @@ import {
     useFloating,
     useHover,
     useInteractions,
+    useRole,
     type VirtualElement,
 } from '@floating-ui/react';
 import useSWR from 'swr';
@@ -383,7 +384,8 @@ export const WordPopoverHost: React.FC = () => {
         handleClose: safePolygon(),
     });
     const dismiss = useDismiss(context);
-    const { getFloatingProps } = useInteractions([hover, dismiss]);
+    const role = useRole(context, { role: 'dialog' });
+    const { getFloatingProps } = useInteractions([hover, dismiss, role]);
 
     // 弹窗打开时暂停播放并记录 open/hover 遭遇事件
     useEffect(() => {
@@ -572,6 +574,7 @@ export const WordPopoverHost: React.FC = () => {
 
             const result = await videoLearningApi.favoriteWord(original, buildFavoriteTranslate(dictionaryResponse));
             if (result.success) {
+                setWordStatus(result.data?.word ?? cleanWord, 'learning');
                 setOptimisticSaved({
                     popKey: activePopKey,
                     version: useVocabularyStore.getState().version,
@@ -595,7 +598,7 @@ export const WordPopoverHost: React.FC = () => {
         } finally {
             setFavoritingPopKey((prev) => (prev === activePopKey ? null : prev));
         }
-    }, [cleanWord, dictionaryResponse, effectiveFavorited, favoritingPopKey, getBaseWord, original, removeVocabularyWords, sentenceHash, sentenceIndex, sentenceText, t, target]);
+    }, [cleanWord, dictionaryResponse, effectiveFavorited, favoritingPopKey, getBaseWord, original, removeVocabularyWords, sentenceHash, sentenceIndex, sentenceText, setWordStatus, t, target]);
 
     const handleStatusChange = useCallback(async (next: WordStatus) => {
         if (!target || updatingStatusPopKey === target.popKey) return;

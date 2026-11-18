@@ -6,6 +6,7 @@ import useSetting from '@/frontend/features/settings/settingsStore';
 import StrUtil from '@/common/utils/str-util';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { usePlayer } from '@/frontend/features/player/playerStore';
+import { useVocabularyState } from '@/frontend/features/player/vocabularyStore';
 import { cn } from '@/frontend/lib/utils';
 import type { Sentence } from '@/common/types/SentenceC';
 import { selectVisibleSentences } from '@/frontend/features/player/lib/sentence-grouping';
@@ -75,6 +76,8 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
     const engine = useTranslation(state => state.engine);
     const openAiMode = useTranslation(state => state.openAiMode);
     const activeFileHash = useTranslation(state => state.activeFileHash);
+    const matchedFileHash = useVocabularyState(state => state.matchedFileHash);
+    const vocabReady = Boolean(activeFileHash) && matchedFileHash === activeFileHash;
 
     // 顶层订阅组件所需状态
     const translationKey = sentence?.translationKey || '';
@@ -307,6 +310,7 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
                             ref={subtitleContentRef}
                             data-testid="main-subtitle-content"
                             data-subtitle-active={block ? undefined : 'true'}
+                            data-vocab-ready={vocabReady ? 'true' : undefined}
                             className={cn(
                                 'group/subtitle flex flex-col justify-center items-center gap-2 w-full min-w-0 shrink-0 my-auto',
                                 isOverlay && 'pointer-events-auto',

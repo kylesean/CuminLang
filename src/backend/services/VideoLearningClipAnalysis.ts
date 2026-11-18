@@ -161,10 +161,17 @@ export default class VideoLearningClipAnalysis {
     }
 
     /**
+     * 仅清除本地裁切候选缓存，不回溯触发共享字幕分析失效。
+     */
+    public clearCandidates(): void {
+        this.candidates.clear();
+    }
+
+    /**
      * 清除裁切候选缓存和共享字幕分析缓存。
      */
     public clear(): void {
-        this.candidates.clear();
+        this.clearCandidates();
         this.getVocabularyAnalysisService().invalidate();
     }
 }

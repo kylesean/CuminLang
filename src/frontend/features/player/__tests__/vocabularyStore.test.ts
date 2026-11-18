@@ -13,12 +13,16 @@ describe('vocabularyStore status projection', () => {
             familiar: 'familiar',
             known: 'known',
             ignored: 'ignored',
-        });
+        }, 'hash-1');
 
+        expect(useVocabularyStore.getState().matchedFileHash).toBe('hash-1');
         expect(useVocabularyStore.getState().isVocabularyWord('learn')).toBe(true);
         expect(useVocabularyStore.getState().isVocabularyWord('familiar')).toBe(true);
         expect(useVocabularyStore.getState().isVocabularyWord('known')).toBe(false);
         expect(useVocabularyStore.getState().isVocabularyWord('ignored')).toBe(false);
+
+        useVocabularyStore.getState().clearVocabularyWords();
+        expect(useVocabularyStore.getState().matchedFileHash).toBeNull();
     });
 
     it('状态切换会立即更新高亮集合', () => {

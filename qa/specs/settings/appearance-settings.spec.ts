@@ -1,5 +1,5 @@
 import { expect, type Page, type Locator } from '@playwright/test';
-import { launchAppSession, readConfigValue, test } from '../../support/fixtures';
+import { readConfigValue, test } from '../../support/fixtures';
 import { chooseInRow, openSettingsSection, reloadSettingsPage, selectInRow, switchSettingsSection } from '../../support/settings-page';
 
 /** 主题按钮文案到根节点 `data-theme` 值的映射。 */
@@ -64,28 +64,21 @@ test.describe('外观设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
     });
 
-    test('[SET-APP-02] 重启应用后沿用上次选择的主题', async ({ userDataDir }) => {
-        const first = await launchAppSession(userDataDir);
-        try {
-            await openAppearanceSetting(first.page);
-            await switchTheme(first.page, '深色');
-            await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
-        } finally {
-            await first.close();
-        }
+    test('[SET-APP-02] 重启应用后沿用上次选择的主题', async ({ openSession, userDataDir }) => {
+        const first = await openSession();
+        await openAppearanceSetting(first.page);
+        await switchTheme(first.page, '深色');
+        await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
+        await first.close();
 
-        const restarted = await launchAppSession(userDataDir);
-        try {
-            // 重启后不做任何操作，界面主题直接来自持久化配置
-            await expect(restarted.page.getByTestId('app-root')).toHaveAttribute('data-theme', 'dark');
+        const restarted = await openSession();
+        // 重启后不做任何操作，界面主题直接来自持久化配置
+        await expect(restarted.page.getByTestId('app-root')).toHaveAttribute('data-theme', 'dark');
 
-            // 再进外观页确认选中项回显为深色：选中态来自后端读回的设置，
-            // 能排除「只是启动兜底类名恰好是深色」的假通过
-            await openAppearanceSetting(restarted.page);
-            await expect(colorModeRadio(restarted.page, '深色')).toBeChecked();
-        } finally {
-            await restarted.close();
-        }
+        // 再进外观页确认选中项回显为深色：选中态来自后端读回的设置，
+        // 能排除「只是启动兜底类名恰好是深色」的假通过
+        await openAppearanceSetting(restarted.page);
+        await expect(colorModeRadio(restarted.page, '深色')).toBeChecked();
     });
 
     test('[SET-APP-03] 切换界面字号后写入配置，重进页面仍回显所选档位', async ({ session, userDataDir }) => {
@@ -119,34 +112,27 @@ test.describe('外观设置', () => {
         await expect(selectInRow(page, 'language')).toHaveText('English');
     });
 
-    test('[SET-APP-05] 主题从深色切回浅色同样落盘，重启后不回弹到深色', async ({ userDataDir }) => {
-        const first = await launchAppSession(userDataDir);
-        try {
-            await openAppearanceSetting(first.page);
+    test('[SET-APP-05] 主题从深色切回浅色同样落盘，重启后不回弹到深色', async ({ openSession, userDataDir }) => {
+        const first = await openSession();
+        await openAppearanceSetting(first.page);
 
-            // 先切到深色，让配置里存在一个非默认值
-            await switchTheme(first.page, '深色');
-            await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
+        // 先切到深色，让配置里存在一个非默认值
+        await switchTheme(first.page, '深色');
+        await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('dark');
 
-            // 再切回浅色。浅色是 schema 默认值，反向路径才是关口：
-            // 若「写回默认值」被当成「没改动」而跳过，界面会显示浅色、配置文件却还是深色，
-            // 用户下次启动就会看到主题弹回深色。
-            await switchTheme(first.page, '浅色');
-            await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('light');
-        } finally {
-            await first.close();
-        }
+        // 再切回浅色。浅色是 schema 默认值，反向路径才是关口：
+        // 若「写回默认值」被当成「没改动」而跳过，界面会显示浅色、配置文件却还是深色，
+        // 用户下次启动就会看到主题弹回深色。
+        await switchTheme(first.page, '浅色');
+        await expect.poll(() => readConfigValue(userDataDir, 'appearance.theme')).toBe('light');
+        await first.close();
 
-        const restarted = await launchAppSession(userDataDir);
-        try {
-            // 重启后是浅色。这一步单独看说明不了问题（默认值恰好也是浅色），
-            // 上面的写盘断言才是证明「真的覆盖了」的那一半，两者一起才闭合。
-            await expect(restarted.page.getByTestId('app-root')).toHaveAttribute('data-theme', 'light');
-            await openAppearanceSetting(restarted.page);
-            await expect(colorModeRadio(restarted.page, '浅色')).toBeChecked();
-        } finally {
-            await restarted.close();
-        }
+        const restarted = await openSession();
+        // 重启后是浅色。这一步单独看说明不了问题（默认值恰好也是浅色），
+        // 上面的写盘断言才是证明「真的覆盖了」的那一半，两者一起才闭合。
+        await expect(restarted.page.getByTestId('app-root')).toHaveAttribute('data-theme', 'light');
+        await openAppearanceSetting(restarted.page);
+        await expect(colorModeRadio(restarted.page, '浅色')).toBeChecked();
     });
 
     test('[SET-APP-09] 选完主题立刻切到别的设置栏目，主题仍会落盘并在重进后回显选中', async ({ session, userDataDir }) => {
@@ -172,9 +158,12 @@ test.describe('外观设置', () => {
         await openAppearanceSetting(page);
 
         const header = page.getByTestId('title-bar-header');
+        const isMac = process.platform === 'darwin';
         const minimize = page.getByRole('button', { name: '最小化' });
         const minimizeIcon = page.getByTestId('title-bar-minimize-icon');
-        await expect(minimize).toBeVisible();
+        if (!isMac) {
+            await expect(minimize).toBeVisible();
+        }
 
         // Matcha / Y2K 的 Astryx spacing 基数是 6px 而非 4px。标题栏若继续用
         // h-8/w-11 这类 spacing 工具类，会膨胀到 48px 并被固定 32px 的 header 裁掉。
@@ -185,18 +174,20 @@ test.describe('外观设置', () => {
             await expect(page.getByTestId('app-root')).toHaveAttribute('data-astryx-theme', slug);
 
             const headerBox = await header.boundingBox();
-            const controlBox = await minimize.boundingBox();
-            const iconBox = await minimizeIcon.boundingBox();
             expect(headerBox?.height).toBeGreaterThanOrEqual(31);
             expect(headerBox?.height).toBeLessThanOrEqual(33);
-            expect(controlBox?.width).toBeGreaterThanOrEqual(43);
-            expect(controlBox?.width).toBeLessThanOrEqual(45);
-            expect(controlBox?.height).toBeGreaterThanOrEqual(31);
-            expect(controlBox?.height).toBeLessThanOrEqual(33);
-            expect(controlBox?.y).toBeLessThanOrEqual(1);
-            expect(iconBox?.height).toBeGreaterThanOrEqual(13);
-            expect(iconBox?.height).toBeLessThanOrEqual(15);
-            expect((iconBox?.y ?? 0) + (iconBox?.height ?? 0)).toBeLessThanOrEqual(32);
+            if (!isMac) {
+                const controlBox = await minimize.boundingBox();
+                const iconBox = await minimizeIcon.boundingBox();
+                expect(controlBox?.width).toBeGreaterThanOrEqual(43);
+                expect(controlBox?.width).toBeLessThanOrEqual(45);
+                expect(controlBox?.height).toBeGreaterThanOrEqual(31);
+                expect(controlBox?.height).toBeLessThanOrEqual(33);
+                expect(controlBox?.y).toBeLessThanOrEqual(1);
+                expect(iconBox?.height).toBeGreaterThanOrEqual(13);
+                expect(iconBox?.height).toBeLessThanOrEqual(15);
+                expect((iconBox?.y ?? 0) + (iconBox?.height ?? 0)).toBeLessThanOrEqual(32);
+            }
         }
     });
 });

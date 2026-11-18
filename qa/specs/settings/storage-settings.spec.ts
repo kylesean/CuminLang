@@ -33,7 +33,11 @@ test.describe('存储设置', () => {
     });
 
     test('[SET-STO-02] 填了没有写权限的目录会显式报错，不落盘也不在页面上假装已保存', async ({ session, userDataDir }) => {
-        test.skip(process.platform === 'win32', 'Windows 的目录权限语义不支持 chmod 0o500 构造只读父目录');
+        const isRootUser = typeof process.getuid === 'function' && process.getuid() === 0;
+        test.skip(
+            process.platform === 'win32' || isRootUser,
+            'Windows 与 Linux root（CAP_DAC_OVERRIDE）下 chmod 0o500 无法阻断目录写入',
+        );
         const page = session.page;
         await openStorageSetting(page);
 
