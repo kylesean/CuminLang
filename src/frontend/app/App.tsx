@@ -31,6 +31,7 @@ import {
 import type { MigrationFailureDetail } from '@/common/contracts/migration-failure';
 import HomePage from '@/frontend/features/file-browser/HomePage';
 import { useDesktopLyricsBridge } from '@/frontend/features/desktop-lyrics/useDesktopLyricsBridge';
+import { APP_SHELL_TESTIDS } from '@/common/constants/qa-testids';
 
 const DesktopLyricsPage = lazy(() => import('@/frontend/features/desktop-lyrics/DesktopLyricsPage'));
 
@@ -127,7 +128,7 @@ export const App = () => {
         if (isDesktopLyricsRoute) {
             return;
         }
-        document.documentElement.dataset.testid = 'app-root';
+        document.documentElement.dataset.testid = APP_SHELL_TESTIDS.root;
         // 运行时设置尚在 IPC 水合中：保留 index.html 首屏镜像已套用的明暗，
         // 避免尚未拿到配置时先把 dark 覆写成 light 并在 localStorage 中污染镜像。
         if (!settingsInit) {

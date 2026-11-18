@@ -29,6 +29,7 @@ import {
 } from '@/frontend/features/settings/settingsApi';
 import { useAutoSaveSettingsForm } from '@/frontend/features/settings/useAutoSaveSettingsForm';
 import type { MobileAccessSettingSaveVO } from '@/common/contracts/mobile-access-setting-vo';
+import { SETTING_ITEM_TESTIDS } from '@/common/constants/qa-testids';
 
 type MobileAccessFormValues = MobileAccessSettingSaveVO;
 
@@ -266,7 +267,7 @@ const MobileAccessSetting: React.FC = () => {
                                                 type="body"
                                                 hasTabularNumbers
                                                 wordBreak="break-all"
-                                                data-testid="mobile-access-url"
+                                                data-testid={SETTING_ITEM_TESTIDS.mobileAccessUrl}
                                             >
                                                 {url}
                                             </Text>

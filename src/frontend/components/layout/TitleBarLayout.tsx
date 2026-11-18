@@ -5,6 +5,7 @@ import TitleBar from '@/frontend/components/layout/TitleBar/TitleBar';
 import { TITLE_BAR_HEIGHT } from '@/frontend/components/layout/TitleBar/titleBarMetrics';
 import { StartupLoading } from '@/frontend/components/shared/LoadingStates';
 import useLayout from '@/frontend/app/stores/layoutStore';
+import { APP_SHELL_TESTIDS } from '@/common/constants/qa-testids';
 
 /**
  * 带有桌面端统一标题栏的顶层路由布局容器。
@@ -28,7 +29,7 @@ const TitleBarLayout: React.FC = () => {
             // 会把 32px 的标题栏挤出 header，导致窗口控制按钮高度不一、与标题栏错位
             header={
                 !fullScreen ? (
-                    <LayoutHeader height={TITLE_BAR_HEIGHT} padding={0} data-testid="title-bar-header">
+                    <LayoutHeader height={TITLE_BAR_HEIGHT} padding={0} data-testid={APP_SHELL_TESTIDS.titleBarHeader}>
                         {/* 标题栏高度由 TitleBar 自身固定，外层只负责同高的 header slot；
                             不要再用 h-8 之类的 spacing 工具类，它会跟随主题放大 */}
                         <TitleBar className="w-full" />

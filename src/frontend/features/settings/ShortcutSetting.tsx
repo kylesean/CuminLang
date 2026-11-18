@@ -32,6 +32,7 @@ import { SettingKeyObj } from '@/common/types/store_schema';
 import type { ShortcutSettingDetailVO, ShortcutSettingSaveVO } from '@/common/types/vo/shortcut-setting-vo';
 import { SettingSection, SettingsLoadingSkeleton } from '@/frontend/features/settings/components/form';
 import SettingsPageShell from '@/frontend/features/settings/components/form/SettingsPageShell';
+import { SETTING_ITEM_TESTIDS } from '@/common/constants/qa-testids';
 import { SETTINGS_DETAIL_SWR_OPTIONS, settingsApi } from '@/frontend/features/settings/settingsApi';
 import { useAutoSaveSettingsForm } from '@/frontend/features/settings/useAutoSaveSettingsForm';
 
@@ -790,7 +791,7 @@ const ShortcutRow: React.FC<{
     const isDefault = value === defaultValue;
 
     return (
-        <HStack justify="between" vAlign="center" gap={6} width="100%" data-testid="shortcut-row">
+        <HStack justify="between" vAlign="center" gap={6} width="100%" data-testid={SETTING_ITEM_TESTIDS.shortcutRow}>
             <VStack gap={0.5} className="min-w-0 flex-1">
                 <Text type="body" weight="medium">{title}</Text>
                 <Text type="supporting" color="secondary" className="break-words">{description}</Text>
@@ -800,6 +801,7 @@ const ShortcutRow: React.FC<{
                 <button
                     type="button"
                     aria-haspopup="dialog"
+                    aria-label={editLabel}
                     title={editLabel}
                     onClick={() => setIsDialogOpen(true)}
                     className="inline-flex items-center rounded-lg px-2 py-1 -mx-2 cursor-pointer transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"

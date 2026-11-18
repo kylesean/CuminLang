@@ -5,6 +5,7 @@ import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { cn } from '@/frontend/lib/utils';
 import useLayout from '@/frontend/app/stores/layoutStore';
 import { setPodcastModeForCurrentVideo } from '@/frontend/features/player/podcastMode';
+import { PLAYER_UI_TESTIDS } from '@/common/constants/qa-testids';
 import {
     DARK_BAR_BUTTON_HOVER,
     MEDIA_BAR_ACTIVE,
@@ -27,7 +28,7 @@ export default function PodcastModeButton() {
                 onClick={() => setPodcastModeForCurrentVideo(!podcastMode)}
                 aria-pressed={podcastMode}
                 aria-label={t('controlBox.podcastMode')}
-                data-testid="player-control-podcast-mode-button"
+                data-testid={PLAYER_UI_TESTIDS.podcastModeButton}
                 className={cn(
                     MEDIA_BAR_TEXT_BUTTON,
                     podcastMode

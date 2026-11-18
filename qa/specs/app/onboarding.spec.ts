@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import { test } from '../../support/fixtures';
 import { CURRENT_ONBOARDING_VERSION } from '../../../src/common/constants/onboarding';
 import { ONBOARDING_COMPLETED_VERSION_KEY } from '../../../src/common/constants/systemConfigKeys';
-import { NAV_TESTIDS } from '../../../src/common/constants/qa-testids';
+import { APP_SHELL_TESTIDS, NAV_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /**
  * 首次使用引导的真实 UI 链路。
@@ -15,7 +15,7 @@ test.describe('首次使用引导', () => {
     test('[SET-ONB-01] 从真实引导页完成跳过并进入主界面，重启后不再展示引导 @smoke', async ({ openSession }) => {
         const first = await openSession({ skipOnboarding: false });
         const { page } = first;
-        await expect(page.getByTestId('onboarding-view')).toBeVisible();
+        await expect(page.getByTestId(APP_SHELL_TESTIDS.onboardingView)).toBeVisible();
         await expect(page.getByRole('heading', { name: '选择保存位置' })).toBeVisible();
 
         await page.getByRole('button', { name: '下一步' }).click();
@@ -41,6 +41,6 @@ test.describe('首次使用引导', () => {
         // 重启后直接进入主界面，证明标记确实跨进程持久化，而不只是当前页面 state。
         const restarted = await openSession({ skipOnboarding: false });
         await expect(restarted.page.getByTestId(NAV_TESTIDS.settings)).toBeVisible();
-        await expect(restarted.page.getByTestId('onboarding-view')).toHaveCount(0);
+        await expect(restarted.page.getByTestId(APP_SHELL_TESTIDS.onboardingView)).toHaveCount(0);
     });
 });

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect } from '@playwright/test';
 import { readPackagedConfigValue, test } from '../../support/packaged-fixtures';
 import { SENTENCE_CARD_TESTID } from '../../../src/common/constants/player-scroll-protocol';
-import { openSettingsSection, reloadSettingsPage } from '../../support/settings-page';
+import { openSettingsSection, reloadSettingsPage, switchSettingsSection } from '../../support/settings-page';
 
 /** 媒体夹具：用来验证打包态忽略 `?file=` dev 入口。 */
 const FIXTURE_VIDEO = path.resolve(__dirname, '..', '..', 'fixtures', 'media', 'qa-bilingual.mp4');
@@ -23,9 +23,11 @@ test.describe('打包产物', () => {
             resourcesPath: process.resourcesPath,
         }));
         expect(runtime.isPackaged).toBe(true);
-        // macOS .app 内为 Contents/Resources，Windows/Linux 为 resources
+        // macOS .app 内为 Contents/Resources，Windows/Linux 为 resources；
+        // forge extraResource 把 ['resources', 'lib', 'drizzle'] 拷贝到 resourcesPath 下对应子目录
         expect(runtime.resourcesPath).toMatch(/[\\/]resources$/i);
-        expect(fs.existsSync(path.join(runtime.resourcesPath, 'dictionary.sqlite'))).toBe(true);
+        expect(fs.existsSync(path.join(runtime.resourcesPath, 'resources', 'dictionary.sqlite'))).toBe(true);
+        expect(fs.existsSync(path.join(runtime.resourcesPath, 'drizzle', 'migrations'))).toBe(true);
 
         // NODE_ENV=development 不得把数据目录切回 dev 形态
         expect(fs.existsSync(path.join(userDataDir, 'data', 'dp_db.sqlite3'))).toBe(true);
@@ -57,6 +59,9 @@ test.describe('打包产物', () => {
         ))).toBe(false);
         await expect(page.getByTestId(SENTENCE_CARD_TESTID)).toHaveCount(0);
 
+        // 从未加载视频的播放页返回媒体库，回到主导航壳层再进入设置中心
+        await page.getByRole('button', { name: '返回媒体库' }).click();
+
         // 验证打包态真实读写 config.json（不靠预置文件蒙混过关）
         await openSettingsSection(
             page,
@@ -72,7 +77,7 @@ test.describe('打包产物', () => {
         await expect(page.getByRole('radiogroup', { name: '色彩模式' }).getByRole('radio', { name: '深色' })).toBeChecked();
 
         // 关于页与版本号链路可用（ASAR 内 renderer、preload、原生数据库模块均正常）
-        await openSettingsSection(page, 'about', page.getByRole('heading', { name: '关于与更新' }));
+        await switchSettingsSection(page, 'about', page.getByRole('heading', { name: '关于与更新' }));
         await expect(page.getByRole('main').getByText(/^v\d+\.\d+\.\d+/).first()).toBeVisible();
     });
 });

@@ -111,6 +111,7 @@ const ensureMobileWeb = (): boolean => {
     const builtMtime = fs.existsSync(MOBILE_ENTRY) ? fs.statSync(MOBILE_ENTRY).mtimeMs : 0;
     const sourceMtime = Math.max(
         newestMtime(path.join(projectDir, 'src', 'mobile')),
+        newestMtime(path.join(projectDir, 'src', 'common')),
         newestMtime(path.join(projectDir, 'assets')),
         fileMtime('vite.mobile.config.ts'),
     );
@@ -137,10 +138,12 @@ const ensureFixtures = (): boolean => {
     const missing = MEDIA_FILES.filter((name) => !fs.existsSync(path.join(MEDIA_DIR, name)));
     if (missing.length === 0) {
         // 只判缺失是不够的：改了生成脚本（句数、时间轴、分辨率）而产物还在，
-        // 用例会继续对着与文档契约不符的旧夹具跑。
+        // 用例会继续对着与文档契约不符的旧夹具跑。需校验所有产物都晚于生成脚本。
         const generatorMtime = fileMtime(path.join('qa', 'fixtures', 'make-fixtures.mjs'));
-        const fixtureMtime = fileMtime(path.join('qa', 'fixtures', 'media', 'qa-bilingual.srt'));
-        if (fixtureMtime >= generatorMtime) {
+        const oldestFixtureMtime = Math.min(
+            ...MEDIA_FILES.map((name) => fileMtime(path.join('qa', 'fixtures', 'media', name))),
+        );
+        if (oldestFixtureMtime >= generatorMtime) {
             return false;
         }
     }
@@ -149,7 +152,10 @@ const ensureFixtures = (): boolean => {
         stdio: 'inherit',
     });
     if (result.status !== 0) {
-        throw new Error(`媒体夹具生成失败（exit ${result.status}）：缺 ${missing.join('、')}`);
+        const detail = missing.length > 0
+            ? `缺 ${missing.join('、')}`
+            : '现有夹具已过期且重建失败（请确认本机已安装 ffmpeg / ffprobe）';
+        throw new Error(`媒体夹具生成失败（exit ${result.status}）：${detail}`);
     }
     return true;
 };

@@ -7,4 +7,4 @@
 
 ## 场景
 
-- 用例：**[SET-PKG-01]** 打包应用在 `NODE_ENV=development` 下仍按生产态启动，且 ASAR、原生数据库与设置页可用
+- 用例：**[SET-PKG-01]** 打包应用在 `NODE_ENV=development` 下仍按生产态启动，且 ASAR、`extraResource`、原生数据库与设置读写可用

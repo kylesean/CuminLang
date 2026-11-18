@@ -1,6 +1,11 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { isSecretPersisted, readConfigValue, test } from '../../support/fixtures';
 import { openSettingsSection, reloadSettingsPage, switchSettingsSection, chooseInRow, selectInRow } from '../../support/settings-page';
+import {
+    SETTING_ITEM_TESTIDS,
+    modelRowTestId,
+    providerPresetCardTestId,
+} from '../../../src/common/constants/qa-testids';
 
 /** 进入服务与资源设置页。 */
 async function openResourcesSetting(page: Page): Promise<void> {
@@ -10,6 +15,18 @@ async function openResourcesSetting(page: Page): Promise<void> {
 /** 切到服务与资源页的页内分区。 */
 async function openResourcesTab(page: Page, tab: '本地资源' | '云端服务'): Promise<void> {
     await page.getByRole('tab', { name: tab, exact: true }).click();
+}
+
+function apiKeyInput(page: Page): Locator {
+    return page.getByLabel('API Key');
+}
+
+function apiUrlInput(page: Page): Locator {
+    return page.getByRole('textbox', { name: 'API URL' });
+}
+
+function addModelInput(page: Page): Locator {
+    return page.getByRole('textbox', { name: '输入模型标识，如 deepseek-flash' });
 }
 
 /** 「API 类型」下拉的显示文案到存储枚举值的对应表。 */
@@ -56,14 +73,14 @@ test.describe('服务与资源设置', () => {
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
 
-        await page.getByPlaceholder('sk-...').fill(API_KEY);
+        await apiKeyInput(page).fill(API_KEY);
         await page.getByRole('button', { name: '保存' }).click();
-        await page.getByPlaceholder('https://api.deepseek.com/v1').fill(ENDPOINT);
+        await apiUrlInput(page).fill(ENDPOINT);
 
         // 模型标识靠「添加」进列表，不是直接编辑文本
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
-        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toBeVisible();
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toBeVisible();
 
         await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
         await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(ENDPOINT);
@@ -73,25 +90,26 @@ test.describe('服务与资源设置', () => {
         // 重进页面：密钥不再明文下发，只展示脱敏提示；地址与模型清单仍来自后端回读
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
-        const savedKeyInput = page.getByPlaceholder(SAVED_KEY_PLACEHOLDER);
+        const savedKeyInput = apiKeyInput(page);
         await expect(savedKeyInput).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
         await expect(savedKeyInput).toHaveValue('');
         await expect(savedKeyInput).not.toHaveAttribute('placeholder', new RegExp(API_KEY));
-        await expect(page.getByPlaceholder('https://api.deepseek.com/v1')).toHaveValue(ENDPOINT);
-        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toBeVisible();
+        await expect(apiUrlInput(page)).toHaveValue(ENDPOINT);
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toBeVisible();
 
         // 留空保存必须沿用旧 key：只改接口地址触发一次自动保存，密钥输入框保持为空
         const rotatedEndpoint = 'https://api.e2e.test/v2';
-        await page.getByPlaceholder('https://api.deepseek.com/v1').fill(rotatedEndpoint);
+        await apiUrlInput(page).fill(rotatedEndpoint);
         await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(rotatedEndpoint);
         await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
 
         // 再重进一次：密钥仍是「已保存」的脱敏态，说明留空保存没有把旧 key 当成清空
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
-        await expect(page.getByPlaceholder(SAVED_KEY_PLACEHOLDER)).toHaveValue('');
-        await expect(page.getByPlaceholder('https://api.deepseek.com/v1')).toHaveValue(rotatedEndpoint);
-        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toBeVisible();
+        await expect(apiKeyInput(page)).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
+        await expect(apiKeyInput(page)).toHaveValue('');
+        await expect(apiUrlInput(page)).toHaveValue(rotatedEndpoint);
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toBeVisible();
     });
 
     test('[SET-SVC-02] 识别方式与词典补充方式改动会落盘，重进页面仍回显', async ({ session, userDataDir }) => {
@@ -103,7 +121,7 @@ test.describe('服务与资源设置', () => {
 
         // 先添加云端模型并切到该模型，再切回「不补充」，确认下拉改动真实写盘
         await openResourcesTab(page, '云端服务');
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(NEW_MODEL);
 
@@ -146,23 +164,24 @@ test.describe('服务与资源设置', () => {
         await expect(dialog.getByText('选择厂商预设')).toBeVisible();
 
         // 预设的地址与类型从弹窗里现读，断言不写死具体厂商参数
-        const presetCard = dialog.getByTestId('provider-preset-anthropic');
-        const presetEndpoint = (await presetCard.getByTestId('provider-preset-endpoint').innerText()).trim();
-        const presetFormatLabel = (await presetCard.getByTestId('provider-preset-format').innerText()).trim();
+        const presetCard = dialog.getByTestId(providerPresetCardTestId('anthropic'));
+        const presetEndpoint = (await presetCard.getByTestId(SETTING_ITEM_TESTIDS.providerPresetEndpoint).innerText()).trim();
+        const presetFormatLabel = (await presetCard.getByTestId(SETTING_ITEM_TESTIDS.providerPresetFormat).innerText()).trim();
         await presetCard.getByRole('button', { name: '使用', exact: true }).click();
         await expect(dialog).toBeHidden();
 
         const presetApiFormat = API_FORMAT_BY_LABEL[presetFormatLabel];
+        expect(presetApiFormat, `未映射的 API 类型标签：${presetFormatLabel}`).toBeTruthy();
         await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.endpoint')).toBe(presetEndpoint);
         await expect.poll(() => readConfigValue(userDataDir, 'apiKeys.openAi.apiFormat')).toBe(presetApiFormat);
 
         // 当前页面即时回显
-        await expect(page.getByPlaceholder('https://api.deepseek.com/v1')).toHaveValue(presetEndpoint);
+        await expect(apiUrlInput(page)).toHaveValue(presetEndpoint);
         await expect(selectInRow(page, 'apiFormat')).toHaveText(presetFormatLabel);
 
         // 重进页面：地址与类型来自后端回读
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(page.getByPlaceholder('https://api.deepseek.com/v1')).toHaveValue(presetEndpoint);
+        await expect(apiUrlInput(page)).toHaveValue(presetEndpoint);
         await expect(selectInRow(page, 'apiFormat')).toHaveText(presetFormatLabel);
     });
 
@@ -171,11 +190,11 @@ test.describe('服务与资源设置', () => {
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
 
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(NEW_MODEL);
 
-        const modelRow = page.getByTestId(`model-row-${NEW_MODEL}`);
+        const modelRow = page.getByTestId(modelRowTestId(NEW_MODEL));
         await expect(modelRow).toBeVisible();
 
         // 关闭模型启用开关：写入 models.openai.disabled 并在列表显示「已关闭」
@@ -192,17 +211,21 @@ test.describe('服务与资源设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.disabled')).toBe('');
 
         const temporaryModel = 'e2e-model-temp';
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(temporaryModel);
+        await addModelInput(page).fill(temporaryModel);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(temporaryModel);
 
-        const temporaryRow = page.getByTestId(`model-row-${temporaryModel}`);
+        const temporaryRow = page.getByTestId(modelRowTestId(temporaryModel));
         await expect(temporaryRow.getByRole('button', { name: '删除' })).toBeEnabled();
         await deleteModelRow(page, temporaryRow);
 
-        // 删除同样要写回配置，而不是只从界面列表里消失
+        // 删除同样要写回配置，且重进页面后不会复现
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).not.toContain(temporaryModel);
-        await expect(page.getByTestId(`model-row-${temporaryModel}`)).toHaveCount(0);
+        await expect(page.getByTestId(modelRowTestId(temporaryModel))).toHaveCount(0);
+        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await openResourcesTab(page, '云端服务');
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toBeVisible();
+        await expect(page.getByTestId(modelRowTestId(temporaryModel))).toHaveCount(0);
     });
 
     test('[SET-SVC-06] 把字幕翻译指到新增的云端模型后，模型槽位落盘并回显', async ({ session, userDataDir }) => {
@@ -210,7 +233,7 @@ test.describe('服务与资源设置', () => {
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
 
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toContain(NEW_MODEL);
 
@@ -231,7 +254,7 @@ test.describe('服务与资源设置', () => {
         await openResourcesTab(page, '云端服务');
 
         // 先绑定到云端模型，让状态从默认 none 切实发生变化，避免「原本就是 none」导致无脏写
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await openResourcesTab(page, '本地资源');
         await chooseInRow(page, 'subtitleTranslation', NEW_MODEL);
@@ -257,7 +280,7 @@ test.describe('服务与资源设置', () => {
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
 
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
 
         await openResourcesTab(page, '本地资源');
@@ -280,7 +303,7 @@ test.describe('服务与资源设置', () => {
 
         // 添加云端模型并开启整句讲解，再切回禁用验证持久化
         await openResourcesTab(page, '云端服务');
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
 
         await openResourcesTab(page, '本地资源');
@@ -294,32 +317,36 @@ test.describe('服务与资源设置', () => {
         await expect(selectInRow(page, 'sentenceLearning')).toHaveText('禁用');
     });
 
-    test('[SET-SVC-10] 把功能从云端模型切走后，原模型的删除按钮恢复可用且删得掉', async ({ session, userDataDir }) => {
+    test('[SET-SVC-10] 已绑定功能的云端模型也可直接删除，删除后列表与配置不再保留该模型', async ({ session, userDataDir }) => {
         const page = session.page;
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
 
-        // 新增模型并绑定到字幕翻译，仍可直接删除（模型列表可自由管理）
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        // 新增模型并绑定到字幕翻译；模型列表支持自由删除
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
         await openResourcesTab(page, '本地资源');
         await chooseInRow(page, 'subtitleTranslation', NEW_MODEL);
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.subtitleTranslation')).toBe(NEW_MODEL);
 
         await openResourcesTab(page, '云端服务');
-        const modelRow = page.getByTestId(`model-row-${NEW_MODEL}`);
+        const modelRow = page.getByTestId(modelRowTestId(NEW_MODEL));
         await expect(modelRow.getByRole('button', { name: '删除' })).toBeEnabled();
 
         await deleteModelRow(page, modelRow);
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).not.toContain(NEW_MODEL);
-        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toHaveCount(0);
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
+
+        await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
+        await openResourcesTab(page, '云端服务');
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
     });
 
     test('[SET-SVC-11] 关掉应用再打开，云端密钥仍原样回读', async ({ openSession, userDataDir }) => {
         const first = await openSession();
         await openResourcesSetting(first.page);
         await openResourcesTab(first.page, '云端服务');
-        await first.page.getByPlaceholder('sk-...').fill(API_KEY);
+        await apiKeyInput(first.page).fill(API_KEY);
         await first.page.getByRole('button', { name: '保存' }).click();
         await expect.poll(() => isSecretPersisted(userDataDir, 'apiKeys.openAi.key', API_KEY)).toBe(true);
         await first.close();
@@ -328,7 +355,7 @@ test.describe('服务与资源设置', () => {
         const restarted = await openSession();
         await openResourcesSetting(restarted.page);
         await openResourcesTab(restarted.page, '云端服务');
-        const savedKeyInput = restarted.page.getByPlaceholder(SAVED_KEY_PLACEHOLDER);
+        const savedKeyInput = apiKeyInput(restarted.page);
         await expect(savedKeyInput).toHaveAttribute('placeholder', SAVED_KEY_PLACEHOLDER);
         await expect(savedKeyInput).toHaveValue('');
         await expect(savedKeyInput).not.toHaveAttribute('placeholder', new RegExp(API_KEY));
@@ -339,17 +366,17 @@ test.describe('服务与资源设置', () => {
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
 
-        await page.getByPlaceholder('输入模型标识，如 deepseek-flash').fill(NEW_MODEL);
+        await addModelInput(page).fill(NEW_MODEL);
         await page.getByRole('button', { name: '添加', exact: true }).click();
-        const addedRow = page.getByTestId(`model-row-${NEW_MODEL}`);
+        const addedRow = page.getByTestId(modelRowTestId(NEW_MODEL));
         await expect(addedRow).toBeVisible();
         await deleteModelRow(page, addedRow);
 
         // 清空就是清空：清单在磁盘上留空，不会又被兜底模型塞回来
         await expect.poll(() => readConfigValue(userDataDir, 'models.openai.available')).toBe('');
-        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toHaveCount(0);
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
         await reloadSettingsPage(page, page.getByRole('heading', { name: '服务与资源' }));
-        await expect(page.getByTestId(`model-row-${NEW_MODEL}`)).toHaveCount(0);
+        await expect(page.getByTestId(modelRowTestId(NEW_MODEL))).toHaveCount(0);
 
         // 清单为空只影响云端模型可选范围，不该连带把无关偏好一起拒绝保存
         await openResourcesTab(page, '本地资源');
@@ -364,7 +391,7 @@ test.describe('服务与资源设置', () => {
         await openResourcesSetting(page);
         await openResourcesTab(page, '云端服务');
 
-        await page.getByPlaceholder('https://api.deepseek.com/v1').fill(ENDPOINT);
+        await apiUrlInput(page).fill(ENDPOINT);
 
         // 关键：填完立刻离开，不给 600ms 防抖留时间，验证离开栏目时自动保存冲刷不丢配置
         await switchSettingsSection(page, 'appearance', page.getByRole('radio', { name: '深色' }));
@@ -374,6 +401,6 @@ test.describe('服务与资源设置', () => {
         // 回到该页：接口地址来自后端回读
         await switchSettingsSection(page, 'resources', page.getByRole('heading', { name: '服务与资源' }));
         await openResourcesTab(page, '云端服务');
-        await expect(page.getByPlaceholder('https://api.deepseek.com/v1')).toHaveValue(ENDPOINT);
+        await expect(apiUrlInput(page)).toHaveValue(ENDPOINT);
     });
 });

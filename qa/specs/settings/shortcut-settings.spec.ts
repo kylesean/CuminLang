@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { readConfigValue, test } from '../../support/fixtures';
 import { openSettingsSection, reloadSettingsPage, switchSettingsSection } from '../../support/settings-page';
+import { SETTING_ITEM_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /** 进入快捷键设置页。 */
 async function openShortcutSetting(page: Page): Promise<void> {
@@ -14,12 +15,16 @@ async function openShortcutSetting(page: Page): Promise<void> {
  * @param title 该行的中文功能名（如「单句重播」）。
  */
 function shortcutRow(page: Page, title: string): Locator {
-    return page.getByTestId('shortcut-row').filter({ hasText: title });
+    return page.getByTestId(SETTING_ITEM_TESTIDS.shortcutRow).filter({ hasText: title });
 }
 
-/** 打开某行的编辑弹窗（点击键位徽章）。 */
+function searchBox(page: Page): Locator {
+    return page.getByRole('searchbox', { name: '搜索快捷键或功能名称...' });
+}
+
+/** 打开某行的编辑弹窗（点击编辑按钮）。 */
 async function openShortcutDialog(page: Page, title: string): Promise<Locator> {
-    await shortcutRow(page, title).getByRole('button').first().click();
+    await shortcutRow(page, title).getByRole('button', { name: '编辑快捷键' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     // 弹窗挂载后才会把焦点交给录制面板；等它开始监听再按键，
@@ -48,9 +53,11 @@ test.describe('快捷键设置', () => {
         await reloadSettingsPage(page, page.getByRole('heading', { name: '快捷键' }));
         await expect(shortcutRow(page, '单句重播')).toContainText('Y');
 
-        // 恢复默认同样要写回配置，而不是只改界面
-        await shortcutRow(page, '单句重播').getByRole('button').nth(1).click();
+        // 恢复默认同样要写回配置并经重进回显，而不是只改界面
+        await shortcutRow(page, '单句重播').getByRole('button', { name: '恢复默认' }).click();
         await expect.poll(() => readConfigValue(userDataDir, 'shortcut.repeatSingleSentence')).toBe('r');
+        await reloadSettingsPage(page, page.getByRole('heading', { name: '快捷键' }));
+        await expect(shortcutRow(page, '单句重播')).toContainText('R');
         await expect(shortcutRow(page, '单句重播')).not.toContainText('Y');
     });
 
@@ -89,7 +96,7 @@ test.describe('快捷键设置', () => {
         const page = session.page;
         await openShortcutSetting(page);
 
-        const search = page.getByPlaceholder('搜索快捷键或功能名称...');
+        const search = searchBox(page);
 
         // 正常态下四个分组的功能行都在
         await expect(shortcutRow(page, '单句重播')).toBeVisible();
@@ -113,7 +120,7 @@ test.describe('快捷键设置', () => {
 
         // 搜索框只是列表过滤器，不是设置项：重进页面后应为空
         await reloadSettingsPage(page, page.getByRole('heading', { name: '快捷键' }));
-        await expect(page.getByPlaceholder('搜索快捷键或功能名称...')).toHaveValue('');
+        await expect(searchBox(page)).toHaveValue('');
         expect(readConfigValue(userDataDir, 'shortcut.searchQuery')).toBeUndefined();
     });
 

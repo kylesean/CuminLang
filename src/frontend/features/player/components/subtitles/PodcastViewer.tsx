@@ -17,6 +17,7 @@ import StrUtil from '@/common/utils/str-util';
 import FuncUtil from '@/common/utils/func-util';
 import { useWordPopoverStore } from '@/frontend/features/player/components/translatable-line/wordPopoverStore';
 import useTranslation from '@/frontend/features/player/translationStore';
+import { PLAYER_UI_TESTIDS } from '@/common/constants/qa-testids';
 
 const AUDIO_PULSE_BARS = [
     { key: 'b1', idleScale: 0.45, frames: [0.45, 0.95, 0.55, 0.85, 0.45], duration: 1.05 },
@@ -76,7 +77,7 @@ const PodcastSentenceProgressBar = memo(function PodcastSentenceProgressBar({
     return (
         <div
             aria-hidden="true"
-            data-testid="podcast-sentence-progress"
+            data-testid={PLAYER_UI_TESTIDS.podcastSentenceProgress}
             className="mx-auto mt-5 h-0.5 w-32 overflow-hidden rounded-full bg-border/50"
         >
             <div
@@ -117,7 +118,7 @@ function PodcastTopBar({
             <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-border/50 bg-body/80 px-3 py-1 backdrop-blur-md">
                 <PodcastAudioPulse playing={playing} reducedMotion={reducedMotion} />
                 <span
-                    data-testid="podcast-sentence-counter"
+                    data-testid={PLAYER_UI_TESTIDS.podcastSentenceCounter}
                     aria-label={t('podcast.sentenceCounter', { current: currentIndex + 1, total: totalCount })}
                     className="font-mono text-xs font-medium tabular-nums text-secondary"
                 >
@@ -137,7 +138,7 @@ function PodcastTopBar({
                 <Tooltip content={t('podcast.blindListeningHint')} placement="below">
                     <button
                         type="button"
-                        data-testid="podcast-blind-toggle"
+                        data-testid={PLAYER_UI_TESTIDS.podcastBlindToggle}
                         aria-pressed={podcastBlindMode}
                         onClick={togglePodcastBlindMode}
                         className={cn(
@@ -159,7 +160,7 @@ function PodcastTopBar({
                 >
                     <button
                         type="button"
-                        data-testid="podcast-transcript-toggle"
+                        data-testid={PLAYER_UI_TESTIDS.podcastTranscriptToggle}
                         aria-pressed={podcastTranscriptVisible}
                         onClick={togglePodcastTranscript}
                         className={cn(

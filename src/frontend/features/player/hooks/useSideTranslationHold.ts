@@ -62,7 +62,7 @@ const runHold = async (scroller: HTMLElement, before: BeforeSnapshot): Promise<v
     const policy = readHoldPolicy();
     const { anchor } = before;
 
-    const hold: HoldRecord = beginHold({
+    const hold: HoldRecord | null = beginHold({
         policy,
         anchorIndex: anchor.index,
         anchorTopBefore: anchor.top,

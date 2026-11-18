@@ -17,9 +17,11 @@
  */
 import { expect, type Page } from '@playwright/test';
 import { test } from '../../support/fixtures';
-import path from 'node:path';
+import { navigateToFixturePlayer } from '../../support/player-entry';
 import {
+    CONVERGE_EPSILON_PX,
     FLING_TO_END_WHEEL_DELTA,
+    MAX_SCROLL_WRITES,
     MIN_CONTENT_HEIGHT_DELTA,
     MIN_START_SCROLL_TOP,
     ROUNDS,
@@ -33,19 +35,15 @@ import {
     SIDE_TRANSLATION_TOGGLE_TESTID as SIDE_TRANSLATION_TESTID,
 } from '../../../src/common/constants/player-scroll-protocol';
 
-/** 夹具：36 句双语字幕 + 同目录同名视频（由 qa/fixtures/make-fixtures.mjs 生成，不入库）。 */
-const FIXTURE_VIDEO = path.join(__dirname, '..', '..', 'fixtures', 'media', 'qa-bilingual.mp4');
-
 /** 本轮使用的策略：a = hold，b = 对照。 */
 const POLICY: 'a' | 'b' = process.env.DP_POLICY === 'b' ? 'b' : 'a';
 
 /**
  * 本文件用例的超时预算（毫秒）。
  *
- * 全局超时是 60 秒，但这里的最坏耗时明显更长：`openPlayer` 里等字幕行最多 30 秒、
- * 等滚动静稳最多 15 秒；每轮还要等 hold（预置 8 秒 + 正式 10 秒）、钉起点最多 3.2 秒，
- * 三轮合计约 66 秒。加起来最坏能到 110 秒以上——用默认值会让「超时」先于断言触发，
- * 失败信息指向时间而不是残差，把排查方向带偏。
+ * `openPlayer` 里等字幕行最多 30 秒、等滚动静稳最多 15 秒；每轮还要等 hold
+ * （预置 8 秒 + 正式 10 秒）、钉起点最多 3.2 秒，三轮最坏可达 110 秒以上。
+ * 这里保持与全局超时 180 秒对齐，避免未完成采样时超时归因错位。
  */
 const PLAYER_TEST_TIMEOUT_MS = 180_000;
 
@@ -242,13 +240,7 @@ async function readSideTranslation(page: Page): Promise<boolean> {
  * @returns 点击派发后结束。
  */
 async function clickSideTranslationWithoutPointer(page: Page): Promise<void> {
-    await page.evaluate((toggleTestId) => {
-        const toggle = document.querySelector<HTMLElement>(`[data-testid="${toggleTestId}"]`);
-        if (!toggle) {
-            throw new Error('侧栏译文开关不存在');
-        }
-        toggle.click();
-    }, SIDE_TRANSLATION_TESTID);
+    await page.getByTestId(SIDE_TRANSLATION_TESTID).dispatchEvent('click');
 }
 
 /**
@@ -336,17 +328,9 @@ async function openPlayer(page: Page): Promise<void> {
     await page.evaluate((policy) => {
         (window as { __dpPolicy?: string }).__dpPolicy = policy;
     }, POLICY);
-    const hash = `#/player/qa?file=${encodeURIComponent(FIXTURE_VIDEO)}&seek=0&lang=zh`;
-    await page.evaluate((target) => {
-        window.location.hash = target;
-    }, hash);
-    await page.waitForFunction(
-        ({ cardTestId, scrollerTestId }) =>
-            document.querySelectorAll(`[data-testid="${cardTestId}"]`).length > 0
-            && Boolean(document.querySelector(`[data-testid="${scrollerTestId}"]`)),
-        { cardTestId: SENTENCE_CARD_TESTID, scrollerTestId: SCROLLER_TESTID },
-        { timeout: 30_000 },
-    );
+    await navigateToFixturePlayer(page);
+    await expect(page.getByTestId(SENTENCE_CARD_TESTID).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId(SCROLLER_TESTID)).toBeVisible({ timeout: 30_000 });
     // 等调试面挂上（main 进程的 devMode 查询是一次异步 IPC）。
     // 这里不吞异常：埋点是这套差分用例的判定依据，等不到就该在开跑前失败，
     // 而不是让后面的断言静默降级成「只验了页面能滚」。
@@ -542,12 +526,12 @@ test.describe('侧栏译文切换后的阅读位置保持', () => {
             expect(observation.instrumentation, '调试埋点缺失，滚动写入无法判定').toBe('present');
 
             if (POLICY === 'a') {
-                expect(observation.residual, '末轮残差应小于 1 布局像素').not.toBeNull();
-                expect(Math.abs(observation.residual ?? Infinity)).toBeLessThan(1);
+                expect(observation.residual, `末轮残差应小于 ${CONVERGE_EPSILON_PX} 布局像素`).not.toBeNull();
+                expect(Math.abs(observation.residual ?? Infinity)).toBeLessThan(CONVERGE_EPSILON_PX);
                 // 请求数与写入数是两个子系统：requestCount 记 Virtuoso 的 scrollToIndex/scrollBy，
                 // writeCount 记 hold 自己直接改 scrollTop。收敛轮数有上限，两者都要钉住。
-                expect(observation.requestCount ?? Infinity, 'Virtuoso 请求类写入不应超过 3 次').toBeLessThanOrEqual(3);
-                expect(observation.writeCount ?? Infinity, 'hold 自己的补偿写入不应超过 3 次').toBeLessThanOrEqual(3);
+                expect(observation.requestCount ?? Infinity, `Virtuoso 请求类写入不应超过 ${MAX_SCROLL_WRITES} 次`).toBeLessThanOrEqual(MAX_SCROLL_WRITES);
+                expect(observation.writeCount ?? Infinity, `hold 自己的补偿写入不应超过 ${MAX_SCROLL_WRITES} 次`).toBeLessThanOrEqual(MAX_SCROLL_WRITES);
             } else {
                 // 对照策略：一次补偿都不许发生
                 expect(observation.requestCount, '对照策略不允许出现请求类滚动').toBe(0);

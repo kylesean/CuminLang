@@ -9,7 +9,7 @@
  * `?file=` 只在开发/未打包运行时生效（判据为 main 进程下发的 `devMode`）；
  * 打包版即使手工拼出这个参数也会被完全忽略。
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import { resolveDevMode } from '@/frontend/lib/devMode';
 import { applyLanguageSetting } from '@/frontend/i18n';
@@ -38,13 +38,6 @@ export interface DevPlayerEntry {
     seekSeconds: number | null;
 }
 
-/** 从 URL 上抓到的参数（只抓一次，页面自身会改写 search 参数）。 */
-interface CapturedEntryParams {
-    file: string | null;
-    seekSeconds: number | null;
-    lang: string | null;
-}
-
 /**
  * 解析 `seek` 参数。
  *
@@ -62,24 +55,28 @@ const parseSeek = (raw: string | null): number | null => {
 /**
  * 读取并处理播放页的 dev 入口参数。
  *
- * @param searchParams 当前路由的 query 参数（只在首次渲染时读取）。
+ * @param searchParams 当前路由的 query 参数。
  * @returns 入口状态、观看记录 ID 与 seek 位置。
  */
 export function useDevPlayerEntry(searchParams: URLSearchParams): DevPlayerEntry {
-    // 首次渲染时定稿：页面自身随后会改写 search 参数，之后再读就看不到 `file` 了
-    const [captured] = useState<CapturedEntryParams>(() => ({
-        file: searchParams.get('file'),
-        seekSeconds: parseSeek(searchParams.get('seek')),
-        lang: searchParams.get('lang'),
-    }));
-    const [state, setState] = useState<{ status: DevPlayerEntryStatus; videoId: string | null }>({
-        status: captured.file ? 'resolving' : 'idle',
+    const file = searchParams.get('file');
+    const seekRaw = searchParams.get('seek');
+    const lang = searchParams.get('lang');
+    const seekSeconds = useMemo(() => parseSeek(seekRaw), [seekRaw]);
+    const entryKey = file ? `${file}\0${lang ?? ''}` : null;
+
+    const [resolved, setResolved] = useState<{
+        forKey: string | null;
+        status: DevPlayerEntryStatus;
+        videoId: string | null;
+    }>({
+        forKey: null,
+        status: 'idle',
         videoId: null,
     });
 
     useEffect(() => {
-        const file = captured.file;
-        if (!file) {
+        if (!file || !entryKey) {
             return undefined;
         }
         let cancelled = false;
@@ -90,11 +87,11 @@ export function useDevPlayerEntry(searchParams: URLSearchParams): DevPlayerEntry
             }
             if (!devMode) {
                 // 打包版不认这个参数：按「没有 dev 入口」处理，交给正规流程报错/空态
-                setState({ status: 'idle', videoId: null });
+                setResolved({ forKey: entryKey, status: 'idle', videoId: null });
                 return;
             }
-            if (captured.lang === 'zh' || captured.lang === 'en') {
-                await applyLanguageSetting(captured.lang === 'zh' ? 'zh-CN' : 'en-US');
+            if (lang === 'zh' || lang === 'en') {
+                await applyLanguageSetting(lang === 'zh' ? 'zh-CN' : 'en-US');
             }
             // 走应用自己的入库接口：路径存在就复用已有记录，重复进入同一路径不会产生重复记录
             const ids = await playerApi.createWatchHistoryEntries([file]);
@@ -105,21 +102,43 @@ export function useDevPlayerEntry(searchParams: URLSearchParams): DevPlayerEntry
                 void swrApiMutate('watch-history/list/basic');
                 void swrApiMutate('watch-history/list');
             }
-            setState({ status: ids.length > 0 ? 'ready' : 'failed', videoId: ids[0] ?? null });
+            setResolved({
+                forKey: entryKey,
+                status: ids.length > 0 ? 'ready' : 'failed',
+                videoId: ids[0] ?? null,
+            });
         })().catch(() => {
             if (!cancelled) {
-                setState({ status: 'failed', videoId: null });
+                setResolved({ forKey: entryKey, status: 'failed', videoId: null });
             }
         });
         return () => {
             cancelled = true;
         };
-    }, [captured]);
+    }, [entryKey, file, lang]);
+
+    if (!entryKey) {
+        return {
+            status: 'idle',
+            requested: false,
+            videoId: null,
+            seekSeconds,
+        };
+    }
+
+    if (resolved.forKey !== entryKey) {
+        return {
+            status: 'resolving',
+            requested: true,
+            videoId: null,
+            seekSeconds,
+        };
+    }
 
     return {
-        status: state.status,
-        requested: Boolean(captured.file),
-        videoId: state.videoId,
-        seekSeconds: captured.seekSeconds,
+        status: resolved.status,
+        requested: true,
+        videoId: resolved.videoId,
+        seekSeconds,
     };
 }

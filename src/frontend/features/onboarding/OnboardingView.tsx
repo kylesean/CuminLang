@@ -13,6 +13,7 @@ import { Text } from '@astryxdesign/core/Text';
 import { TextInput } from '@astryxdesign/core/TextInput';
 import { VStack } from '@astryxdesign/core/VStack';
 import TitleBar from '@/frontend/components/layout/TitleBar/TitleBar';
+import { APP_SHELL_TESTIDS } from '@/common/constants/qa-testids';
 import { TITLE_BAR_HEIGHT } from '@/frontend/components/layout/TitleBar/titleBarMetrics';
 import {
     CheckCircle2,
@@ -242,7 +243,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onCompleted }) =
 
     return (
         <div
-            data-testid="onboarding-view"
+            data-testid={APP_SHELL_TESTIDS.onboardingView}
             className="relative flex h-screen w-full flex-col overflow-hidden bg-body text-primary select-none"
         >
             <header

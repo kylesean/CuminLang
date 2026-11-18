@@ -42,5 +42,17 @@ test.describe('渲染层安全策略', () => {
                 `经 meta 投递时 ${directive} 会被规范忽略，写进桌面 CSP 只会每次加载丢一条错误`,
             ).not.toContain(directive);
         }
+
+        // 同时核验真实生效的 Electron 沙箱与 Node 隔离（不主动触发报错，避免污染观测）
+        const globalsExposure = await session.page.evaluate(() => ({
+            hasRequire: typeof (window as unknown as { require?: unknown }).require !== 'undefined',
+            hasProcess: typeof (window as unknown as { process?: unknown }).process !== 'undefined',
+            hasModule: typeof (window as unknown as { module?: unknown }).module !== 'undefined',
+        }));
+        expect(globalsExposure).toEqual({
+            hasRequire: false,
+            hasProcess: false,
+            hasModule: false,
+        });
     });
 });

@@ -19,6 +19,7 @@ import { fileBrowserApi } from '@/frontend/features/file-browser/fileBrowserApi'
 import useInView from '@/frontend/hooks/useInView';
 import i18n from '@/frontend/i18n';
 import { toast } from 'react-hot-toast';
+import { watchHistoryCardTestId } from '@/common/constants/qa-testids';
 
 const ProjectListItem = ({
     video,
@@ -99,7 +100,7 @@ const ProjectListItem = ({
         >
             <div
                 ref={containerRef}
-                data-testid={`watch-history-card-${video.id}`}
+                data-testid={watchHistoryCardTestId(video.id)}
                 data-video-id={video.id}
                 role="button"
                 tabIndex={0}

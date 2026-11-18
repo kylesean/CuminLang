@@ -7,6 +7,7 @@ import StrUtil from '@/common/utils/str-util';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { useVocabularyState } from '@/frontend/features/player/vocabularyStore';
+import { PLAYER_UI_TESTIDS } from '@/common/constants/qa-testids';
 import { cn } from '@/frontend/lib/utils';
 import type { Sentence } from '@/common/types/SentenceC';
 import { selectVisibleSentences } from '@/frontend/features/player/lib/sentence-grouping';
@@ -298,7 +299,7 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
                 {!isOverlay && <SceneCue sentences={sentences} currentSentence={sentence} />}
                 <div
                     ref={subtitleContainerRef}
-                    data-testid="main-subtitle-scroller"
+                    data-testid={PLAYER_UI_TESTIDS.mainSubtitleScroller}
                     className={cn(
                         'w-full overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
                         isOverlay ? 'max-h-[46vh]' : 'h-full',
@@ -308,7 +309,7 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
                         {/* 字幕内容区：受 py-3 保护，自然居中 */}
                         <div
                             ref={subtitleContentRef}
-                            data-testid="main-subtitle-content"
+                            data-testid={PLAYER_UI_TESTIDS.mainSubtitleContent}
                             data-subtitle-active={block ? undefined : 'true'}
                             data-vocab-ready={vocabReady ? 'true' : undefined}
                             className={cn(

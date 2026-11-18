@@ -45,7 +45,11 @@ const problems = [];
 for (const target of TARGET_DIRS) {
     for (const file of listTsFiles(path.join(QA_ROOT, target))) {
         const relative = path.relative(REPO_ROOT, file).split(path.sep).join('/');
-        const lines = fs.readFileSync(file, 'utf8').split('\n');
+        // 剥离块注释与单行注释（保留换行与行号对应），避免注释里的示例误报
+        const stripped = fs.readFileSync(file, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
+            .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+        const lines = stripped.split('\n');
         lines.forEach((line, index) => {
             if (/\.locator\s*\(/.test(line)) {
                 problems.push(`${relative}:${index + 1} 使用了 page.locator()，请改用 getByRole/getByTestId`);

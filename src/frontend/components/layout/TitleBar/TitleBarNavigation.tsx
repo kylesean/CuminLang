@@ -8,6 +8,7 @@ import { useAppHistoryNavigation } from '@/frontend/app/hooks/useAppHistoryNavig
 import { swrApiMutate } from '@/frontend/lib/swr-util';
 import useSubtitleScroll from '@/frontend/features/player/hooks/useSubtitleScroll';
 import { cn } from '@/frontend/lib/utils';
+import { APP_SHELL_TESTIDS } from '@/common/constants/qa-testids';
 
 const NAV_ICON_BUTTON_CLASS = cn(
     'inline-flex items-center justify-center w-[24px] h-[24px] rounded-md select-none transition-colors',
@@ -40,7 +41,7 @@ const InnerNavigation: React.FC = () => {
             <Tooltip content={backTooltip} placement="below">
                 <button
                     type="button"
-                    data-testid="title-bar-back"
+                    data-testid={APP_SHELL_TESTIDS.titleBarBack}
                     disabled={!backEnabled}
                     onClick={goBack}
                     className={cn(
@@ -59,7 +60,7 @@ const InnerNavigation: React.FC = () => {
                 <Tooltip content={forwardTooltip} placement="below">
                     <button
                         type="button"
-                        data-testid="title-bar-forward"
+                        data-testid={APP_SHELL_TESTIDS.titleBarForward}
                         disabled={!canGoForward}
                         onClick={goForward}
                         className={cn(

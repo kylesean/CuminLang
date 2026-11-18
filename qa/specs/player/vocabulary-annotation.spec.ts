@@ -1,11 +1,8 @@
-import path from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 import { test } from '../../support/fixtures';
-import { VOCAB_ANNOTATION_TESTIDS } from '../../../src/common/constants/qa-testids';
-
-/** 媒体夹具：真实视频 + 双语 SRT。 */
-const FIXTURE_VIDEO = path.resolve(__dirname, '..', '..', 'fixtures', 'media', 'qa-bilingual.mp4');
+import { navigateToFixturePlayer } from '../../support/player-entry';
+import { PLAYER_UI_TESTIDS, VOCAB_ANNOTATION_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /**
  * 夹具字幕第一句中的内容词，且存在于默认词表。
@@ -16,14 +13,12 @@ const FIXTURE_VIDEO = path.resolve(__dirname, '..', '..', 'fixtures', 'media', '
 const TARGET_WORD = 'steady';
 
 function mainSubtitleContent(page: Page): Locator {
-    return page.getByTestId('main-subtitle-content');
+    return page.getByTestId(PLAYER_UI_TESTIDS.mainSubtitleContent);
 }
 
 /** 打开播放器并等待第一句字幕及其词表匹配完成。 */
 async function openFixture(page: Page): Promise<void> {
-    await page.evaluate((file) => {
-        window.location.hash = `#/player/qa?file=${encodeURIComponent(file)}&seek=0&lang=zh`;
-    }, FIXTURE_VIDEO);
+    await navigateToFixturePlayer(page);
     const content = mainSubtitleContent(page);
     await expect(content.getByText('The player keeps').first()).toBeVisible({ timeout: 30_000 });
     // 必须等到 matchSubtitleVocabulary IPC 返回并同步进 vocabularyStore，避免在 store 尚未填充时假通过

@@ -1,6 +1,6 @@
 # YouTube 链接导入
 
-用例文件：`qa/specs/settings/youtube-import.spec.ts`（本轮为手动用例，尚未自动化）
+用例文件：无（本轮为手动用例，尚未自动化）
 
 本页场景依赖真实 YouTube 网络与 yt-dlp 下载，无法在 CI 中稳定复现，因此全部登记为手动；
 ID 保留给后续自动化补齐。

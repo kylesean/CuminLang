@@ -27,8 +27,8 @@
 
 ## 用例 ID 与状态
 
-- 每份页面文档顶部先声明这一页的用例文件：`` 用例文件：`qa/specs/settings/xxx.spec.ts` ``。
-- ID 形如 `SET-PRX-01`：`SET` = 设置中心，中段 = 页面或范围，末段 = 该范围内的序号。ID 一旦分配就不再复用。
+- 每份页面文档顶部先声明这一页的用例文件：`` 用例文件：`qa/specs/settings/xxx.spec.ts` ``（尚无自动化用例的手动文档写 `用例文件：无`）。
+- ID 形如 `SET-PRX-01`：`SET` 源于最早起草自设置中心并沿用至今的统一前缀（新增非设置范围可用 `SET-*` 历史前缀或对应域前缀），中段 = 页面或范围，末段 = 该范围内的序号。ID 一旦分配就不再复用。
 - 每条场景挂一个 ID，文档里只有两种写法：
 
 ```markdown
@@ -71,12 +71,19 @@ node qa/tools/check-test-cases.mjs   # 文档与用例双向比对（QA 侧必�
 | [appearance.md](./appearance.md) | 外观 | `qa/specs/settings/appearance-settings.spec.ts` |
 | [mobile-access.md](./mobile-access.md) | 手机访问 | `qa/specs/settings/mobile-access-settings.spec.ts` |
 | [about.md](./about.md) | 关于与更新 | `qa/specs/settings/about-settings.spec.ts` |
-| [renderer-security.md](./renderer-security.md) | 渲染层安全策略（应用外壳，非设置页） | `qa/specs/app/renderer-security.spec.ts` |
-| [onboarding.md](./onboarding.md) | 首次使用引导（应用外壳，非设置页） | `qa/specs/app/onboarding.spec.ts` |
-| [playback.md](./playback.md) | 播放核心链路（应用外壳，非设置页） | `qa/specs/player/playback-golden-path.spec.ts` |
+| [youtube-import.md](./youtube-import.md) | YouTube 链接导入（手动登记） | `无` |
+| [renderer-security.md](./renderer-security.md) | 渲染层安全策略（应用外壳） | `qa/specs/app/renderer-security.spec.ts` |
+| [onboarding.md](./onboarding.md) | 首次使用引导（应用外壳） | `qa/specs/app/onboarding.spec.ts` |
+| [navigation-history.md](./navigation-history.md) | 全局历史导航（应用外壳） | `qa/specs/app/navigation-history.spec.ts` |
+| [playback.md](./playback.md) | 播放核心链路（播放器） | `qa/specs/player/playback-golden-path.spec.ts` |
+| [playback-layout.md](./playback-layout.md) | 播放器分栏与重置（播放器） | `qa/specs/player/layout-split-reset.spec.ts` |
+| [podcast-mode.md](./podcast-mode.md) | 播客视图模式（播放器） | `qa/specs/player/podcast-mode.spec.ts` |
+| [vocabulary-annotation.md](./vocabulary-annotation.md) | 播放器词汇注释（播放器） | `qa/specs/player/vocabulary-annotation.spec.ts` |
 | [packaged.md](./packaged.md) | 真实打包产物冒烟（nightly / 手工） | `qa/specs/packaged/packaged-smoke.spec.ts` |
 
-「改完立刻切走会不会丢」是每个表单页共有的时机场景，所以不单开文档，就写在各自的页面文档里（各页有一条 `xx-05` 之类的用例）。下面只剩两条没法挂到任何单一页面上的机制性缺口。
+> 播放器滚动锚定回归（`qa/specs/player/player-scroll-anchor.spec.ts`）由契约工具 `pnpm run qa:check-scroll`（`qa/tools/check-player-scroll.mjs`）直接验证，不走 SET ID 登记。
+
+「改完立刻切走会不会丢」是每个表单页共有的时机场景，所以不单开文档，就写在各自的页面文档里（例如各页的保存时机用例）。下面只剩两条没法挂到任何单一页面上的机制性缺口。
 
 ## 跨页面的机制性缺口
 

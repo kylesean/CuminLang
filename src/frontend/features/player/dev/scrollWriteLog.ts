@@ -181,7 +181,10 @@ export function beginHold(params: {
     anchorTopBefore: number | null;
     scrollTopBefore: number;
     contentHeightBefore: number;
-}): HoldRecord {
+}): HoldRecord | null {
+    if (!import.meta.env.DEV && !isDevMode()) {
+        return null;
+    }
     holdSeq += 1;
     const record: HoldRecord = {
         seq: holdSeq,
@@ -201,9 +204,6 @@ export function beginHold(params: {
         startedAt: performance.now(),
         endedAt: null,
     };
-    if (!isDevMode()) {
-        return record;
-    }
     holdRecords.push(record);
     if (holdRecords.length > MAX_HOLD_RECORDS) {
         holdRecords.splice(0, holdRecords.length - MAX_HOLD_RECORDS);
@@ -214,10 +214,10 @@ export function beginHold(params: {
 /**
  * 结束一次 hold 记录。
  *
- * @param record 待补写的记录。
+ * @param record 待补写的记录（非开发态为 null）。
  * @param result 结果字段。
  */
-export function finishHold(record: HoldRecord, result: {
+export function finishHold(record: HoldRecord | null, result: {
     outcome: HoldOutcome;
     rounds?: number;
     anchorTopAfter?: number | null;
@@ -225,6 +225,9 @@ export function finishHold(record: HoldRecord, result: {
     scrollTopAfter?: number;
     contentHeightAfter?: number;
 }): void {
+    if (!record) {
+        return;
+    }
     record.done = true;
     record.endedAt = performance.now();
     record.outcome = result.outcome;

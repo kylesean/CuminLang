@@ -5,15 +5,14 @@
  * （舞台 / 主字幕）两组比例。此前两个分隔条各管一轴，用户拖动过其中一组、
  * 却双击了另一组分隔条时，看起来就像复位完全没生效。
  */
-import path from 'node:path';
 import { expect, type Page } from '@playwright/test';
 import { test } from '../../support/fixtures';
+import { navigateToFixturePlayer } from '../../support/player-entry';
+import { NAV_TESTIDS, PLAYER_UI_TESTIDS } from '../../../src/common/constants/qa-testids';
 import { SENTENCE_CARD_TESTID } from '../../../src/common/constants/player-scroll-protocol';
 
-const FIXTURE_VIDEO = path.resolve(__dirname, '..', '..', 'fixtures', 'media', 'qa-bilingual.mp4');
-
-const INNER_HANDLE = 'playback-split-handle-inner';
-const OUTER_HANDLE = 'playback-split-handle-outer';
+const INNER_HANDLE = PLAYER_UI_TESTIDS.playbackSplitHandleInner;
+const OUTER_HANDLE = PLAYER_UI_TESTIDS.playbackSplitHandleOuter;
 
 interface SplitSizes {
     video: number;
@@ -24,9 +23,7 @@ interface SplitSizes {
 
 async function openPlayer(page: Page): Promise<void> {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.evaluate((file) => {
-        window.location.hash = `#/player/qa?file=${encodeURIComponent(file)}&seek=0&lang=zh`;
-    }, FIXTURE_VIDEO);
+    await navigateToFixturePlayer(page);
     await expect(page.getByTestId(SENTENCE_CARD_TESTID).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId(INNER_HANDLE)).toBeVisible();
     // 等两帧让窗口放大与 flex 分栏测量完成，避免拖拽拿到过期几何坐标。
@@ -142,6 +139,11 @@ test('[SET-PLY-02] 双击任一分隔条都会同时复位两组比例', async (
 
     await doubleClickHandle(page, OUTER_HANDLE);
     await expectBothAxesReset(page);
+
+    // 刷新页面后仍保留复位后的分栏比例，验证重置真正持久化到 localStorage
+    await page.reload();
+    await expect(page.getByTestId(SENTENCE_CARD_TESTID).first()).toBeVisible({ timeout: 30_000 });
+    await expectBothAxesReset(page);
 });
 
 test('[SET-PLY-03] 字幕文稿收起后双击主字幕分隔条仍能复位且不抛错', async ({ session }) => {
@@ -174,15 +176,15 @@ test('[SET-PLY-04] 大字号下复位后双语字幕仍完整落在默认面板�
         });
     });
     await page.reload();
-    await page.getByTestId('nav-settings').waitFor();
+    await page.getByTestId(NAV_TESTIDS.settings).waitFor();
     await openPlayer(page);
 
     await doubleClickHandle(page, INNER_HANDLE);
     const sizes = await readSplitSizes(page);
     expect(sizes.subtitle).toBeGreaterThanOrEqual(28);
 
-    const subtitle = await page.getByTestId('main-subtitle-scroller').evaluate((scroller) => {
-        const content = scroller.querySelector<HTMLElement>('[data-testid="main-subtitle-content"]');
+    const subtitle = await page.getByTestId(PLAYER_UI_TESTIDS.mainSubtitleScroller).evaluate((scroller, contentTestId) => {
+        const content = scroller.querySelector<HTMLElement>(`[data-testid="${contentTestId}"]`);
         if (!content) {
             throw new Error('主字幕内容容器不存在');
         }
@@ -193,7 +195,7 @@ test('[SET-PLY-04] 大字号下复位后双语字幕仍完整落在默认面板�
             scale: Number.parseFloat(scale),
             text: scroller.textContent ?? '',
         };
-    });
+    }, PLAYER_UI_TESTIDS.mainSubtitleContent);
 
     expect(subtitle.text).toContain('The player keeps your reading position steady');
     expect(subtitle.text).toContain('界面重新排版时');

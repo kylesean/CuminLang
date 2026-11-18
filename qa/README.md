@@ -20,8 +20,8 @@ pnpm run test:e2e:smoke               # PR 门禁的 @smoke 子集
 pnpm run test:e2e:packaged            # 先打包，再跑真实打包产物冒烟（nightly / 手工）
 pnpm exec playwright test -c qa/playwright.config.ts --list   # 只列用例（不启动应用）
 pnpm run qa:check-locators            # 禁止 CSS/tag 定位器的静态检查
-node qa/tools/check-test-cases.mjs    # 用例文档 ↔ 用例 ID 双向校验
-node qa/tools/check-player-scroll.mjs # 播放器滚动锚定检查（JSON + 语义化退出码）
+pnpm run qa:check-cases               # 用例文档 ↔ 用例 ID 双向校验
+pnpm run qa:check-scroll              # 播放器滚动锚定检查（JSON + 语义化退出码）
 ```
 
 - **备料全自动**：`qa/support/globalSetup.ts` 在用例前跑——`.vite` 缺失、构建输入变化、产物摘要不一致或不是生产模式时重新构建（约 8~25 秒），媒体夹具缺失就生成。因此「刚 clone」和「改了 src 之后」都只需要上面那一条命令。
@@ -30,7 +30,7 @@ node qa/tools/check-player-scroll.mjs # 播放器滚动锚定检查（JSON + 语
 - 首次运行会按需下载 Electron 二进制到 `node_modules/electron`，需要网络。
 - 生成媒体夹具需要本机有 `ffmpeg` / `ffprobe`（`qa/fixtures/make-fixtures.mjs`）。
 - 首次拉取本分支后要先装依赖：`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install`。`@playwright/test` 是这套基建引入的依赖；跳过浏览器下载是因为用例只用 Electron，用不到 Playwright 自带的 Chromium。
-- **CI 分层**：PR 跑 `@smoke`（xvfb，约 1~2 分钟）；main 推送跑全量；nightly 跑全量 + 真实打包产物冒烟。失败自动上传截图、JUnit、HTML 报告与运行期证据。
+- **CI 分层**：PR 跑 `verify` + `@smoke`（xvfb）；main 推送 / `v*` tag / 手动触发跑 `verify` + 全量 E2E；`e2e-nightly.yml`（手动触发）跑全量 + 真实打包产物冒烟。失败自动上传截图、JUnit、HTML 报告与 `runtime-evidence.json`（含渲染/子进程退出记录、主进程日志尾部与脱敏配置快照）。
 
 ## 3. 工作原理
 
@@ -51,21 +51,22 @@ node qa/tools/check-player-scroll.mjs # 播放器滚动锚定检查（JSON + 语
 
 | 导出 | 用途 |
 |---|---|
-| `test` | 扩展后的 test，提供下面两个 fixture |
+| `test` | 扩展后的 test，提供下面三个 fixture |
 | `session` | 已启动并处于主界面的应用会话，`session.page` 可直接操作 |
+| `openSession` | 工厂函数，用于多会话/引导/重启类用例启动独立受监控会话（同样记录进程退出、日志与脱敏配置证据） |
 | `userDataDir` | 用例独占的临时 userData 目录，用例结束自动清理 |
-| `launchAppSession(userDataDir)` | 手动启动一次会话，重启场景用 |
+| `launchAppSession(userDataDir)` | 底层启动函数，不自动挂载 fixture 证据收集；常规/重启场景优先用 `openSession` |
 | `readConfigValue(userDataDir, 'a.b')` | 读配置文件里的嵌套值（如 `appearance.theme`） |
 
 ```typescript
 // 普通用例：直接拿 session
 test('...', async ({ session, userDataDir }) => { /* ... */ });
 
-// 重启场景：不用 session fixture，自己控制两次启动
-const first = await launchAppSession(userDataDir);
+// 重启或引导场景：不用 session fixture，用 openSession 启动并自动受监控
+const first = await openSession();
 // ...操作...
 await first.close();
-const restarted = await launchAppSession(userDataDir);
+const restarted = await openSession();
 ```
 
 ### 设置页公共工具（`qa/support/settings-page.ts`）
@@ -84,7 +85,7 @@ const restarted = await launchAppSession(userDataDir);
 
 ## 5. 新页面用例怎么写
 
-设置中心各页面已全覆盖。**每条用例测什么、哪些场景还是缺口、当前各页各有多少条，看 [test-cases/](./test-cases/)（一个设置页一份文档），或直接跑 `node qa/tools/check-test-cases.mjs` 看它打印的概览**——计数由工具算，本文档不手写，避免数字悄悄过期。本文档只讲怎么写，按页面形态挑最近的抄：
+设置中心与播放器核心链路均已建立用例与文档对齐（其中「YouTube 链接导入」因强依赖外网仅保留手动清单）。**每条用例测什么、哪些场景还是缺口、当前各页各有多少条，看 [test-cases/](./test-cases/)（一个页面或范围一份文档），或直接跑 `pnpm run qa:check-cases` 看它打印的概览**——计数由工具算，本文档不手写，避免数字悄悄过期。本文档只讲怎么写，按页面形态挑最近的抄：
 
 | 页面形态 | 参考文件（都在 `qa/specs/settings/`） |
 |---|---|
@@ -198,8 +199,8 @@ node qa/tools/check-player-scroll.mjs  # 播放器滚动锚定检查：输出 JS
 
 - **启动偶发停顿几十秒到几分钟（环境级，与 Playwright 无关）**：`launch()` 偶尔迟迟不返回，stderr 在 `Debugger listening` 后长期不出 `DevTools listening`；停顿期间应用就绪前的 JS（建库、迁移）已完成，但 Chromium 不 fork GPU 进程、不建 profile，恢复时一次性补齐。纯手动 `electron .` 同样复现（实测停顿 17 秒至 2 分钟以上），与本项目代码、`app.evaluate()`（实测 5~64ms 正常）无关；本机触发源为显示器切换器：把本机切走期间启动一律卡住（实测 12 分钟窗口内多次尝试无一例外），切回瞬间恢复，切回后重跑即可。全局测试超时 180 秒、launch 上限 120 秒，留出 teardown 余量；遇到启动超时先查切换器状态与 `journalctl -k` 的外设事件，不要怀疑用例本身。
 - **GPU 默认关闭，不污染本机环境**：fixture 默认追加 `--disable-gpu`，规避 Linux/Wayland 下 NVIDIA egl-gbm 的上游崩溃（NVIDIA/egl-gbm#9）和启动等待，避免本机出现系统级 GPU 崩溃提示。个别用例要显式验证 GPU 硬件路径时设置 `QA_DISABLE_GPU=0`。同时主进程监听 `render-process-gone` / `child-process-gone`：渲染进程非正常退出判红；GPU 进程崩溃只作为环境证据记录（失败时随 runtime-evidence 上传），不直接判产品回归。
-- **`NODE_ENV` 不能解锁 dev 能力**：`runtimeEnv.isDevelopmentMode()` 只认 `!app.isPackaged`。打包应用即使从带 `NODE_ENV=development` 的终端启动，也必须使用 `data/`、`logs/`、`config.json`，并忽略 `?file=`。`SET-PKG-01` 专门守这条边界。
-- **Windows 权限失败路径**：`chmod 0o500` 只在 POSIX 上能构造只读父目录；`SET-STO-02` 在 Windows 显式 skip，并保留原因。其它平台仍必须真实失败并断言错误横幅与旧值未被覆盖。
+- **`NODE_ENV` 不能解锁 dev 能力**：`runtimeEnv.isDevelopmentMode()` 只认 `!app.isPackaged || Boolean(process.defaultApp)`。打包应用即使从带 `NODE_ENV=development` 的终端启动，也必须使用 `data/`、`logs/`、`config.json`，并忽略 `?file=`。`SET-PKG-01` 专门守这条边界。
+- **权限失败路径（Windows / Linux root）**：`chmod 0o500` 只在 POSIX 非 root 账户下能拦截写权限；`SET-STO-02` 在 Windows 或 Linux `root`（`process.getuid() === 0`）下显式 skip 并写明原因，其余环境仍必须真实失败并断言错误横幅与旧值未被覆盖。
 - **Chromium 开关必须用 `--flag=value` 等号形式**：`--user-data-dir <path>` 写成两个 token 会被解析成"无值开关 + 位置参数"，userData 静默回退到真实目录、污染开发数据。fixture 里是 `--user-data-dir=${dir}`（另有 `assertUserDataIsolated` 兜底）；手写启动脚本时容易踩。
 - **`npm/yarn install` 后 Electron 二进制可能缺失**：仓库里 `electron` 包的 postinstall 不落盘二进制，首次跑用例时会自动补下，日志出现 `Downloading Electron binary...` 属正常。
 - **配置是嵌套 JSON**：electron-store 按点号访问，`appearance.theme` 在文件里存成 `{"appearance":{"theme":"dark"}}`；断言用 `readConfigValue`，不要按平铺 key 读。
@@ -218,10 +219,10 @@ QA 拥有场景清单、契约常量与评审权；开发可以维护测试实�
   `@/frontend/**`、`@/backend/**` 等内部实现一律禁止——运行期契约只能走 `window.__dpDebug` 与 URL 参数，
   否则用例会跟着实现细节一起腐烂，产品一重构就全红。由 `eslint.config.mjs` 的 `no-restricted-imports` 强制。
 - `src/**` 不允许 import `qa/**`：产品代码不能依赖用例。同样由 `eslint.config.mjs` 强制。
-- 用例 ID 与文档的绑定由 `node qa/tools/check-test-cases.mjs` 强制（只改一边就报错）。
+- 用例 ID 与文档的绑定由 `pnpm run qa:check-cases`（`node qa/tools/check-test-cases.mjs`）强制（只改一边就报错，同时禁止顶层 `test.only`/`test.skip`/`test.fixme` 并校验文档声明的 `用例文件` 存在）。
   这个脚本已接进 CI（`Test case docs` 步骤），不是「记得手动跑」的君子协定。
-- `qa/tools/check-locators.mjs` 禁止 `page.locator()` / `page.$()`，CI 直接拦截 CSS 类名与标签定位。
-- PR 的 `@smoke`、main 的全量、nightly 的打包冒烟都在 CI 跑；失败证据（截图/JUnit/HTML/运行期进程退出记录）自动上传。
+- `pnpm run qa:check-locators`（`qa/tools/check-locators.mjs`）禁止 `page.locator()` / `page.$()`，CI 直接拦截 CSS 类名与标签定位。
+- PR 跑 `@smoke`、main/tag 推送与手动触发跑全量、nightly（手动触发）跑全量 + 打包冒烟；失败证据（截图/JUnit/HTML/`runtime-evidence.json`）自动上传。
 
 **人审强制（下面三条写死在 review 清单里）**
 

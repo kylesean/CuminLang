@@ -1,7 +1,8 @@
 import net from 'node:net';
 import { expect, type Page } from '@playwright/test';
 import { readConfigValue, test } from '../../support/fixtures';
-import { openSettingsSection } from '../../support/settings-page';
+import { openSettingsSection, reloadSettingsPage } from '../../support/settings-page';
+import { SETTING_ITEM_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /**
  * 手机访问设置的用例。
@@ -56,13 +57,15 @@ async function allocateFreePort(): Promise<number> {
  * 打开手机访问服务，并等页面把访问地址列出来。
  *
  * @param page 应用主窗口页面。
+ * @param userDataDir 用例隔离目录（用于确认退让端口先完成落盘，再触发开关）。
  */
-async function enableMobileAccess(page: Page): Promise<void> {
+async function enableMobileAccess(page: Page, userDataDir: string): Promise<void> {
     if (!(await isPortFree(DEFAULT_MOBILE_PORT))) {
         const freePort = await allocateFreePort();
         const portInput = page.getByRole('spinbutton', { name: '端口' });
         await portInput.fill(String(freePort));
         await portInput.blur();
+        await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.port')).toBe(String(freePort));
     }
     const toggle = page.getByRole('switch', { name: ENABLE_SWITCH_NAME });
     // Astryx 的 Switch 渲染成原生 checkbox，勾选状态在 checked 属性上而不是 aria-checked。
@@ -70,7 +73,7 @@ async function enableMobileAccess(page: Page): Promise<void> {
         await toggle.click();
     }
     // 地址区块要等服务真的起来才有内容，这里等第一条带令牌的地址出现。
-    await expect(page.getByTestId('mobile-access-url').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl).first()).toBeVisible({ timeout: 20_000 });
 }
 
 /**
@@ -80,16 +83,28 @@ async function enableMobileAccess(page: Page): Promise<void> {
  * @returns 完整访问地址（含令牌）。
  */
 async function readAccessUrl(page: Page): Promise<string> {
-    const text = await page.getByTestId('mobile-access-url').first().textContent();
+    const text = await page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl).first().textContent();
     expect(text).toBeTruthy();
     return (text ?? '').trim();
 }
 
+/** 若宿主网络限制本机访问局域网接口 IP，回退到回环地址探测同一端口服务。 */
+async function fetchServiceWithLoopbackFallback(rawUrl: string): Promise<Response> {
+    try {
+        return await fetch(rawUrl);
+    } catch {
+        const loopback = new URL(rawUrl);
+        loopback.hostname = '127.0.0.1';
+        return fetch(loopback.toString());
+    }
+}
+
 test.describe('手机访问设置', () => {
-    test('[SET-MOB-01] 开启后访问地址带令牌，没有令牌的请求被拒绝', async ({ session }) => {
+    test('[SET-MOB-01] 开启后访问地址带令牌，没有令牌的请求被拒绝', async ({ session, userDataDir }) => {
         const page = session.page;
         await openMobileAccess(page);
-        await enableMobileAccess(page);
+        await enableMobileAccess(page, userDataDir);
+        await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.enabled')).toBe('true');
 
         const accessUrl = await readAccessUrl(page);
         expect(accessUrl).toContain('?t=');
@@ -101,18 +116,23 @@ test.describe('手机访问设置', () => {
         // 只断言「地址里有令牌」证明不了服务真的在校验。
         const withoutToken = new URL(accessUrl);
         withoutToken.searchParams.delete('t');
-        const anonymous = await fetch(withoutToken.toString());
+        const anonymous = await fetchServiceWithLoopbackFallback(withoutToken.toString());
         expect(anonymous.status).toBe(401);
 
         // 带令牌的地址则要能正常打开手机页。
-        const authorized = await fetch(accessUrl);
+        const authorized = await fetchServiceWithLoopbackFallback(accessUrl);
         expect(authorized.status).toBe(200);
+
+        // 重进页面：启用状态与访问地址来自后端回读
+        await reloadSettingsPage(page, page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
+        await expect(page.getByRole('switch', { name: ENABLE_SWITCH_NAME })).toBeChecked();
+        await expect(page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl).first()).toBeVisible();
     });
 
     test('[SET-MOB-02] 重新生成令牌后旧地址立刻失效，新地址可用', async ({ session, userDataDir }) => {
         const page = session.page;
         await openMobileAccess(page);
-        await enableMobileAccess(page);
+        await enableMobileAccess(page, userDataDir);
 
         const oldUrl = await readAccessUrl(page);
         const oldToken = new URL(oldUrl).searchParams.get('t');
@@ -123,23 +143,23 @@ test.describe('手机访问设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.token')).not.toBe(oldToken);
 
         await page.getByRole('button', { name: '刷新' }).click();
+        await expect.poll(async () => new URL(await readAccessUrl(page)).searchParams.get('t')).not.toBe(oldToken);
         const newUrl = await readAccessUrl(page);
         const newToken = new URL(newUrl).searchParams.get('t');
         expect(newToken).toBeTruthy();
-        expect(newToken).not.toBe(oldToken);
 
         // 旧地址要真的打不开了，而不只是界面上换了个字符串。
-        const stale = await fetch(oldUrl);
+        const stale = await fetchServiceWithLoopbackFallback(oldUrl);
         expect(stale.status).toBe(401);
 
-        const fresh = await fetch(newUrl);
+        const fresh = await fetchServiceWithLoopbackFallback(newUrl);
         expect(fresh.status).toBe(200);
     });
 
     test('[SET-MOB-03] 关闭后不再展示访问地址', async ({ session, userDataDir }) => {
         const page = session.page;
         await openMobileAccess(page);
-        await enableMobileAccess(page);
+        await enableMobileAccess(page, userDataDir);
         await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.enabled')).toBe('true');
 
         await page.getByRole('switch', { name: ENABLE_SWITCH_NAME }).click();
@@ -147,6 +167,11 @@ test.describe('手机访问设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'mobileAccess.enabled')).toBe('false');
         // 关闭后地址区块应回到空态文案，不再列出任何带令牌的地址。
         await expect(page.getByText('开启服务后，这里会列出可以访问的地址。')).toBeVisible();
-        await expect(page.getByTestId('mobile-access-url')).toHaveCount(0);
+        await expect(page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl)).toHaveCount(0);
+
+        // 重进页面仍保持关闭态
+        await reloadSettingsPage(page, page.getByRole('switch', { name: ENABLE_SWITCH_NAME }));
+        await expect(page.getByRole('switch', { name: ENABLE_SWITCH_NAME })).not.toBeChecked();
+        await expect(page.getByTestId(SETTING_ITEM_TESTIDS.mobileAccessUrl)).toHaveCount(0);
     });
 });

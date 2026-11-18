@@ -1,6 +1,7 @@
 import { expect, type Page, type Locator } from '@playwright/test';
 import { readConfigValue, test } from '../../support/fixtures';
 import { chooseInRow, openSettingsSection, reloadSettingsPage, selectInRow, switchSettingsSection } from '../../support/settings-page';
+import { APP_SHELL_TESTIDS } from '../../../src/common/constants/qa-testids';
 
 /** 主题按钮文案到根节点 `data-theme` 值的映射。 */
 const THEME_VALUE = { 深色: 'dark', 浅色: 'light' } as const;
@@ -38,7 +39,7 @@ function fontSizeGroup(page: Page): Locator {
  */
 async function switchTheme(page: Page, theme: ThemeLabel): Promise<void> {
     await colorModeRadio(page, theme).click();
-    await expect(page.getByTestId('app-root')).toHaveAttribute('data-theme', THEME_VALUE[theme]);
+    await expect(page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', THEME_VALUE[theme]);
 }
 
 /**
@@ -56,7 +57,7 @@ test.describe('外观设置', () => {
         await openAppearanceSetting(session.page);
 
         // 全新配置的默认主题是浅色
-        await expect(session.page.getByTestId('app-root')).toHaveAttribute('data-theme', 'light');
+        await expect(session.page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', 'light');
 
         await switchTheme(session.page, '深色');
 
@@ -73,7 +74,7 @@ test.describe('外观设置', () => {
 
         const restarted = await openSession();
         // 重启后不做任何操作，界面主题直接来自持久化配置
-        await expect(restarted.page.getByTestId('app-root')).toHaveAttribute('data-theme', 'dark');
+        await expect(restarted.page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', 'dark');
 
         // 再进外观页确认选中项回显为深色：选中态来自后端读回的设置，
         // 能排除「只是启动兜底类名恰好是深色」的假通过
@@ -107,8 +108,7 @@ test.describe('外观设置', () => {
         await expect.poll(() => readConfigValue(userDataDir, 'i18n.language')).toBe('en-US');
 
         // 重进页面：整个界面按持久化的语言设置渲染成英文，语言下拉也停在 English
-        await page.reload();
-        await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
+        await reloadSettingsPage(page, page.getByRole('heading', { name: 'Appearance' }));
         await expect(selectInRow(page, 'language')).toHaveText('English');
     });
 
@@ -130,7 +130,7 @@ test.describe('外观设置', () => {
         const restarted = await openSession();
         // 重启后是浅色。这一步单独看说明不了问题（默认值恰好也是浅色），
         // 上面的写盘断言才是证明「真的覆盖了」的那一半，两者一起才闭合。
-        await expect(restarted.page.getByTestId('app-root')).toHaveAttribute('data-theme', 'light');
+        await expect(restarted.page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', 'light');
         await openAppearanceSetting(restarted.page);
         await expect(colorModeRadio(restarted.page, '浅色')).toBeChecked();
     });
@@ -140,7 +140,7 @@ test.describe('外观设置', () => {
         await openAppearanceSetting(page);
 
         await colorModeRadio(page, '深色').click();
-        await expect(page.getByTestId('app-root')).toHaveAttribute('data-theme', 'dark');
+        await expect(page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-theme', 'dark');
 
         // 关键：点完立刻离开，不给 600ms 防抖留时间。主题是立即可见的界面状态，
         // 用户很容易「点完就走」，此时若丢值，重进页面选中项会退回浅色。
@@ -157,10 +157,10 @@ test.describe('外观设置', () => {
         const page = session.page;
         await openAppearanceSetting(page);
 
-        const header = page.getByTestId('title-bar-header');
+        const header = page.getByTestId(APP_SHELL_TESTIDS.titleBarHeader);
         const isMac = process.platform === 'darwin';
         const minimize = page.getByRole('button', { name: '最小化' });
-        const minimizeIcon = page.getByTestId('title-bar-minimize-icon');
+        const minimizeIcon = page.getByTestId(APP_SHELL_TESTIDS.titleBarMinimizeIcon);
         if (!isMac) {
             await expect(minimize).toBeVisible();
         }
@@ -171,7 +171,7 @@ test.describe('外观设置', () => {
         // 但「32px 设计值」与「被 spacing 放大到 48px」之间仍有足够宽的区分带。
         for (const [label, slug] of [['Y2K', 'dp-y2k'], ['Matcha', 'dp-matcha']] as const) {
             await page.getByText(label, { exact: true }).click();
-            await expect(page.getByTestId('app-root')).toHaveAttribute('data-astryx-theme', slug);
+            await expect(page.getByTestId(APP_SHELL_TESTIDS.root)).toHaveAttribute('data-astryx-theme', slug);
 
             const headerBox = await header.boundingBox();
             expect(headerBox?.height).toBeGreaterThanOrEqual(31);

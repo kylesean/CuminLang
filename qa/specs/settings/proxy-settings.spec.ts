@@ -12,6 +12,14 @@ function proxyModeRadio(page: Page, label: string) {
     return page.getByRole('radiogroup', { name: '代理模式' }).getByRole('radio', { name: label });
 }
 
+function proxyUrlInput(page: Page) {
+    return page.getByRole('textbox', { name: '代理地址' });
+}
+
+function bypassRulesInput(page: Page) {
+    return page.getByRole('textbox', { name: '直连规则' });
+}
+
 /** 页面上填写的代理地址，故意与输入框占位符不同，便于区分「回显了」和「只是占位符」。 */
 const PROXY_URL = 'http://127.0.0.1:7897';
 /** 页面上填写的直连规则。 */
@@ -27,8 +35,8 @@ test.describe('网络代理设置', () => {
 
         await proxyModeRadio(page, '自定义').click();
 
-        await page.getByPlaceholder('http://127.0.0.1:7890').fill(PROXY_URL);
-        await page.getByPlaceholder('localhost,127.0.0.1').fill(BYPASS_RULES);
+        await proxyUrlInput(page).fill(PROXY_URL);
+        await bypassRulesInput(page).fill(BYPASS_RULES);
 
         // 设置页没有保存按钮，改动由页面防抖自动保存到配置文件
         await expect.poll(() => readConfigValue(userDataDir, 'proxy.mode')).toBe('custom');
@@ -38,8 +46,8 @@ test.describe('网络代理设置', () => {
         // 重进页面：值来自后端回读，而不是页面里残留的输入
         await reloadSettingsPage(page, page.getByRole('heading', { name: '网络代理' }));
         await expect(proxyModeRadio(page, '自定义')).toBeChecked();
-        await expect(page.getByPlaceholder('http://127.0.0.1:7890')).toHaveValue(PROXY_URL);
-        await expect(page.getByPlaceholder('localhost,127.0.0.1')).toHaveValue(BYPASS_RULES);
+        await expect(proxyUrlInput(page)).toHaveValue(PROXY_URL);
+        await expect(bypassRulesInput(page)).toHaveValue(BYPASS_RULES);
     });
 
     test('[SET-PRX-02] 切到不使用代理后模式落盘，重进页面仍回显且不再展示地址输入', async ({ session, userDataDir }) => {
@@ -55,8 +63,8 @@ test.describe('网络代理设置', () => {
         // 重进页面：模式来自后端回读，且该模式下没有可填写的代理地址
         await reloadSettingsPage(page, page.getByRole('heading', { name: '网络代理' }));
         await expect(proxyModeRadio(page, '不使用')).toBeChecked();
-        await expect(page.getByPlaceholder('http://127.0.0.1:7890')).toHaveCount(0);
-        await expect(page.getByPlaceholder('localhost,127.0.0.1')).toHaveCount(0);
+        await expect(proxyUrlInput(page)).toHaveCount(0);
+        await expect(bypassRulesInput(page)).toHaveCount(0);
     });
 
     test('[SET-PRX-05] 改完立刻切到别的设置栏目，代理模式与地址仍会落盘并在重进后回显', async ({ session, userDataDir }) => {
@@ -64,7 +72,7 @@ test.describe('网络代理设置', () => {
         await openProxySetting(page);
 
         await proxyModeRadio(page, '自定义').click();
-        await page.getByPlaceholder('http://127.0.0.1:7890').fill(PROXY_URL);
+        await proxyUrlInput(page).fill(PROXY_URL);
 
         // 关键：改完立刻离开，不给 600ms 防抖留时间。离开时挂起的改动必须被提交，
         // 否则用户「填完随手切走」的改动会静默消失，正是最常被投诉的丢值场景。
@@ -76,7 +84,7 @@ test.describe('网络代理设置', () => {
         // 回到该页：显示的是后端回读的值，而不是靠页面残留的输入蒙对
         await switchSettingsSection(page, 'proxy', page.getByRole('heading', { name: '网络代理' }));
         await expect(proxyModeRadio(page, '自定义')).toBeChecked();
-        await expect(page.getByPlaceholder('http://127.0.0.1:7890')).toHaveValue(PROXY_URL);
+        await expect(proxyUrlInput(page)).toHaveValue(PROXY_URL);
     });
 
     test('[SET-PRX-06] 自定义代理填写非法地址时显式提示校验错误，且不覆盖已保存的合法地址', async ({ session, userDataDir }) => {
@@ -84,7 +92,7 @@ test.describe('网络代理设置', () => {
         await openProxySetting(page);
 
         await proxyModeRadio(page, '自定义').click();
-        const urlInput = page.getByPlaceholder('http://127.0.0.1:7890');
+        const urlInput = proxyUrlInput(page);
         await urlInput.fill(PROXY_URL);
         await expect.poll(() => readConfigValue(userDataDir, 'proxy.url')).toBe(PROXY_URL);
 
@@ -98,6 +106,6 @@ test.describe('网络代理设置', () => {
 
         // 重进页面：界面回显的是真正存下来的合法地址，而非刚才的非法输入
         await reloadSettingsPage(page, page.getByRole('heading', { name: '网络代理' }));
-        await expect(page.getByPlaceholder('http://127.0.0.1:7890')).toHaveValue(PROXY_URL);
+        await expect(proxyUrlInput(page)).toHaveValue(PROXY_URL);
     });
 });

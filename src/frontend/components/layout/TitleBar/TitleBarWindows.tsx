@@ -8,6 +8,7 @@ import type { WindowState } from '@/common/types/Types';
 import { Minus, X } from 'lucide-react';
 import { TitleBarNavigation } from './TitleBarNavigation';
 import { TitleBarTitle } from './TitleBarTitle';
+import { APP_SHELL_TESTIDS } from '@/common/constants/qa-testids';
 
 /**
  * Windows / Linux 标题栏控制属性。
@@ -89,7 +90,7 @@ const TitleBarWindows = ({ maximizable = true, className = '' }: TitleBarWindows
                     aria-label={t('minimize')}
                     title={t('minimize')}
                 >
-                    <Minus className="w-[14px] h-[14px]" data-testid="title-bar-minimize-icon" />
+                    <Minus className="w-[14px] h-[14px]" data-testid={APP_SHELL_TESTIDS.titleBarMinimizeIcon} />
                 </button>
                 <button
                     onClick={handleToggleMaximize}

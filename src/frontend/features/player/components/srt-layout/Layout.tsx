@@ -30,6 +30,7 @@ import SubtitleGenerationPanel from './SubtitleGenerationPanel';
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { useTranslation as useI18nTranslation } from 'react-i18next';
 import useSetting from '@/frontend/features/settings/settingsStore';
+import { PLAYER_UI_TESTIDS } from '@/common/constants/qa-testids';
 import {
     DEFAULT_INNER_STAGE_SIZE,
     DEFAULT_INNER_SUBTITLE_SIZE,
@@ -313,7 +314,7 @@ const PlaybackLayout = () => {
                     {(!fullScreen || practiceVisible) && !podcastMode && (
                         <>
                             <SplitHandle
-                                data-testid="playback-split-handle-inner"
+                                data-testid={PLAYER_UI_TESTIDS.playbackSplitHandleInner}
                                 onDoubleClick={resetSplitLayout}
                                 title={t('layout.resetSplitHint')}
                                 aria-label={t('layout.resetSplitHint')}
@@ -419,7 +420,7 @@ const PlaybackLayout = () => {
     const splitHandle = (
         <SplitHandle
             key="outer-split-handle"
-            data-testid="playback-split-handle-outer"
+            data-testid={PLAYER_UI_TESTIDS.playbackSplitHandleOuter}
             onDoubleClick={resetSplitLayout}
             title={t('layout.resetSplitHint')}
             aria-label={t('layout.resetSplitHint')}

@@ -35,18 +35,20 @@ const SPECS_DIR = path.join(REPO_ROOT, 'qa', 'specs');
 const ID_SOURCE = 'SET-[A-Z]{2,6}-\\d{2}';
 const BOLD_ID_RE = new RegExp(`\\*\\*\\[(${ID_SOURCE})\\]\\*\\*`, 'g');
 const SPEC_ID_RE = new RegExp(`\\[(${ID_SOURCE})\\]`, 'g');
-/** 页面文档顶部声明用例文件的那一行。 */
+/** 页面文档顶部声明用例文件的那一行；纯手动页允许写成 `用例文件：无（...）`。 */
 const SPEC_FILE_RE = /用例文件：`([^`]+)`/;
+const MANUAL_NO_SPEC_RE = /用例文件：无/;
 /** 缺口状态写在 ID 后面的括号里。 */
 const GAP_STATUS_RE = /（(未覆盖|手动)）/;
 /** 自动化用例的行首。 */
 const CASE_LINE_RE = /^\s*-\s*用例：/;
 /**
- * test()/test.only()/test.skip() 声明行；`test.describe` 不算用例。
- *
- * 缩进限制在 7 个空格以内，避免把用例体里的 `test.skip(...)` 当成新的用例声明。
+ * test()/test.only()/test.skip() 等声明行；`test.describe` 不算用例。
+ * 不限制前导空格数量，兼容多层 `test.describe` 嵌套与 tab 缩进；
+ * 但用例声明级别禁止使用 `test.only`/`test.skip`/`test.fixme`（带引号标题），避免静默失效。
  */
-const TEST_CALL_RE = /^ {0,7}test(?:\.(?:only|skip|fixme|fail|slow))?\s*\(/;
+const TEST_CALL_RE = /^\s*test(?:\.(only|skip|fixme|fail|slow))?\s*\(/;
+const TEST_DECL_TITLE_START_RE = /^\s*test(?:\.(?:only|skip|fixme|fail|slow))?\s*\(\s*['"`]/;
 
 /**
  * 允许不挂场景 ID 的 spec 文件。
@@ -121,10 +123,14 @@ const parsePageDoc = (file) => {
     const cases = [];
 
     let specFile;
+    let manualOnly = false;
     if (!gapsOnly) {
         specFile = lines.map((line) => line.match(SPEC_FILE_RE)).find(Boolean)?.[1];
-        if (!specFile) {
-            problems.push(`${relFile} 顶部没有声明「用例文件：\`qa/specs/settings/xxx.spec.ts\`」，脚本不知道该去哪找用例`);
+        manualOnly = !specFile && lines.some((line) => MANUAL_NO_SPEC_RE.test(line));
+        if (!specFile && !manualOnly) {
+            problems.push(`${relFile} 顶部没有声明「用例文件：\`qa/specs/settings/xxx.spec.ts\`」（纯手动页请写「用例文件：无」），脚本不知道该去哪找用例`);
+        } else if (specFile && !fs.existsSync(path.join(REPO_ROOT, specFile))) {
+            problems.push(`${relFile} 声明的用例文件不存在：${specFile}`);
         }
     }
 
@@ -164,7 +170,7 @@ const parsePageDoc = (file) => {
         }
     }
 
-    return {page: {file: relFile, specFile, cases}, problems};
+    return {page: {file: relFile, specFile, gapsOnly, cases}, problems};
 };
 
 /**
@@ -181,9 +187,11 @@ const scanSpecs = () => {
         const relFile = path.relative(REPO_ROOT, file).split(path.sep).join('/');
         const lines = fs.readFileSync(file, 'utf8').split('\n');
         for (let index = 0; index < lines.length; index += 1) {
-            if (!TEST_CALL_RE.test(lines[index])) {
+            const callMatch = lines[index].match(TEST_CALL_RE);
+            if (!callMatch) {
                 continue;
             }
+            const modifier = callMatch[1];
             let titleWindow = lines[index];
             for (let offset = 1; offset < 4; offset += 1) {
                 if (titleWindow.includes('=>') || titleWindow.includes('{')) {
@@ -197,6 +205,14 @@ const scanSpecs = () => {
                 if (next.includes('=>') || next.includes('{')) {
                     break;
                 }
+            }
+            // 函数体内按环境条件执行的 `test.skip(cond, reason)` / `test.fixme(cond, reason)`
+            // 第一参数不是标题字符串，属于合法的运行时守卫而非用例声明。
+            if ((modifier === 'skip' || modifier === 'fixme') && !TEST_DECL_TITLE_START_RE.test(titleWindow)) {
+                continue;
+            }
+            if (modifier === 'only' || modifier === 'skip' || modifier === 'fixme') {
+                problems.push(`${relFile}:${index + 1} 禁止在用例声明上保留 test.${modifier}()，请移除后运行或移入文档缺口记录`);
             }
             const ids = [...titleWindow.matchAll(SPEC_ID_RE)].map((match) => match[1]);
             if (ids.length === 0 && !SPECS_WITHOUT_IDS.has(relFile)) {
@@ -294,12 +310,12 @@ const main = () => {
     const overview = pages
         .slice()
         // 页面文档按文件名排，README（跨页面缺口）永远放最后
-        .sort((a, b) => (a.specFile ? 0 : 1) - (b.specFile ? 0 : 1) || a.file.localeCompare(b.file))
+        .sort((a, b) => (a.gapsOnly ? 1 : 0) - (b.gapsOnly ? 1 : 0) || a.file.localeCompare(b.file))
         .map((page) => {
             const automated = page.cases.filter((item) => item.status === '自动化').length;
             const gaps = page.cases.filter((item) => item.status !== '自动化');
             const gapText = gaps.length === 0 ? '无缺口' : `缺口 ${gaps.length} 条（${gaps.map((item) => item.id).join('、')}）`;
-            const name = page.specFile ? path.basename(page.file, '.md') : 'README（跨页面）';
+            const name = page.gapsOnly ? 'README（跨页面）' : path.basename(page.file, '.md');
             return `  ${name.padEnd(18)} 自动化 ${String(automated).padStart(2)} 条，${gapText}`;
         });
 
