@@ -1,3 +1,4 @@
+import leven from 'leven';
 import type { SentencePracticeWordResult } from '@/common/contracts/sentence-practice';
 import { isContentLemma } from '@/common/learning/contentWords';
 import { areUsUkSpellingVariants } from '@/common/utils/practice/practicePromptTokens';
@@ -25,32 +26,13 @@ export interface PracticeAlignment {
 }
 
 /**
- * 经典滚动数组编辑距离(字符级,仅用于词对相似度)。
- */
-const levenshteinDistance = (a: string, b: string): number => {
-    if (a === b) return 0;
-    if (a.length === 0) return b.length;
-    if (b.length === 0) return a.length;
-    let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
-    for (let i = 1; i <= a.length; i++) {
-        const current = [i];
-        for (let j = 1; j <= b.length; j++) {
-            const substitution = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
-            current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, substitution);
-        }
-        previous = current;
-    }
-    return previous[b.length];
-};
-
-/**
  * 0-1 词对相似度:1 - 编辑距离 / 较长词长。
  */
 const charSimilarity = (a: string, b: string): number => {
     if (a === b) return 1;
     const longer = Math.max(a.length, b.length);
     if (longer === 0) return 1;
-    return 1 - levenshteinDistance(a, b) / longer;
+    return 1 - leven(a, b) / longer;
 };
 
 /**

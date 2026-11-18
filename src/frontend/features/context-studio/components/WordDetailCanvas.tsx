@@ -9,7 +9,7 @@ import { Tooltip } from '@astryxdesign/core/Tooltip';
 import { Badge } from '@astryxdesign/core/Badge';
 import { BookOpenText, ExternalLink, Headphones, Languages, Pencil, Trash2, Volume2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import type { WordItem } from '@/frontend/features/video-learning/components/WordSidebar';
+import type { WordItem } from '@/frontend/features/video-learning/types';
 import type { WordContextOccurrence } from '@/common/types/contextStudio';
 import type { WordMemoryVO } from '@/common/types/wordMemory';
 import type { WordStatus } from '@/common/types/vocabulary';

@@ -27,7 +27,7 @@ import PageHeader from '@/frontend/components/shared/common/PageHeader';
 import { ContextStudioListSkeleton } from '@/frontend/components/shared/LoadingStates';
 import MemoryMapSection from '@/frontend/features/learning-data/MemoryMapSection';
 import WordEditDialog from '@/frontend/features/video-learning/components/WordEditDialog';
-import type { WordItem } from '@/frontend/features/video-learning/components/WordSidebar';
+import type { WordItem } from '@/frontend/features/video-learning/types';
 import { videoLearningApi } from '@/frontend/features/video-learning/videoLearningApi';
 import { playContextAudio, stopActiveAudio } from '@/frontend/infrastructure/audio/AudioPlayer';
 import { contextStudioApi } from './contextStudioApi';

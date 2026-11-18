@@ -21,7 +21,7 @@ import { toast } from 'react-hot-toast';
 
 import type { SavedSentenceVO, WordContextOccurrence } from '@/common/types/contextStudio';
 import type { ReviewCardVO, ReviewRateResultVO, ReviewRating } from '@/common/types/review';
-import type { WordItem } from '@/frontend/features/video-learning/components/WordSidebar';
+import type { WordItem } from '@/frontend/features/video-learning/types';
 import MediaUtil from '@/common/utils/MediaUtil';
 import { contextStudioApi } from '@/frontend/features/context-studio/contextStudioApi';
 import { videoLearningApi } from '@/frontend/features/video-learning/videoLearningApi';

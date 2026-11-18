@@ -5,10 +5,7 @@ import type {
     SubtitleTranslationTarget,
 } from '@/backend/services/gateways/translate/SubtitleBatchTranslationInput';
 import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
-import {
-    normalizeTranslationProvider,
-    type ResolvedSubtitleTranslationContext,
-} from '@/backend/services/subtitle-translation/SubtitleTranslationContext';
+import type { ResolvedSubtitleTranslationContext } from '@/backend/services/subtitle-translation/SubtitleTranslationContext';
 import type { SubtitleTranslationStorageMode } from '@/backend/services/subtitle-translation/SubtitleTranslationStorageMode';
 import { buildSentenceStorageKey, shouldTranslateSubtitleText } from '@/backend/services/subtitle-translation/SubtitleTranslationCacheKey';
 import { concurrency } from '@/backend/utils/concurrency';
@@ -87,11 +84,10 @@ export class DirectSubtitleTranslator {
             return new Map();
         }
 
-        const rawProvider = await this.deps.settingService.getCurrentTranslationProvider();
-        if (!rawProvider) {
+        const provider = await this.deps.settingService.getCurrentTranslationProvider();
+        if (!provider) {
             throw new Error('未启用字幕翻译服务');
         }
-        const provider = normalizeTranslationProvider(rawProvider);
 
         const { mode, storageMode, style } = await this.deps.resolveContext(provider);
 
@@ -141,11 +137,10 @@ export class DirectSubtitleTranslator {
      * @returns 删除的缓存行数。
      */
     public async clearTranslationCache(): Promise<number> {
-        const rawProvider = await this.deps.settingService.getCurrentTranslationProvider();
-        if (!rawProvider) {
+        const provider = await this.deps.settingService.getCurrentTranslationProvider();
+        if (!provider) {
             throw new Error('未启用字幕翻译服务');
         }
-        const provider = normalizeTranslationProvider(rawProvider);
         const { storageMode } = await this.deps.resolveContext(provider);
         const deleted = await this.deps.host.deleteTranslationsByMode(storageMode);
         this.deps.logger.info('已清除当前配置的字幕翻译缓存', { provider, storageMode, deleted });

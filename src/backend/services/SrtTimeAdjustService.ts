@@ -42,14 +42,6 @@ export default interface SrtTimeAdjustService {
     getByKey(key: string): Promise<SubtitleTimestampAdjustment | undefined>;
 
     /**
-     * 按字幕路径读取全部时间调整。
-     *
-     * @param subtitlePath 字幕文件路径。
-     * @returns 对应的调整记录列表。
-     */
-    getByPath(subtitlePath: string): Promise<SubtitleTimestampAdjustment[]>;
-
-    /**
      * 按文件哈希读取全部时间调整。
      *
      * @param hash 文件哈希。
@@ -110,16 +102,6 @@ export class SrtTimeAdjustServiceImpl implements SrtTimeAdjustService {
      */
     public async getByKey(key: string): Promise<SubtitleTimestampAdjustment | undefined> {
         return this.subtitleTimestampAdjustmentsRepository.findByKey(key);
-    }
-
-    /**
-     * 按字幕路径读取全部时间调整。
-     *
-     * @param subtitlePath 字幕文件路径。
-     * @returns 对应的调整记录列表。
-     */
-    public getByPath(subtitlePath: string): Promise<SubtitleTimestampAdjustment[]> {
-        return this.subtitleTimestampAdjustmentsRepository.findByPath(subtitlePath);
     }
 
     /**

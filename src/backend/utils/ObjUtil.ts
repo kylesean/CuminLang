@@ -7,10 +7,6 @@ export class ObjUtil {
         return objectHash(obj);
     }
 
-    public static isNull<T>(obj: T | null | undefined): obj is null | undefined {
-        return obj === null || obj === undefined;
-    }
-
     public static isHash(str: Nullable<string>) {
         if (StrUtil.isBlank(str)) {
             return false;

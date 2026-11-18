@@ -1,3 +1,4 @@
+import leven from 'leven';
 import type { SubtitleTrackOrigin } from '@/common/contracts/subtitle-resolution';
 import { resegmentIntoMeaningGroups, type SrtLine } from '@/common/utils/subtitle';
 import type { TimedWord } from '@/common/utils/subtitle/timed-word-segmenter';
@@ -66,20 +67,7 @@ const normalizedSimilarity = (a: string, b: string): number => {
     if (!na && !nb) return 1;
     if (!na || !nb) return 0;
     if (na === nb) return 1;
-
-    const m = na.length;
-    const n = nb.length;
-    const prev = Array.from({ length: n + 1 }, (_, j) => j);
-    const curr = new Array<number>(n + 1).fill(0);
-    for (let i = 1; i <= m; i++) {
-        curr[0] = i;
-        for (let j = 1; j <= n; j++) {
-            const cost = na[i - 1] === nb[j - 1] ? 0 : 1;
-            curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
-        }
-        for (let j = 0; j <= n; j++) prev[j] = curr[j];
-    }
-    return 1 - prev[n] / Math.max(m, n);
+    return 1 - leven(na, nb) / Math.max(na.length, nb.length);
 };
 
 /**

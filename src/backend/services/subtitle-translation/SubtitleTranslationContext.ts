@@ -15,11 +15,6 @@ export type TranslationProviderSetting = NonNullable<
 >;
 
 /**
- * 归一化 provider 设置。
- */
-export const normalizeTranslationProvider = (raw: TranslationProviderSetting): TranslationProvider => raw;
-
-/**
  * 上下文解析依赖：设置与模型路由服务。
  */
 export interface SubtitleTranslationContextDeps {

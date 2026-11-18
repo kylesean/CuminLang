@@ -42,7 +42,6 @@ describe('后台任务保留策略', () => {
     let memoryDb: MemoryDb;
     let repository: DpTaskRepositoryImpl;
     let service: DpTaskServiceImpl;
-    let deleteTerminalBefore: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
         // 只冻结 Date，定时器保持真实，异步落库流程照常推进。
@@ -57,7 +56,6 @@ describe('后台任务保留策略', () => {
             error: vi.fn(),
             info: vi.fn(),
         } as unknown as RendererEvents, repository);
-        deleteTerminalBefore = vi.spyOn(repository, 'deleteTerminalBefore');
     });
 
     afterEach(() => {
@@ -103,34 +101,44 @@ describe('后台任务保留策略', () => {
         expect(await listProgress()).toEqual(['过期待处理', '过期处理中']);
     });
 
-    it('清理使用按七天保留期计算的截止时间', async () => {
+    it('清理严格按七天保留期边界执行（超过七天删除，七天以内保留）', async () => {
+        await insertTask(DpTaskState.DONE, new Date(BASE_TIME.getTime() - RETENTION_MS - 1000), '刚好过期');
+        await insertTask(DpTaskState.DONE, new Date(BASE_TIME.getTime() - RETENTION_MS + 1000), '尚未过期');
+
         await service.cleanupExpiredTasks();
 
-        expect(deleteTerminalBefore).toHaveBeenCalledTimes(1);
-        const cutoff = deleteTerminalBefore.mock.calls[0][0];
-        expect(cutoff).toBe(TimeUtil.dateToUtc(new Date(BASE_TIME.getTime() - RETENTION_MS)));
+        expect(await listProgress()).toEqual(['尚未过期']);
     });
 
     it('任务落库时机会式清理，一小时内最多触发一次', async () => {
-        await service.cleanupExpiredTasks();
-        expect(deleteTerminalBefore).toHaveBeenCalledTimes(1);
+        await insertTask(DpTaskState.DONE, new Date(BASE_TIME.getTime() - RETENTION_MS - 1000), '首批过期');
 
         const taskId = await service.create();
         service.finish(taskId, { progress: '完成' });
-        // 等待任务状态真正落库，并让同一 flush 末尾的 maybeCleanupExpiredTasks 微任务跑完。
-        await waitUntil(async () => (await listProgress()).includes('完成'));
+        await waitUntil(async () => {
+            const items = await listProgress();
+            return items.includes('完成') && !items.includes('首批过期');
+        });
+
+        // 一小时窗口内再次落库，已过期的行应被节流跳过而继续保留。
+        await insertTask(DpTaskState.DONE, new Date(BASE_TIME.getTime() - RETENTION_MS - 1000), '一小时内新增过期');
+        service.finish(taskId, { progress: '二次完成' });
+        await waitUntil(async () => (await listProgress()).includes('二次完成'));
         await Promise.resolve();
         await Promise.resolve();
-        expect(deleteTerminalBefore).toHaveBeenCalledTimes(1);
+        expect(await listProgress()).toContain('一小时内新增过期');
 
         // 时间推过一小时后，下一次任务落库会重新触发清理。
         vi.setSystemTime(new Date(BASE_TIME.getTime() + CLEANUP_INTERVAL_MS + 1000));
         service.finish(taskId, { progress: '再次完成' });
-        await waitUntil(() => deleteTerminalBefore.mock.calls.length === 2);
-        expect(deleteTerminalBefore).toHaveBeenCalledTimes(2);
+        await waitUntil(async () => {
+            const items = await listProgress();
+            return items.includes('再次完成') && !items.includes('一小时内新增过期');
+        });
     });
 
     it('在资源信号量上下文里落库时清理依然能执行', async () => {
+        await insertTask(DpTaskState.DONE, new Date(BASE_TIME.getTime() - RETENTION_MS - 1000), '待信号量清理');
         const taskId = await service.create();
 
         // 任务进度可能在资源信号量（yt-dlp 下载）持有期间更新，
@@ -140,8 +148,7 @@ describe('后台任务保留策略', () => {
             await waitUntil(async () => (await listProgress()).includes('下载完成'));
         });
 
-        await waitUntil(() => deleteTerminalBefore.mock.calls.length >= 1);
-        expect(deleteTerminalBefore).toHaveBeenCalledTimes(1);
+        await waitUntil(async () => !(await listProgress()).includes('待信号量清理'));
     });
 
     it('刚创建的任务在 detail 里带 result: null，而不是缺字段的 undefined', async () => {

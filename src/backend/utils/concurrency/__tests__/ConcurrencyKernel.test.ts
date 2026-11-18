@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createConcurrencyKernel } from '@/backend/utils/concurrency/ConcurrencyKernel';
 import { LockOrderViolationError } from '@/backend/utils/concurrency/types';
 
 describe('并发内核门面', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it('应按 key 复用同一个信号量实例', () => {
         const kernel = createConcurrencyKernel();
         const first = kernel.semaphore('ffmpeg');
@@ -18,6 +22,7 @@ describe('并发内核门面', () => {
     });
 
     it('yieldIfNeeded 应路由到默认调度器', async () => {
+        vi.useFakeTimers();
         const kernel = createConcurrencyKernel({
             scheduler: {
                 default: {
@@ -28,8 +33,10 @@ describe('并发内核门面', () => {
         });
         const scheduler = kernel.scheduler();
         scheduler.beginFrame();
-        await new Promise((resolve) => setTimeout(resolve, 2));
-        await kernel.yieldIfNeeded();
+        vi.advanceTimersByTime(2);
+        const pendingYield = kernel.yieldIfNeeded();
+        await vi.advanceTimersByTimeAsync(0);
+        await pendingYield;
         expect(scheduler.snapshot().yieldCount).toBeGreaterThanOrEqual(1);
     });
 
@@ -78,16 +85,22 @@ describe('并发内核门面', () => {
 
     it('并发调用链之间不应共享持锁上下文', async () => {
         const kernel = createConcurrencyKernel();
+        let releaseFirst!: () => void;
+        const firstGate = new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+        });
 
         const first = kernel.withSemaphore('ffprobe', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+            await firstGate;
         });
 
         const second = kernel.withSemaphore('ffmpeg', async () => {
             return;
         });
 
-        await expect(Promise.all([first, second])).resolves.toBeDefined();
+        await expect(second).resolves.toBeUndefined();
+        releaseFirst();
+        await expect(first).resolves.toBeUndefined();
     });
 
     it('互斥锁外层持有后应允许按顺序获取内层资源信号量', async () => {

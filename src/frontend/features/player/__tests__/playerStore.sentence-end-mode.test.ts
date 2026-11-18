@@ -116,36 +116,31 @@ describe('playerStore 句末模式互斥', () => {
         expect(enabledCount()).toBe(0);
     });
 
-    it('UI 派生模式与 store 实际生效的字段一致（脏状态下也成立）', () => {
+    it.each<[string, () => void]>([
+        ['autoPause', () => usePlayer.getState().setAutoPause(true)],
+        ['singleRepeat', () => usePlayer.getState().setSingleRepeat(true)],
+        ['shadowing', () => usePlayer.getState().setShadowing(true)],
+        ['sentenceLoop', () => usePlayer.getState().setSentenceLoop({ times: 3 })],
+    ])('UI 派生模式 %s 与 store 实际生效的字段一致', (expected, activate) => {
+        usePlayer.setState({
+            autoPause: false,
+            singleRepeat: false,
+            shadowing: false,
+            sentenceLoop: null,
+        });
+        activate();
+        const s = usePlayer.getState();
+        expect(
+            deriveSentenceEndMode(
+                { autoPause: s.autoPause, singleRepeat: s.singleRepeat, shadowing: s.shadowing },
+                s.sentenceLoop !== null,
+            ),
+        ).toBe(expected);
+    });
+
+    it('脏状态下（绕过 setter 直接写多字段）UI 派生模式与引擎裁决顺序一致', () => {
         // 这条钉的是「两个文件之间的顺序对齐」：`deriveSentenceEndMode` 的裁决顺序
         // 必须与 `onTimeUpdate` 的分支顺序一致，否则 UI 会显示一个引擎不执行的模式。
-        //
-        // 正常路径（互斥由 setter 保证）逐个验证：
-        const cases: Array<[() => void, string]> = [
-            [() => usePlayer.getState().setAutoPause(true), 'autoPause'],
-            [() => usePlayer.getState().setSingleRepeat(true), 'singleRepeat'],
-            [() => usePlayer.getState().setShadowing(true), 'shadowing'],
-            [() => usePlayer.getState().setSentenceLoop({ times: 3 }), 'sentenceLoop'],
-        ];
-        for (const [activate, expected] of cases) {
-            usePlayer.setState({
-                autoPause: false,
-                singleRepeat: false,
-                shadowing: false,
-                sentenceLoop: null,
-            });
-            activate();
-            const s = usePlayer.getState();
-            expect(
-                deriveSentenceEndMode(
-                    { autoPause: s.autoPause, singleRepeat: s.singleRepeat, shadowing: s.shadowing },
-                    s.sentenceLoop !== null,
-                ),
-                expected,
-            ).toBe(expected);
-        }
-
-        // 脏状态（绕过 setter 直接写字段）：引擎会先命中 autoPause 分支，UI 必须同样显示 autoPause
         usePlayer.setState({ autoPause: true, singleRepeat: true, shadowing: true, sentenceLoop: null });
         const dirty = usePlayer.getState();
         expect(

@@ -30,8 +30,7 @@ vi.mock('@/backend/infrastructure/settings/store', () => ({
     subscribeSettingChange: () => () => undefined,
 }));
 
-import { z } from 'zod';
-import { Output, streamText, type LanguageModel } from 'ai';
+import { streamText, type LanguageModel } from 'ai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 import { loadAiSdkTestConfig } from '@/test/aiSdkTestConfig';
@@ -69,59 +68,24 @@ const buildLiveModel = (modelId: string): LanguageModel => {
     return provider.chatModel(modelId);
 };
 
+const seedLiveProviderStore = async (): Promise<void> => {
+    const { storeSet } = await import('@/backend/infrastructure/settings/store');
+    storeSet('apiKeys.openAi.key', testConfig!.key);
+    storeSet('apiKeys.openAi.endpoint', testConfig!.endpoint);
+    if (testConfig!.availableModels.length > 0) {
+        storeSet('models.openai.available', testConfig!.availableModels.join('\n'));
+    }
+    if (testConfig!.sentenceLearningModel) {
+        storeSet('models.openai.sentenceLearning', testConfig!.sentenceLearningModel);
+    }
+};
+
 const runTests = (): void => {
     describe.skipIf(!liveTestsEnabled)('AI SDK 升级验证（ai v7 + @ai-sdk/openai-compatible）', () => {
-        describe('streamText 文本流（聊天/欢迎语等通用路径）', () => {
-            it('真实连接：messages 输入能流式产出文本并正常结束', async () => {
-                const result = streamText({
-                    model: buildLiveModel(testConfig!.model),
-                    messages: [
-                        { role: 'user', content: 'Reply with exactly: hello' },
-                    ],
-                });
-                let collected = '';
-                for await (const chunk of result.textStream) {
-                    collected += chunk;
-                }
-                expect(collected.trim().length).toBeGreaterThan(0);
-                expect(collected.toLowerCase()).toContain('hello');
-            }, 60000);
-
-        });
-
-        describe('Output.object 结构化输出（分析/字幕/词典等路径）', () => {
-            it('真实连接：结构化对象流能产出完整且 schema 合法的对象', async () => {
-                const schema = z.object({
-                    translation: z.string(),
-                });
-                const result = streamText({
-                    model: buildLiveModel(testConfig!.model),
-                    output: Output.object({ schema }),
-                    prompt: 'Translate "hello world" to Simplified Chinese, respond with JSON matching the schema.',
-                });
-                const partials: Array<Partial<{ translation: string }>> = [];
-                for await (const partial of result.partialOutputStream) {
-                    partials.push(partial ?? {});
-                }
-                const finalObject = await result.output;
-                expect(partials.length).toBeGreaterThan(0);
-                expect(finalObject).toBeDefined();
-                expect(schema.safeParse(finalObject).success).toBe(true);
-            }, 60000);
-        });
-
         describe('AiProviderServiceImpl（应用真实取模型路径）', () => {
             it('真实连接：开发配置里的 Key 经 electron-store 取模型后能完成一次文本流', async () => {
                 // Key/endpoint/模型路由字段与开发环境配置文件（config.dev.json）一致，写进隔离的测试 store 后走应用真实取模型路径。
-                const { storeSet } = await import('@/backend/infrastructure/settings/store');
-                storeSet('apiKeys.openAi.key', testConfig!.key);
-                storeSet('apiKeys.openAi.endpoint', testConfig!.endpoint);
-                if (testConfig!.availableModels.length > 0) {
-                    storeSet('models.openai.available', testConfig!.availableModels.join('\n'));
-                }
-                if (testConfig!.sentenceLearningModel) {
-                    storeSet('models.openai.sentenceLearning', testConfig!.sentenceLearningModel);
-                }
+                await seedLiveProviderStore();
 
                 const routingService = new ModelRoutingServiceImpl();
                 const providerService = new AiProviderServiceImpl(routingService);

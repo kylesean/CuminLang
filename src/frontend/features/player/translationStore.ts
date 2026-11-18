@@ -204,11 +204,13 @@ const useTranslation = create(
                     engine: latest.engine,
                     openAiMode: latest.openAiMode,
                 });
-                playerApi.updateSubtitleTranslationDemand(
-                    target.fileHash,
-                    target.currentIndex,
-                    demandId,
-                    rendererSessionId,
+                Promise.resolve(
+                    playerApi.updateSubtitleTranslationDemand(
+                        target.fileHash,
+                        target.currentIndex,
+                        demandId,
+                        rendererSessionId,
+                    ),
                 )
                     .catch((error) => showRequestFailure(latest.engine, error));
             }, DEMAND_DEBOUNCE_MS);

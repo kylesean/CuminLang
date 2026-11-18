@@ -68,14 +68,6 @@ export default class SubtitleTimestampAdjustmentsRepositoryImpl implements Subti
         return values[0];
     }
 
-    public async findByPath(subtitlePath: string): Promise<SubtitleTimestampAdjustment[]> {
-        const values: SubtitleTimestampAdjustmentRow[] = await this.db
-            .select()
-            .from(subtitleTimestampAdjustments)
-            .where(eq(subtitleTimestampAdjustments.subtitle_path, subtitlePath));
-        return values;
-    }
-
     public async findByHash(hash: string): Promise<SubtitleTimestampAdjustment[]> {
         const values: SubtitleTimestampAdjustmentRow[] = await this.db
             .select()

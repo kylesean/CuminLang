@@ -39,10 +39,10 @@ describe('validateCustomProxyUrl', () => {
         ['http://bad host:7890', 'invalid_url'],
     ])('拒绝非法代理地址 %s（错误码 %s）', (input, expectedCode) => {
         const result = validateCustomProxyUrl(input);
-        expect(result.valid).toBe(false);
-        if (!result.valid) {
-            expect(result.code).toBe(expectedCode);
-            expect(result.message.length).toBeGreaterThan(0);
-        }
+        expect(result).toMatchObject({
+            valid: false,
+            code: expectedCode,
+            message: expect.stringMatching(/\S/),
+        });
     });
 });

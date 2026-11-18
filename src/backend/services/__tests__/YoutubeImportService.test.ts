@@ -214,14 +214,14 @@ class FakeStorageDirectoryProvider implements StorageDirectoryProvider {
  * 等待任务到达终态；超时抛错避免测试悬挂。
  */
 const waitForTerminalTask = async (dpTaskService: FakeDpTaskService, taskId: number): Promise<DpTask> => {
-    for (let i = 0; i < 200; i++) {
+    let resolved: DpTask | null = null;
+    await vi.waitFor(async () => {
         const task = await dpTaskService.detail(taskId);
-        if (task && [DpTaskState.DONE, DpTaskState.FAILED, DpTaskState.CANCELLED].includes(task.status)) {
-            return task;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    throw new Error('任务未在限时内到达终态');
+        expect(task).not.toBeNull();
+        expect([DpTaskState.DONE, DpTaskState.FAILED, DpTaskState.CANCELLED]).toContain(task!.status);
+        resolved = task;
+    }, { timeout: 2000, interval: 5 });
+    return resolved!;
 };
 
 describe('YouTube 导入服务', () => {

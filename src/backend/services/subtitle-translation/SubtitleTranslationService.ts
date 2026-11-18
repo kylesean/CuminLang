@@ -23,7 +23,6 @@ import {
     type DirectSubtitleTranslatorHost,
 } from '@/backend/services/subtitle-translation/DirectSubtitleTranslator';
 import {
-    normalizeTranslationProvider,
     resolveSubtitleTranslationContext,
     type ResolvedSubtitleTranslationContext,
 } from '@/backend/services/subtitle-translation/SubtitleTranslationContext';
@@ -327,7 +326,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
      * 解析逻辑在 {@link resolveSubtitleTranslationContext} 共享：播放调度与独立直翻
      * 都从这里取值，避免同一配置在多处重复拼装后产生不一致。
      *
-     * @param provider 当前字幕翻译 provider（设置原始值，含 legacy 'local-mt'）。
+     * @param provider 当前字幕翻译 provider。
      * @returns 翻译模式、缓存模式、风格、调度 profileKey 与本地模型 ID（云端为 null）；
      *          对应引擎未配置模型时抛出显式错误。
      */
@@ -339,7 +338,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 settingService: this.settingService,
                 modelRoutingService: this.modelRoutingService,
             },
-            normalizeTranslationProvider(provider),
+            provider,
         );
     }
 
@@ -381,16 +380,15 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             .map((sentence) => sentence.index)
             .sort((left, right) => left - right);
 
-        const rawProvider = await this.settingService.getCurrentTranslationProvider();
+        const provider = await this.settingService.getCurrentTranslationProvider();
         if (this.latestDemandBySession.get(sessionKey) !== input.demandId) {
             return;
         }
-        if (!rawProvider) {
+        if (!provider) {
             this.latestDemandBySession.delete(sessionKey);
             this.scheduler.release(fileHash, input.rendererSessionId);
             throw new Error('未启用字幕翻译服务');
         }
-        const provider = normalizeTranslationProvider(rawProvider);
 
         if (provider === 'tencent') {
             this.scheduler.updateDemand({

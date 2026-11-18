@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import i18n from '@/frontend/i18n';
@@ -30,6 +30,13 @@ const mockCloseChatSession = vi.fn();
 const mockGetStudyNote = vi.fn();
 const mockLearningAvailable = vi.fn();
 const mockStartSubtitleGen = vi.fn();
+const mockCancelSubtitleGen = vi.fn();
+const mockUpdateTranslationDemand = vi.fn();
+const mockReleaseTranslationSession = vi.fn();
+const mockUnsaveSentence = vi.fn();
+const mockStopChatSession = vi.fn();
+const mockSaveStudyNote = vi.fn();
+const mockListPromptPresets = vi.fn();
 
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -47,7 +54,7 @@ vi.mock('@/frontend/features/context-studio/contextStudioApi', () => ({
         listSavedSentences: (...args: unknown[]) => mockListSavedSentences(...args),
         saveSentence: (...args: unknown[]) => mockSaveSentence(...args),
         updateSavedSentence: (...args: unknown[]) => mockUpdateSavedSentence(...args),
-        unsaveSentence: vi.fn().mockResolvedValue(true),
+        unsaveSentence: (...args: unknown[]) => mockUnsaveSentence(...args),
     },
 }));
 
@@ -62,9 +69,9 @@ vi.mock('@/frontend/features/player/playerApi', () => ({
         createWatchHistoryEntries: (...args: unknown[]) => mockCreateWatchHistoryEntries(...args),
         attachSubtitleTrack: (...args: unknown[]) => mockAttachSubtitleTrack(...args),
         startSubtitleGeneration: (...args: unknown[]) => mockStartSubtitleGen(...args),
-        cancelSubtitleGeneration: vi.fn().mockResolvedValue(undefined),
-        updateSubtitleTranslationDemand: vi.fn().mockResolvedValue(undefined),
-        releaseSubtitleTranslationSession: vi.fn().mockResolvedValue(undefined),
+        cancelSubtitleGeneration: (...args: unknown[]) => mockCancelSubtitleGen(...args),
+        updateSubtitleTranslationDemand: (...args: unknown[]) => mockUpdateTranslationDemand(...args),
+        releaseSubtitleTranslationSession: (...args: unknown[]) => mockReleaseTranslationSession(...args),
     },
 }));
 
@@ -84,12 +91,12 @@ vi.mock('@/frontend/features/chat/chatApi', () => ({
     chatApi: {
         createSession: (...args: unknown[]) => mockCreateChatSession(...args),
         closeSession: (...args: unknown[]) => mockCloseChatSession(...args),
-        stopSession: vi.fn().mockResolvedValue(undefined),
+        stopSession: (...args: unknown[]) => mockStopChatSession(...args),
         sendMessage: vi.fn(),
         getStudyNote: (...args: unknown[]) => mockGetStudyNote(...args),
-        saveStudyNote: vi.fn().mockResolvedValue({}),
+        saveStudyNote: (...args: unknown[]) => mockSaveStudyNote(...args),
         learningAvailable: (...args: unknown[]) => mockLearningAvailable(...args),
-        listPromptPresets: vi.fn().mockResolvedValue([]),
+        listPromptPresets: (...args: unknown[]) => mockListPromptPresets(...args),
     },
 }));
 
@@ -118,9 +125,20 @@ describe('ScriptReaderPage - Refactored Book & Inspector Intensive Studio', () =
         await i18n.changeLanguage('zh-CN');
     });
 
+    afterEach(() => {
+        useSubtitleTranslation.getState().clearTranslations();
+    });
+
     beforeEach(() => {
         vi.resetAllMocks();
         localStorage.clear();
+        mockCancelSubtitleGen.mockResolvedValue(undefined);
+        mockUpdateTranslationDemand.mockResolvedValue(undefined);
+        mockReleaseTranslationSession.mockResolvedValue(undefined);
+        mockUnsaveSentence.mockResolvedValue(true);
+        mockStopChatSession.mockResolvedValue(undefined);
+        mockSaveStudyNote.mockResolvedValue({});
+        mockListPromptPresets.mockResolvedValue([]);
         useSubtitleTranslation.setState({
             engine: 'none',
             activeFileHash: null,

@@ -15,7 +15,7 @@ describe('互斥锁行为', () => {
             Array.from({ length: 5 }).map(() => mutex.runExclusive(async () => {
                 active += 1;
                 maxActive = Math.max(maxActive, active);
-                await new Promise((resolve) => setTimeout(resolve, 5));
+                await Promise.resolve();
                 active -= 1;
             })),
         );

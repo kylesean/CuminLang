@@ -87,11 +87,11 @@ describe('单词查询的预置词典优先链路', () => {
         });
 
         const result = await service.transWord('cancel');
-        if (!result || !('definitions' in result)) {
-            throw new Error('预置词典命中时应返回简化单词卡');
-        }
-        expect(result).toMatchObject({ word: 'cancel', collins: 3 });
-        expect(result.definitions).toEqual([{ partOfSpeech: 'n.', meaning: '取消', examples: [] }]);
+        expect(result).toMatchObject({
+            word: 'cancel',
+            collins: 3,
+            definitions: [{ partOfSpeech: 'n.', meaning: '取消', examples: [] }],
+        });
     });
 
     it('未配置词典服务且预置词典未命中时返回 null', async () => {
