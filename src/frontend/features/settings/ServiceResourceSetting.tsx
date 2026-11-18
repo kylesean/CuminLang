@@ -155,7 +155,6 @@ const ServiceResourceSetting: React.FC = () => {
         dictionary: dictionaryEngine !== undefined && dictionaryEngine !== 'none' && dictionaryEngine !== 'invalid',
     };
 
-    // 兼容历史 deep link `?tab=preference`（合并后统一落在本地资源页）
     const [searchParams, setSearchParams] = useSearchParams();
     const tabParam = searchParams.get('tab');
     const activeTab: ResourceTab = tabParam === 'cloud' ? 'cloud' : 'local';

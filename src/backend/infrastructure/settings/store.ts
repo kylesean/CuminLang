@@ -148,59 +148,13 @@ export const storeGet = (key: SettingKey): string => {
         return raw;
     }
     if (!raw.startsWith(ENCRYPTED_PREFIX)) {
-        // 历史遗留的明文：读到时顺手加密并回写，做到自愈，不需要额外的启动迁移。
+        // 密钥环不可用时曾写下的明文：密钥环恢复可用后顺手加密并回写。
         if (raw.length > 0 && isEncryptionAvailable()) {
             store.set(key, encryptSecret(raw));
         }
         return raw;
     }
     return decryptSecret(raw);
-};
-
-/**
- * 读取真实持久化过的非空字符串值，不做 schema 默认值兜底。
- *
- * 与 storeGet 的区别：仅当用户/历史版本显式写入过该键时返回内容，
- * 其余（键不存在、非字符串、空白串）返回 null。供启动迁移判断
- * 「用户是否显式设置过」；键允许是已从 schema 移除的历史键。
- *
- * @param key 设置键（可以是历史键）。
- * @returns 持久化过的非空字符串；未持久化或空白返回 null。
- */
-export const storeGetPersisted = (key: string): string | null => {
-    const value = store.get(key);
-    if (typeof value !== 'string') {
-        return null;
-    }
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-        return null;
-    }
-    // 凭据类键落盘的是密文，这里要还原成明文才对得上调用方的预期。
-    return SECRET_SETTING_KEYS.has(key) ? decryptSecret(trimmed) : trimmed;
-};
-
-/**
- * 判断键是否被真实持久化过（配置文件里存在该键），与 schema 默认值无关。
- *
- * @param key 设置键（可以是历史键）。
- * @returns 配置文件里存在该键时为 true。
- */
-export const storeHas = (key: string): boolean => {
-    return store.has(key);
-};
-
-/**
- * 删除设置项，供启动迁移清理已废弃的历史键。
- *
- * 必须走本单例：electron-store 每次落盘都是整份内存快照写回文件，
- * 若用独立实例 delete，单例后续的任何写入都会把已删键带回磁盘。
- * 参数放宽为 string：被清理的键可能已不在 SettingKey 联合类型里。
- *
- * @param key 要删除的设置键。
- */
-export const storeDelete = (key: string): void => {
-    store.delete(key);
 };
 
 /**

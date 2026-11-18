@@ -26,7 +26,6 @@ export const SettingKeyObj = {
     'apiKeys.tencent.secretId': '',
     'apiKeys.tencent.secretKey': '',
     'apiKeys.openAi.providerKeys': '',
-    'translation.engine': 'tencent',
     'transcription.engine': 'whisper-cpp',
     'providers.subtitleTranslation': 'none',
     'providers.dictionary': 'none',
@@ -43,11 +42,6 @@ export const SettingKeyObj = {
     'models.openai.dictionary': '',
     /** 可选云端语义向量模型标识（如 text-embedding-3-small / gemini-embedding-001）。 */
     'models.openai.embedding': '',
-    'subtitleTranslation.engine': 'none',
-    'dictionary.engine': 'none',
-    // Service function enablement
-    'services.openai.enableSentenceLearning': 'false',
-    'services.openai.subtitleTranslationMode': 'zh',
     'appearance.theme': 'light',
     'appearance.themeFamily': 'neutral',
     'appearance.fontSize': 'fontSizeLarge',
@@ -65,7 +59,6 @@ export const SettingKeyObj = {
      */
     'tts.voice': 'kokoro-en-US-bella',
     'storage.path': '',
-    'storage.collection': 'default',
     'proxy.mode': 'system',
     'proxy.url': '',
     'proxy.bypass_rules': '',

@@ -51,7 +51,7 @@ const KOKORO_EN_V0_19_META = {
 /**
  * 音色清单。
  *
- * 将轻量兼容的 Piper 与高拟真 Kokoro 共存，其中 `en-US-amy-low` 保持在索引 0 以兼容历史测试与老配置。
+ * 将轻量快速的 Piper 与高拟真 Kokoro 共存，其中 `en-US-amy-low` 作为默认音色置于索引 0。
  */
 export const SHERPA_TTS_VOICES: readonly SherpaTtsVoice[] = [
     {

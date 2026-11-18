@@ -109,8 +109,7 @@ describe('设置存储的凭据加密', () => {
         expect(storeGet('mobileAccess.port')).toBe('27183');
     });
 
-    it('历史遗留的明文凭据在读到时自愈成密文', async () => {
-        // 模拟升级前写下的明文。
+    it('密钥环恢复可用后，明文凭据在读到时自愈成密文', async () => {
         persisted.set(SECRET_KEY, PLAIN_SECRET);
         const { storeGet } = await importStore();
 

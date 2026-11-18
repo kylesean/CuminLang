@@ -26,9 +26,7 @@ vi.mock('react-i18next', () => ({
 /** 构造一次 drizzle 阶段的迁移失败详情。 */
 const failureDetail = (overrides: Partial<MigrationFailureDetail> = {}): MigrationFailureDetail => ({
     failed: true,
-    phase: 'custom',
-    migrationId: 'store-schema-dictionary-youdao-v2',
-    description: '清理有道词典链路存量数据',
+    phase: 'drizzle',
     errorMessage: 'SQLITE_BUSY: database is locked',
     ...overrides,
 });
@@ -40,22 +38,12 @@ describe('MigrationFailureGate 恢复页', () => {
         vi.mocked(resetAndRelaunch).mockResolvedValue();
     });
 
-    it('展示失败阶段、迁移身份与错误详情', () => {
+    it('展示失败阶段与错误详情', () => {
         render(<MigrationFailureGate failure={failureDetail()} />);
 
         expect(screen.getByText('title')).toBeDefined();
-        expect(screen.getByText(/store-schema-dictionary-youdao-v2/)).toBeDefined();
-        expect(screen.getByText(/SQLITE_BUSY/)).toBeDefined();
-    });
-
-    it('drizzle 阶段失败时展示阶段标识，没有迁移 id', () => {
-        render(<MigrationFailureGate failure={failureDetail({
-            phase: 'drizzle',
-            migrationId: null,
-            description: null,
-        })} />);
-
         expect(screen.getByText(/phase: drizzle/)).toBeDefined();
+        expect(screen.getByText(/SQLITE_BUSY/)).toBeDefined();
     });
 
     it('点击重试会调用重启接口，并停留在重启中状态', async () => {

@@ -118,23 +118,6 @@ describe('LocalEmbeddingRuntime', () => {
         expect(status.multimodalModelPath).toBe(path.join(mmprojDir, LOCAL_EMBEDDING_MMPROJ.file));
     });
 
-    it('读取状态时清理已废弃的 bge-small 模型目录', async () => {
-        directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dashplayer-embedding-'));
-        const legacyDir = path.join(directory, 'bge-small-en-v1.5-q8_0');
-        await fs.mkdir(legacyDir, { recursive: true });
-        await fs.writeFile(path.join(legacyDir, 'bge-small-en-v1.5-q8_0.gguf'), 'old');
-        const runtime = new LocalEmbeddingRuntime({
-            provideDirectory: async () => directory!,
-            ensurePathAccessible: async () => undefined,
-        } as never);
-
-        await runtime.getStatus();
-        // getStatus 里的清理是 fire-and-forget，用条件轮询等待目录被移除。
-        await vi.waitFor(async () => {
-            await expect(fs.access(legacyDir)).rejects.toThrow();
-        });
-    });
-
     it('删除模型会同时移除文本模型与多模态投影', async () => {
         directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dashplayer-embedding-'));
         const modelDir = path.join(directory, LOCAL_EMBEDDING_MODEL.id);

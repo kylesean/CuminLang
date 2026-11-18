@@ -34,8 +34,6 @@ export default class MigrationFailureController implements Controller {
         return {
             failed: failure !== null,
             phase: failure?.phase ?? null,
-            migrationId: failure?.migrationId ?? null,
-            description: failure?.description ?? null,
             errorMessage: failure?.errorMessage ?? null,
         };
     }

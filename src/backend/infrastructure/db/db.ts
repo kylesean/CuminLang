@@ -61,8 +61,6 @@ const openHandle = (): DbHandle => {
         // 开库失败等价于 drizzle 阶段失败：让启动流程进入恢复模式而不是直接崩溃。
         setMigrationFailure({
             phase: 'drizzle',
-            migrationId: null,
-            description: null,
             errorMessage: openError.message,
         });
         dbLogger.error('database open failed', { error: openError, path: file });

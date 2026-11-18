@@ -31,12 +31,10 @@ function stubStartupState(options: {
                 options.migrationFailed
                     ? {
                           failed: true,
-                          phase: 'custom',
-                          migrationId: 'store-schema-dictionary-youdao-v2',
-                          description: '清理有道词典链路存量数据',
+                          phase: 'drizzle',
                           errorMessage: 'SQLITE_BUSY: database is locked',
                       }
-                    : { failed: false, phase: null, migrationId: null, description: null, errorMessage: null }
+                    : { failed: false, phase: null, errorMessage: null }
             );
         }
         if (path === 'watch-history/list/basic' || path === 'watch-history/list') {

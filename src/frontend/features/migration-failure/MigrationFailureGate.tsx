@@ -69,7 +69,6 @@ export const MigrationFailureGate: React.FC<MigrationFailureGateProps> = ({ fail
     /** 失败详情的纯文本形态，供用户复制反馈。 */
     const detailText = [
         failure.phase ? `phase: ${failure.phase}` : null,
-        failure.migrationId ? `migration: ${failure.migrationId}` : null,
         failure.errorMessage ? `error: ${failure.errorMessage}` : null,
     ].filter(Boolean).join('\n');
 

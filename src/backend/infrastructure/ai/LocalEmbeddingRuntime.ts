@@ -82,34 +82,6 @@ export class LocalEmbeddingRuntime {
         @optional() @inject(TYPES.RendererGateway) private readonly rendererGateway?: RendererGateway,
     ) {}
 
-    /** 旧模型清理是否已执行；每次进程生命周期只做一次。 */
-    private legacyCleanupDone = false;
-
-    /**
-     * 清理已废弃的 bge-small 模型文件（幂等，每个进程只执行一次）。
-     *
-     * 放在读取状态时触发而不是启动时集中执行：用户可能整年不开语义推荐，
-     * 没必要为 37 MB 的清理阻塞启动；一旦用到语义能力，旧文件就该消失。
-     *
-     * @returns 是否确实删除了旧目录。
-     */
-    public async cleanupLegacyModel(): Promise<boolean> {
-        if (this.legacyCleanupDone) {
-            return false;
-        }
-        this.legacyCleanupDone = true;
-        const legacy = await this.legacyModelPath();
-        try {
-            await fs.promises.rm(legacy, { recursive: true, force: true });
-            return true;
-        } catch (error) {
-            this.logger.warn('legacy embedding model cleanup skipped', {
-                error: error instanceof Error ? error.message : String(error),
-            });
-            return false;
-        }
-    }
-
     /** 模型文件的安装路径。 */
     private async modelPath(): Promise<string> {
         const directory = await this.directories.provideDirectory(StorageDirectoryTarget.MODELS);
@@ -148,8 +120,6 @@ export class LocalEmbeddingRuntime {
 
     /** 语义模型状态：是否已安装、体积、下载进度与下载源，供设置页与引导页展示。 */
     public async getStatus(): Promise<LocalEmbeddingStatus> {
-        // 顺带清理旧模型：用户打开设置页或推荐页时就完成迁移，不必等到下次安装。
-        void this.cleanupLegacyModel();
         const [ready, multimodalReady, modelFilePath, multimodalFilePath] = await Promise.all([
             this.isReady(),
             this.isMultimodalReady(),
@@ -457,17 +427,6 @@ export class LocalEmbeddingRuntime {
             await fs.promises.rm(`${target}${LOCAL_AI_INTEGRITY_MARKER_SUFFIX}`, { force: true }).catch(() => undefined);
         }
         return removed;
-    }
-
-    /**
-     * 旧的 bge-small 模型目录，用于升级清理。
-     *
-     * 用户从旧版本升级后，旧模型文件会一直占着 37 MB；这里显式列出并在
-     * 启动时清理，避免「已移除但磁盘上还在」。
-     */
-    private async legacyModelPath(): Promise<string> {
-        const directory = await this.directories.provideDirectory(StorageDirectoryTarget.MODELS);
-        return path.join(directory, 'bge-small-en-v1.5-q8_0');
     }
 
     /**
