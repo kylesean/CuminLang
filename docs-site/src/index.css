@@ -1,0 +1,11 @@
+@import "../../src/index.css";
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--color-background-body);
+  color: var(--color-text-primary);
+}

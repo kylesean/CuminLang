@@ -96,6 +96,9 @@ resources/mobile/
 # Electron-Forge
 out/
 
+# Docs site build
+docs-site/dist/
+
 # Playwright
 test-results/
 playwright-report/

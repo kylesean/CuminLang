@@ -1,82 +1,64 @@
 name: Build documentation
 
 on:
-    push:
-        branches: [main]
-        paths:
-            - 'Writerside/**'
-            - '.github/workflows/deploy-doc.yml'
-    workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - 'docs/screenshots/**'
+      - 'src/astryx-themes.ts'
+      - 'src/themes/**'
+      - '.github/workflows/deploy-doc.yml'
+  workflow_dispatch:
 
 permissions:
-    contents: read
-    id-token: write
-    pages: write
+  contents: read
+  id-token: write
+  pages: write
 
-env:
-    INSTANCE: 'Writerside/dp'
-    ARTIFACT: 'webHelpDP2-all.zip'
-    DOCKER_VERSION: '241.15989'
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v5
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
-            - name: Build docs using Writerside Docker builder
-              uses: JetBrains/writerside-github-action@v4
-              with:
-                  instance: ${{ env.INSTANCE }}
-                  artifact: ${{ env.ARTIFACT }}
-                  docker-version: ${{ env.DOCKER_VERSION }}
+      - name: Enable Corepack
+        run: corepack enable
 
-            - name: Save artifact with build results
-              uses: actions/upload-artifact@v4
-              with:
-                  name: docs
-                  path: |
-                      artifacts/${{ env.ARTIFACT }}
-                      artifacts/report.json
-                  retention-days: 7
-    test:
-        needs: build
-        runs-on: ubuntu-latest
-        steps:
-            - name: Download artifacts
-              uses: actions/download-artifact@v4
-              with:
-                  name: docs
-                  path: artifacts
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
 
-            - name: Test documentation
-              uses: JetBrains/writerside-checker-action@v1
-              with:
-                  instance: ${{ env.INSTANCE }}
-    deploy:
-        environment:
-            name: github-pages
-            url: ${{ steps.deployment.outputs.page_url }}
-        needs: [build, test]
-        runs-on: ubuntu-latest
-        steps:
-            - name: Download artifacts
-              uses: actions/download-artifact@v4
-              with:
-                  name: docs
+      - name: Install dependencies
+        env:
+          SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
+        run: pnpm install --frozen-lockfile
 
-            - name: Unzip artifact
-              run: unzip -O UTF-8 -qq '${{ env.ARTIFACT }}' -d dir
+      - name: Build Astryx documentation site
+        run: pnpm exec vite build --config docs-site/vite.config.ts
 
-            - name: Setup Pages
-              uses: actions/configure-pages@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
 
-            - name: Package and upload Pages artifact
-              uses: actions/upload-pages-artifact@v3
-              with:
-                  path: dir
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/dist
 
-            - name: Deploy to GitHub Pages
-              id: deployment
-              uses: actions/deploy-pages@v4
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
