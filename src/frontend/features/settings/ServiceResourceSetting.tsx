@@ -38,6 +38,7 @@ import { useAutoSaveSettingsForm } from '@/frontend/features/settings/useAutoSav
 import { useServiceResourceActions } from '@/frontend/features/settings/hooks/useServiceResourceActions';
 import { SETTING_ROW_TESTIDS } from '@/common/constants/qa-testids';
 import { flattenEnabledProviderModels } from '@/common/utils/cloud-ai-providers';
+import { resolveProviderEndpointHost } from '@/common/constants/cloud-ai-provider-presets';
 import type { EngineSelectionSettingVO } from '@/common/types/vo/engine-selection-setting-vo';
 import type { ServiceCredentialSettingFormValues } from '@/common/types/vo/service-credentials-setting-vo';
 
@@ -195,6 +196,8 @@ const ServiceResourceSetting: React.FC = () => {
                 activeProviderId: settings.openai.activeProviderId,
                 providers: settings.openai.providers.map((item) => ({
                     ...item,
+                    // 记住详情里已落盘的地址主机：编辑态改到别的 host 时只做提示，不阻断保存。
+                    savedEndpointHost: resolveProviderEndpointHost(item.endpoint),
                     key: '',
                     clearKey: false,
                 })),

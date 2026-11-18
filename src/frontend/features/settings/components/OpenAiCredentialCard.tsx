@@ -15,6 +15,7 @@ import { toast } from 'react-hot-toast';
 
 import { Button } from '@astryxdesign/core/Button';
 import { AlertDialog } from '@astryxdesign/core/AlertDialog';
+import { Banner } from '@astryxdesign/core/Banner';
 import { Card } from '@astryxdesign/core/Card';
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
 import { Divider } from '@astryxdesign/core/Divider';
@@ -36,6 +37,7 @@ import type {
 import {
     CLOUD_AI_PROVIDER_PRESETS,
     isLocalLlmEndpoint,
+    resolveProviderEndpointHost,
 } from '@/common/constants/cloud-ai-provider-presets';
 import { AI_API_FORMATS, type AiApiFormat } from '@/common/utils/cloud-ai-api-format';
 import { maskSecret } from '@/common/utils/secret-mask';
@@ -145,6 +147,19 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
     const disabledModels = activeProvider.disabledModels ?? [];
     const isLocalEndpoint = isLocalLlmEndpoint(endpoint);
     const isCustomProfile = activeProvider.id === 'custom' || activeProvider.id.startsWith('custom-');
+
+    /*
+      地址主机被改到别处时只提示、不阻断：密钥按服务商条目归属，换地址复用同一份凭据
+      是正常操作（官方 ↔ 自建代理 ↔ 中转站）。提示的作用是让用户在「测试连接」前
+      看清这把密钥接下来会发到哪个域名。
+    */
+    const currentEndpointHost = resolveProviderEndpointHost(endpoint);
+    const savedEndpointHost = activeProvider.savedEndpointHost ?? '';
+    const endpointHostChanged = Boolean(
+        savedEndpointHost
+        && currentEndpointHost
+        && savedEndpointHost !== currentEndpointHost,
+    );
 
     const apiFormatLabelMap: Record<AiApiFormat, string> = React.useMemo(() => ({
         openai: t('serviceCredentials.openai.apiFormatOpenai'),
@@ -593,6 +608,21 @@ export const OpenAiCredentialCard: React.FC<OpenAiCredentialCardProps> = ({
                         : t('serviceCredentials.openai.endpointHint')}
                     size="sm"
                 />
+                {endpointHostChanged && (
+                    <Banner
+                        status="warning"
+                        title={t('serviceCredentials.openai.endpointHostChangedTitle')}
+                        description={activeProvider.hasKey
+                            ? t('serviceCredentials.openai.endpointHostChangedWithKey', {
+                                from: savedEndpointHost,
+                                to: currentEndpointHost,
+                            })
+                            : t('serviceCredentials.openai.endpointHostChangedNoKey', {
+                                from: savedEndpointHost,
+                                to: currentEndpointHost,
+                            })}
+                    />
+                )}
             </VStack>
 
             <Divider variant="subtle" />

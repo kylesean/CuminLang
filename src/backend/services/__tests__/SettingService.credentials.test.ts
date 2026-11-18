@@ -10,6 +10,16 @@ vi.mock('electron', () => ({
     ipcRenderer: undefined,
 }));
 
+const loggerInfo = vi.hoisted(() => vi.fn());
+vi.mock('@/backend/infrastructure/logger', () => ({
+    getMainLogger: () => ({
+        info: loggerInfo,
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+    }),
+}));
+
 import { SettingServiceImpl } from '@/backend/services/SettingService';
 import type { SettingsStore } from '@/backend/services/gateways/SettingsStore';
 import { SettingKeyObj, type SettingKey } from '@/common/types/store_schema';
@@ -132,6 +142,52 @@ describe('服务凭据：不把明文送进渲染进程', () => {
 
         expect(JSON.parse(store.values.get('apiKeys.openAi.providerKeys')!)).toEqual({ deepseek: OPENAI_KEY });
         expect(store.values.get('apiKeys.tencent.secretKey')).toBe(TENCENT_KEY);
+    });
+
+    /**
+     * 换地址是正常操作（官方 ↔ 自建代理 ↔ 中转站），密钥仍按服务商条目归属；
+     * 但「这把密钥以后会发到哪个域名」必须能在日志里回溯。
+     */
+    it('接口主机变更时记录 from/to 与密钥是否沿用，且不落完整 URL', async () => {
+        loggerInfo.mockClear();
+
+        await service.saveServiceCredentials({
+            ...baseSave,
+            openai: {
+                ...baseSave.openai,
+                providers: [{
+                    ...baseSave.openai.providers[0],
+                    endpoint: 'https://proxy.example.net/v1',
+                    key: '',
+                }],
+            },
+        });
+
+        const changeLog = loggerInfo.mock.calls.find(([message]) => message === 'provider endpoint host changed');
+        expect(changeLog).toBeDefined();
+        expect(changeLog?.[1]).toEqual({
+            providerId: 'deepseek',
+            from: 'api.example.com',
+            to: 'proxy.example.net',
+            keyReused: true,
+        });
+        expect(JSON.stringify(changeLog)).not.toContain(OPENAI_KEY);
+        expect(JSON.stringify(changeLog)).not.toContain('/v1');
+    });
+
+    it('主机未变更时不写变更日志', async () => {
+        loggerInfo.mockClear();
+
+        await service.saveServiceCredentials({
+            ...baseSave,
+            openai: {
+                ...baseSave.openai,
+                // 同主机换路径（/v1 -> /v2）不算地址迁移
+                providers: [{ ...baseSave.openai.providers[0], endpoint: 'https://api.example.com/v2', key: '' }],
+            },
+        });
+
+        expect(loggerInfo.mock.calls.some(([message]) => message === 'provider endpoint host changed')).toBe(false);
     });
 
     it('填了新密钥才覆盖', async () => {

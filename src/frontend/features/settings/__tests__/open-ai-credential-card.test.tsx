@@ -43,6 +43,9 @@ const translationDict: Record<string, string> = {
     'serviceCredentials.openai.providerNamePlaceholder': '如 DeepSeek、本地 AI',
     'serviceCredentials.openai.copyLink': '复制链接',
     'serviceCredentials.openai.openInBrowser': '在浏览器中打开',
+    'serviceCredentials.openai.endpointHostChangedTitle': '接口地址的主机已变更',
+    'serviceCredentials.openai.endpointHostChangedWithKey': '已保存的密钥仍会沿用，保存后「测试连接」将把该密钥发送到 {{to}}（原为 {{from}}）。请确认这是你自己的地址。',
+    'serviceCredentials.openai.endpointHostChangedNoKey': '该配置尚未保存密钥，地址将从 {{from}} 改为 {{to}}。',
     'common.saveFailed': '保存失败',
     'common.delete': '删除',
     'common.cancel': '取消',
@@ -57,7 +60,11 @@ vi.mock('react-i18next', () => ({
             if (key === 'serviceCredentials.openai.deleteModelConfirm') {
                 return `确定删除模型「${String(params?.model ?? '')}」？`;
             }
-            return translationDict[key] ?? key;
+            const template = translationDict[key];
+            if (template === undefined) {
+                return key;
+            }
+            return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(params?.[name] ?? ''));
         },
     }),
 }));
@@ -167,6 +174,35 @@ describe('OpenAiCredentialCard', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         expect(screen.getByDisplayValue('https://api.deepseek.com/v1')).toBeInTheDocument();
         expect(screen.getByText('existing-model')).toBeInTheDocument();
+    });
+
+    it('接口主机变更且已有密钥时，提示密钥将沿用并指向新地址', () => {
+        const values = buildDefaultValues({
+            // 编辑态已改成新主机，详情里记的是旧主机
+            endpoint: 'https://proxy.example.net/v1',
+            hasKey: true,
+            keyHint: '••••1234',
+        });
+        values.openai.providers[0]!.savedEndpointHost = 'api.example.com';
+
+        renderCard(values);
+
+        expect(screen.getByText('接口地址的主机已变更')).toBeInTheDocument();
+        expect(screen.getByText(/已保存的密钥仍会沿用/)).toBeInTheDocument();
+        expect(screen.getByText(/proxy\.example\.net/)).toBeInTheDocument();
+        expect(screen.getByText(/api\.example\.com/)).toBeInTheDocument();
+    });
+
+    it('接口主机未变更或尚未保存地址时不显示提示', () => {
+        const unchanged = buildDefaultValues({ endpoint: 'https://api.example.com/v2', hasKey: true });
+        unchanged.openai.providers[0]!.savedEndpointHost = 'api.example.com';
+        const { unmount } = renderCard(unchanged);
+        expect(screen.queryByText('接口地址的主机已变更')).not.toBeInTheDocument();
+        unmount();
+
+        const fresh = buildDefaultValues({ endpoint: 'https://api.example.com/v1', hasKey: false });
+        renderCard(fresh);
+        expect(screen.queryByText('接口地址的主机已变更')).not.toBeInTheDocument();
     });
 
     it('选择 Anthropic 预设后 API 类型切换为 Anthropic', async () => {

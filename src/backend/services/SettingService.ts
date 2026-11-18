@@ -8,6 +8,7 @@ import { maskSecret } from '@/common/utils/secret-mask';
 import {
     isAllowedProviderEndpoint,
     isLocalLlmEndpoint,
+    resolveProviderEndpointHost,
 } from '@/common/constants/cloud-ai-provider-presets';
 import type ClientProviderService from '@/backend/services/ClientProviderService';
 import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
@@ -456,6 +457,12 @@ export class SettingServiceImpl implements SettingService {
      */
     public async saveServiceCredentials(settings: ServiceCredentialSettingSaveVO): Promise<void> {
         const existingKeys = parseStoredProviderKeys(this.getValue('apiKeys.openAi.providerKeys'));
+        const previousHostById = new Map(
+            this.getStoredProviderProfiles().map((profile) => [
+                profile.id,
+                resolveProviderEndpointHost(profile.endpoint),
+            ]),
+        );
         const nextKeys: Record<string, string> = {};
         const nextProfiles: PersistedCloudAiProvider[] = [];
 
@@ -489,6 +496,22 @@ export class SettingServiceImpl implements SettingService {
                 nextKeys[id] = item.key as string;
             } else if (existingKey) {
                 nextKeys[id] = existingKey;
+            }
+
+            /*
+              服务商地址变化只记录 host，供事后回溯「这个密钥什么时候被指向了哪个域名」。
+              保存本身仍是用户动作、密钥按服务商条目归属，因此这里不阻断也不清空密钥；
+              日志只留 host，不落完整 URL 与任何密钥材料。
+            */
+            const previousHost = previousHostById.get(id) ?? '';
+            const nextHost = resolveProviderEndpointHost(endpoint);
+            if (previousHost && nextHost && previousHost !== nextHost) {
+                this.logger.info('provider endpoint host changed', {
+                    providerId: id,
+                    from: previousHost,
+                    to: nextHost,
+                    keyReused: Boolean(existingKey) && !item.clearKey && StrUtil.isBlank(item.key),
+                });
             }
 
             nextProfiles.push({

@@ -75,6 +75,27 @@ export function isAllowedProviderEndpoint(endpoint: string): boolean {
 }
 
 /**
+ * 提取接口地址的 `host`（含端口），用于「服务商地址被改到哪」的可读提示与日志。
+ *
+ * 只取 host 不取完整 URL：路径与查询串可能带代理参数，落日志只会增加噪音。
+ * 地址为空或无法解析时返回空串，调用方据此跳过提示。
+ *
+ * @param endpoint 用户填写的接口地址。
+ * @returns 形如 `api.deepseek.com` 或 `127.0.0.1:11434` 的主机标识；无法解析时为空串。
+ */
+export function resolveProviderEndpointHost(endpoint: string): string {
+    const trimmed = endpoint.trim();
+    if (!trimmed) {
+        return '';
+    }
+    try {
+        return new URL(trimmed).host;
+    } catch {
+        return '';
+    }
+}
+
+/**
  * 仅保留四家主流预设：OpenAI、Anthropic、Gemini、DeepSeek。
  */
 export const CLOUD_AI_PROVIDER_PRESETS: CloudAiProviderPreset[] = [

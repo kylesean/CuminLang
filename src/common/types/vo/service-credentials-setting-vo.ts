@@ -28,6 +28,13 @@ export type CloudAiProviderProfileSaveVO = {
 export type CloudAiProviderProfileFormValue = CloudAiProviderProfileDetailVO & {
     key: string;
     clearKey: boolean;
+    /**
+     * 详情里已落盘的接口地址主机（仅前端提示用，不参与保存）。
+     *
+     * 编辑态把地址改到别的主机时，界面据此提示「已保存的密钥仍会沿用」；
+     * 保存载荷不包含该字段，避免它被误当成业务数据写回。
+     */
+    savedEndpointHost?: string;
 };
 
 /**
