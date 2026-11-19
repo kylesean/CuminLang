@@ -126,7 +126,7 @@ void i18nextUse(initReactI18next)
         ns: ['nav', 'settings', 'toast', 'errors', 'player', 'pages', 'common', 'onboarding', 'migration', 'youtubeImport', 'practice', 'recap', 'compass', 'moment', 'memoryMap', 'metrics'],
         defaultNS: 'settings',
         returnNull: false,
-        debug: import.meta.env.DEV,
+        debug: import.meta.env.DEV && import.meta.env.MODE !== 'test',
         parseMissingKeyHandler: (key) => {
             if (import.meta.env.DEV) {
                 getRendererLogger('i18n').warn(`[i18n] missing key: ${key}`);

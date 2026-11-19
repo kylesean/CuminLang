@@ -524,16 +524,20 @@ export default function ContextStudioPage() {
     const handleMemoryMapWord = useCallback(
         (wordText: string) => {
             const found = words.find((w) => w.word.toLowerCase() === wordText.toLowerCase());
-            if (found) {
-                setExplicitSelection({ kind: 'word', word: found });
-            } else {
-                setSearchParams({ word: wordText });
-                setExplicitSelection(null);
-            }
+            setExplicitSelection(found ? { kind: 'word', word: found } : null);
             setActiveFilter('words');
-            setStudioView('workspace');
+            setSearchParams(
+                (prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.delete('view');
+                    next.delete('sentenceKey');
+                    next.set('word', found ? found.word : wordText);
+                    return next;
+                },
+                { replace: true },
+            );
         },
-        [words, setSearchParams, setStudioView],
+        [words, setSearchParams],
     );
 
     const handleLaunchTopicReview = useCallback(
@@ -799,17 +803,7 @@ export default function ContextStudioPage() {
                                     : undefined
                             }
                             onRated={(wordText, res) => handleReviewWordCompleted(wordText, res.status)}
-                            onOpenWord={(wordText) => {
-                                const found = words.find((w) => w.word.toLowerCase() === wordText.toLowerCase());
-                                if (found) {
-                                    setExplicitSelection({ kind: 'word', word: found });
-                                } else {
-                                    setSearchParams({ word: wordText });
-                                    setExplicitSelection(null);
-                                }
-                                setActiveFilter('words');
-                                setStudioView('workspace');
-                            }}
+                            onOpenWord={handleMemoryMapWord}
                             onExit={() => {
                                 setTopicCards(null);
                                 setActiveReviewTopic(null);
@@ -1103,6 +1097,16 @@ export default function ContextStudioPage() {
                                     setWords((prev) => prev.filter((w) => w.word !== deletedText));
                                     removeWordFromDueQueue(deletedText);
                                     setExplicitSelection(null);
+                                    setSearchParams(
+                                        (prev) => {
+                                            const next = new URLSearchParams(prev);
+                                            if (next.get('word')?.toLowerCase() === deletedText.toLowerCase()) {
+                                                next.delete('word');
+                                            }
+                                            return next;
+                                        },
+                                        { replace: true },
+                                    );
                                 }}
                                 onStatusUpdated={(wordText, nextStatus) => {
                                     setWords((prev) =>

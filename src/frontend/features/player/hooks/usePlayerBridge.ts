@@ -324,6 +324,9 @@ export function usePlayerBridge(navigate: (path: string) => void) {
         }
         try {
             const nextVideo = await playerApi.getNextVideo(currentVideoId);
+            if (usePlaybackSession.getState().videoId !== currentVideoId) {
+                return;
+            }
             if (nextVideo) {
                 logger.info('auto playing next video', { fileName: nextVideo.fileName });
                 navigate(`/player/${nextVideo.id}`);

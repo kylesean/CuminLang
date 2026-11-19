@@ -149,6 +149,7 @@ function BeatShadowingView({
     // 节拍跟读支持 Space 一键启停，与禁用后播放器热键形成无缝衔接
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
+            if (e.defaultPrevented) return;
             if (e.key !== ' ' || e.repeat) return;
             const target = e.target as HTMLElement | null;
             if (isTextEntryTarget(target) || isInteractiveTarget(target)) return;
@@ -568,6 +569,7 @@ function RecordShadowingView({
     // 键盘交互：R 原音、S 0.75×、Space 对讲/启停（自动示范中按 Space 立即开麦）、V 键 A/B 对比、P 听我的、Enter 下一句
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
+            if (e.defaultPrevented) return;
             const target = e.target as HTMLElement | null;
             if (isTextEntryTarget(target) || isInteractiveTarget(target)) {
                 return;

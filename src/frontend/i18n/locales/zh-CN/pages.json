@@ -251,6 +251,7 @@
         "startTranscribe": "开始本地识别转写",
         "noAudioSelected": "请选择至少一个音频文件（MP3 / M4A / WAV 等）",
         "importAudioFailed": "未能导入音频文件",
+        "importAudioFailedWithReason": "导入音频失败: {{message}}",
         "emptySelectTitle": "暂无可精读的文稿",
         "emptySelectDesc": "可以从媒体库导入带字幕的视频，或直接导入 MP3 / M4A 播客音频生成精读文稿。",
         "openDocListBtn": "浏览文稿列表"

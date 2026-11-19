@@ -111,6 +111,8 @@
     "polishSentence": "Polish sentence",
     "quoteText": "Quote this text",
     "copy": "Copy",
+    "copied": "Copied",
+    "ttsPlayFailed": "Failed to play pronunciation",
     "newChatFromSelection": "Start a chat with selection",
     "forceRefresh": "Refresh now",
     "learning": {

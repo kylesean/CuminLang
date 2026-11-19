@@ -832,7 +832,7 @@ export default function ScriptReaderPage() {
             }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            toast.error(t('scriptReader.importAudioFailed', { defaultValue: '导入音频失败: {{message}}', message }));
+            toast.error(t('scriptReader.importAudioFailedWithReason', { defaultValue: '导入音频失败: {{message}}', message }));
         } finally {
             setImportingAudio(false);
         }

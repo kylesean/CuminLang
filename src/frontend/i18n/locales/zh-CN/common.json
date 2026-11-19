@@ -111,6 +111,8 @@
     "polishSentence": "润色句子",
     "quoteText": "引用这段文本",
     "copy": "复制",
+    "copied": "已复制",
+    "ttsPlayFailed": "朗读播放失败",
     "newChatFromSelection": "用选择内容新建对话",
     "forceRefresh": "强制刷新",
     "learning": {

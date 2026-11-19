@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePlayer } from '@/frontend/features/player/playerStore';
 import { deriveSentenceEndMode } from '@/frontend/features/player/lib/sentence-end-mode';
+import { useTrainingModeStore } from '@/frontend/features/player/trainingStore';
 
 // playerStore 在模块加载时会拉取设置与窗口信息；这里只关心句末模式的状态转移，
 // 把外部 IPC 与音频能力全部替身掉，避免测试依赖真实后端。
@@ -199,6 +200,78 @@ describe('playerStore 句末模式互斥', () => {
             expect(usePlayer.getState().shadowingPause).not.toBeNull();
             expect(usePlayer.getState().playing).toBe(false);
         } finally {
+            usePlayer.getState().setShadowing(false);
+            vi.useRealTimers();
+        }
+    });
+
+    it('影子跟读留白结束后在 skipGap 开关下均可恢复播放并解除旧句高亮锁', () => {
+        vi.useFakeTimers();
+        try {
+            const s0 = {
+                fileHash: 'hash-gap',
+                index: 0,
+                start: 1.0,
+                end: 2.0,
+                adjustedStart: null,
+                adjustedEnd: null,
+                text: 'First sentence.',
+                textZH: '',
+                key: 'hash-gap-0',
+                transGroup: 1,
+                translationKey: 'hash-gap:0',
+                struct: { original: 'First sentence.', blocks: [] },
+            };
+            const s1 = {
+                fileHash: 'hash-gap',
+                index: 1,
+                start: 3.0,
+                end: 4.0,
+                adjustedStart: null,
+                adjustedEnd: null,
+                text: 'Second sentence.',
+                textZH: '',
+                key: 'hash-gap-1',
+                transGroup: 2,
+                translationKey: 'hash-gap:1',
+                struct: { original: 'Second sentence.', blocks: [] },
+            };
+
+            // 1) skipGap = true：留白倒计时结束后跳到下一句开头并恢复 playing = true
+            useTrainingModeStore.getState().setSkipGap(true);
+            usePlayer.getState().setSource('file:///gap.mp4');
+            usePlayer.getState().loadSubtitles([s0, s1]);
+            usePlayer.getState().setShadowing(true);
+            usePlayer.getState().gotoSentence(s0);
+            usePlayer.getState().play();
+            usePlayer.getState().resolveSeek(1.0);
+
+            usePlayer.getState().updateExactPlayTime(2.1);
+            expect(usePlayer.getState().playing).toBe(false);
+            const pauseMs = usePlayer.getState().shadowingPause!.durationMs;
+
+            vi.advanceTimersByTime(pauseMs);
+            expect(usePlayer.getState().playing).toBe(true);
+            expect(usePlayer.getState().currentSentence?.key).toBe('hash-gap-1');
+
+            // 2) skipGap = false：留白结束后解除旧句 currentLock，时间进入下一句时立即切换高亮
+            useTrainingModeStore.getState().setSkipGap(false);
+            usePlayer.getState().gotoSentence(s0);
+            usePlayer.getState().play();
+            usePlayer.getState().resolveSeek(1.0);
+
+            usePlayer.getState().updateExactPlayTime(2.1);
+            expect(usePlayer.getState().playing).toBe(false);
+            const pauseMs2 = usePlayer.getState().shadowingPause!.durationMs;
+
+            vi.advanceTimersByTime(pauseMs2);
+            expect(usePlayer.getState().playing).toBe(true);
+            expect(usePlayer.getState().internal.currentLock).toBeNull();
+
+            usePlayer.getState().updateExactPlayTime(3.1);
+            expect(usePlayer.getState().currentSentence?.key).toBe('hash-gap-1');
+        } finally {
+            useTrainingModeStore.getState().setSkipGap(false);
             usePlayer.getState().setShadowing(false);
             vi.useRealTimers();
         }

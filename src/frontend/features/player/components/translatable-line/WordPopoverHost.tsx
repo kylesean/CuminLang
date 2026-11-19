@@ -392,7 +392,6 @@ export const WordPopoverHost: React.FC = () => {
         if (!open || !target || !cleanWord) {
             return;
         }
-        const session = usePlaybackSession.getState();
         const action = mode === 'hover' ? 'hover' : 'open';
         if (action === 'hover' && !shouldRecordEncounter('hover', `${cleanWord}:${sentenceHash ?? ''}`)) {
             return;
@@ -400,11 +399,16 @@ export const WordPopoverHost: React.FC = () => {
         if (action === 'open' && !shouldRecordEncounter('open', cleanWord)) {
             return;
         }
+        const session = usePlaybackSession.getState();
+        const sessionSrtHash = session.srtHash;
+        const sentenceFileHash = sentenceHash ? sentenceHash.split(':')[0] || undefined : undefined;
+        const isSameSessionSubtitle = !sentenceFileHash
+            || (sessionSrtHash !== null && sessionSrtHash.length > 0 && (sentenceFileHash === sessionSrtHash || Boolean(sentenceHash?.startsWith(sessionSrtHash))));
         void videoLearningApi.recordWordEncounter({
             word: cleanWord,
             action,
-            videoId: session.videoId ?? undefined,
-            fileHash: session.srtHash ?? undefined,
+            videoId: isSameSessionSubtitle ? (session.videoId ?? undefined) : undefined,
+            fileHash: (isSameSessionSubtitle ? sessionSrtHash : sentenceFileHash) || sentenceFileHash || sessionSrtHash || undefined,
             sentenceIndex,
             sentenceHash,
             context: sentenceText,
@@ -580,11 +584,15 @@ export const WordPopoverHost: React.FC = () => {
                     version: useVocabularyStore.getState().version,
                 });
                 const session = usePlaybackSession.getState();
+                const sessionSrtHash = session.srtHash;
+                const sentenceFileHash = sentenceHash ? sentenceHash.split(':')[0] || undefined : undefined;
+                const isSameSessionSubtitle = !sentenceFileHash
+                    || (sessionSrtHash !== null && sessionSrtHash.length > 0 && (sentenceFileHash === sessionSrtHash || Boolean(sentenceHash?.startsWith(sessionSrtHash))));
                 void videoLearningApi.recordWordEncounter({
                     word: cleanWord,
                     action: 'save',
-                    videoId: session.videoId ?? undefined,
-                    fileHash: session.srtHash ?? undefined,
+                    videoId: isSameSessionSubtitle ? (session.videoId ?? undefined) : undefined,
+                    fileHash: (isSameSessionSubtitle ? sessionSrtHash : sentenceFileHash) || sentenceFileHash || sessionSrtHash || undefined,
                     sentenceIndex,
                     sentenceHash,
                     context: sentenceText,
@@ -611,21 +619,25 @@ export const WordPopoverHost: React.FC = () => {
                 setWordStatus(cleanWord, nextTarget);
                 setOptimisticStatusState({ popKey: activePopKey, status: nextTarget });
                 const session = usePlaybackSession.getState();
+                const sessionSrtHash = session.srtHash;
+                const sentenceFileHash = sentenceHash ? sentenceHash.split(':')[0] || undefined : undefined;
+                const isSameSessionSubtitle = !sentenceFileHash
+                    || (sessionSrtHash !== null && sessionSrtHash.length > 0 && (sentenceFileHash === sessionSrtHash || Boolean(sentenceHash?.startsWith(sessionSrtHash))));
                 void videoLearningApi.recordWordEncounter({
                     word: cleanWord,
                     action: nextTarget === 'known' ? 'known' : nextTarget === 'ignored' ? 'ignore' : 'save',
-                    videoId: session.videoId ?? undefined,
-                    fileHash: session.srtHash ?? undefined,
+                    videoId: isSameSessionSubtitle ? (session.videoId ?? undefined) : undefined,
+                    fileHash: (isSameSessionSubtitle ? sessionSrtHash : sentenceFileHash) || sentenceFileHash || sessionSrtHash || undefined,
                     sentenceIndex,
                     sentenceHash,
                     context: sentenceText,
                 });
             } else {
-                toast.error(result.error || t('updateWordStatusFailed'));
+                toast.error(result.error || t('wordStateUpdateFailed'));
             }
         } catch (error) {
             logger.error('update word status failed', { error: error instanceof Error ? error.message : error });
-            toast.error(t('updateWordStatusFailed'));
+            toast.error(t('wordStateUpdateFailed'));
         } finally {
             setUpdatingStatusPopKey((prev) => (prev === activePopKey ? null : prev));
         }

@@ -388,6 +388,8 @@ export default function PracticeDock() {
     }, []);
 
     const playClip = useCallback((unit: PracticeUnit, rate?: number) => {
+        stopStudioAudioRef.current?.();
+        stopHistoryAudio();
         lastStartedClipUnitKeyRef.current = unit.key;
         if (usePlayer.getState().playPracticeClip) {
             usePlayer.getState().playPracticeClip(unit.range, unit.anchor, rate !== undefined ? { rate } : undefined);
@@ -395,7 +397,7 @@ export default function PracticeDock() {
         }
         usePlayer.getState().gotoSentence(unit.anchor);
         usePlayer.getState().play();
-    }, []);
+    }, [stopHistoryAudio]);
 
     const handleReplay = useCallback(() => {
         if (!activeUnit) return;

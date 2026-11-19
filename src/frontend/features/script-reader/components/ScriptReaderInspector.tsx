@@ -499,7 +499,17 @@ function InspectorActiveBody({
                                 {onMarkWordKnown && (
                                     <button
                                         type="button"
-                                        onClick={() => onMarkWordKnown(word)}
+                                        onClick={() => {
+                                            setComprehension((prev) =>
+                                                prev
+                                                    ? {
+                                                          ...prev,
+                                                          unknownWords: prev.unknownWords.filter((w) => w !== word),
+                                                      }
+                                                    : prev,
+                                            );
+                                            onMarkWordKnown(word);
+                                        }}
                                         className="rounded text-secondary hover:text-accent cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                                         title={t('scriptReader.markKnown', { defaultValue: '标为已掌握' })}
                                         aria-label={t('scriptReader.markKnownWord', { defaultValue: `标熟 ${word}`, word })}
@@ -530,7 +540,7 @@ function InspectorActiveBody({
                     isBusy={copilot.isBusy}
                     sessionReady={copilot.sessionReady}
                     cloudAvailable={copilot.cloudAvailable}
-                    chatErrorText={copilot.chatErrorText}
+                    chatErrorText={copilot.chatErrorText ?? copilot.sessionError}
                     input={copilot.input}
                     onInputChange={copilot.setInput}
                     onSubmit={(val) => void copilot.handleSubmit(val)}

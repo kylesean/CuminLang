@@ -791,14 +791,19 @@ export const usePlayer = create<PlayerState>((set, get) => {
       activateCurrentLock(tailTarget, pauseMs + 1500);
       shadowTimer = setTimeout(() => {
         shadowTimer = null;
-        set({ shadowingPause: null });
+        clearCurrentLockTimer();
+        set((prev) => ({
+          shadowingPause: null,
+          internal: { ...prev.internal, currentLock: null },
+        }));
         const s = get();
         if (s.shadowing && !s.playing) {
-          if (useTrainingModeStore.getState().skipGap) {
+          const next = useTrainingModeStore.getState().skipGap ? getNavUnitAtOffset(1) : null;
+          if (next) {
             // 跳过空隙：直接跳到下一句开头并继续播放
-            s.nextSentence();
+            s.seekToTarget({ time: next.range.start, target: navUnitTarget(next.unit), play: true });
           } else {
-            // 不跳过空隙：原地恢复播放，让句间空隙自然播过去进入下一句
+            // 不跳过空隙（或已是末句）：原地恢复播放，让句间空隙自然播过去进入下一句
             // （不走 startPlayback，避免 rewindOnResume 把播放头退回本句开头）
             set((prev) => ({ playing: true, playRequestId: prev.playRequestId + 1 }));
           }
@@ -1696,8 +1701,9 @@ export const usePlayer = create<PlayerState>((set, get) => {
       const pos = findFocusedNavIndex();
       if (pos < 0) return;
 
-      // 跳句不改变播放意图：暂停中按「下一句」只移动播放头与高亮，不应突然起播。
-      const play = get().playing;
+      // 跳句不改变播放意图：暂停中按「下一句」只移动播放头与高亮，不应突然起播；
+      // 影子跟读留白期间（shadowingPause !== null）点「跳过留白」属于跟读流内续接，应恢复播放。
+      const play = get().playing || get().shadowingPause !== null;
       const nextIdx = Math.min(units.length - 1, Math.max(0, pos + step));
       const unit = units[nextIdx];
 

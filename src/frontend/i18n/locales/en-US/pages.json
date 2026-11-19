@@ -251,6 +251,7 @@
         "startTranscribe": "Transcribe Locally",
         "noAudioSelected": "Please select at least one audio file (MP3, M4A, WAV, etc.)",
         "importAudioFailed": "Failed to import audio",
+        "importAudioFailedWithReason": "Failed to import audio: {{message}}",
         "emptySelectTitle": "No scripts yet",
         "emptySelectDesc": "Open captioned videos from your library or import MP3 / M4A audio to generate a script.",
         "openDocListBtn": "Browse scripts"

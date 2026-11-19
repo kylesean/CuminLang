@@ -260,9 +260,10 @@ export const useWatchPlayer = (detail: MobileWatchDetail): WatchPlayerApi => {
         targetTime: number,
         targetIndex: number | null,
     ): number | null => {
+        const alreadyAtTarget = Math.abs(video.currentTime - targetTime) < 1e-4;
         const token = ++seekTokenRef.current;
-        activeProgrammaticTokenRef.current = token;
-        seekInFlightRef.current = true;
+        activeProgrammaticTokenRef.current = alreadyAtTarget ? null : token;
+        seekInFlightRef.current = !alreadyAtTarget;
         seekTargetIndexRef.current = targetIndex;
         try {
             video.currentTime = targetTime;
