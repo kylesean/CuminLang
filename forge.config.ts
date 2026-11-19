@@ -77,6 +77,31 @@ const pruneForeignNativeVariants = async (buildPath: string, platform: string, a
     await drop(path.join(buildPath, 'node_modules/better-sqlite3/deps'));
     await drop(path.join(buildPath, 'node_modules/better-sqlite3/src'));
     await drop(path.join(buildPath, 'node_modules/node-addon-api'));
+
+    // onnxruntime-node：bin/napi-v*/<platform>/<arch> 只保留目标平台架构
+    // （其余变体合计 ~220MB，且异架构 ELF 同样会让 Linux RPM brp-strip 失败）
+    const ortBinRoot = path.join(buildPath, 'node_modules/onnxruntime-node/bin');
+    if (await pathExists(ortBinRoot)) {
+        for (const napiDir of await fs.readdir(ortBinRoot)) {
+            const napiPath = path.join(ortBinRoot, napiDir);
+            const napiStat = await fs.stat(napiPath).catch(() => null);
+            if (!napiStat?.isDirectory()) continue;
+            for (const platDir of await fs.readdir(napiPath)) {
+                const platPath = path.join(napiPath, platDir);
+                if (platDir !== nativePlatform) {
+                    await drop(platPath);
+                    continue;
+                }
+                const platStat = await fs.stat(platPath).catch(() => null);
+                if (!platStat?.isDirectory()) continue;
+                for (const archDir of await fs.readdir(platPath)) {
+                    if (archDir !== arch) {
+                        await drop(path.join(platPath, archDir));
+                    }
+                }
+            }
+        }
+    }
 };
 
 /**
@@ -113,12 +138,14 @@ const config: ForgeConfig = {
         // Keep the package small by still ignoring everything else.
         ignore: (file: string) => {
             if (!file) return false;
-            if (file.startsWith('/.vite')) return false;
-            if (file === '/node_modules') return false;
 
             // sourcemap 只服务于开发期与错误符号化，符号化用上传到符号服务的 map 即可；
             // 打进安装包只会白白多 ~35MB（main + renderer 的 sourcesContent 全量）。
+            // 必须在 `/.vite` 白名单之前判定，否则 `/.vite/**/*.map` 会被提前放行。
             if (file.endsWith('.map')) return true;
+
+            if (file.startsWith('/.vite')) return false;
+            if (file === '/node_modules') return false;
 
             // 仅保留 Vite externalized 的原生依赖、构建期按需保留的头文件及运行时网络代理传递依赖；
             // node-addon-api 在 @electron/rebuild 编译阶段需要参与 include 探测，随后在 packageAfterPrune 中一并裁除
