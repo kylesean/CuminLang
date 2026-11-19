@@ -172,6 +172,20 @@ describe('media:// 协议处理器', () => {
             fs.rmSync(siblingRoot, { recursive: true, force: true });
         });
 
+        it('根目录内以两个或三个点号开头的合法文件名不会被误判为路径穿越', async () => {
+            const dotPrefixFile = path.join(tempRoot, '...And Justice for All.mp4');
+            fs.writeFileSync(dotPrefixFile, FILE_CONTENT, 'utf8');
+            const handler = createMediaRequestHandler({ resolveAllowedRoots: async () => [tempRoot] });
+
+            try {
+                const response = await handler(buildRequest(dotPrefixFile));
+                expect(response.status).toBe(200);
+                expect(await response.text()).toBe(FILE_CONTENT);
+            } finally {
+                fs.rmSync(dotPrefixFile, { force: true });
+            }
+        });
+
         it('文件不存在时返回 404', async () => {
             const handler = createMediaRequestHandler({ resolveAllowedRoots: async () => [tempRoot] });
 

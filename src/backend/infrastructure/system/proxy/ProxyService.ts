@@ -129,11 +129,11 @@ class NodeProxyController {
         if (key === this.currentKey) {
             return;
         }
-        this.currentKey = key;
-        this.matcher = createProxyBypassMatcher(bypassRules);
-
-        this.disposeProxyDispatcher();
+        const nextMatcher = createProxyBypassMatcher(bypassRules);
         if (!url) {
+            this.disposeProxyDispatcher();
+            this.matcher = nextMatcher;
+            this.currentKey = key;
             setGlobalDispatcher(this.originalGlobalDispatcher);
             return;
         }
@@ -142,6 +142,9 @@ class NodeProxyController {
         const proxyDispatcher = endpoint.kind === 'socks'
             ? this.buildSocksDispatcher(endpoint.value)
             : new EnvHttpProxyAgent();
+        this.disposeProxyDispatcher();
+        this.matcher = nextMatcher;
+        this.currentKey = key;
         this.proxyDispatcher = proxyDispatcher;
         setGlobalDispatcher(new SelectiveDispatcher(proxyDispatcher, this.originalGlobalDispatcher, this.matcher));
     }
@@ -314,9 +317,10 @@ const startSystemProxyMonitor = (): void => {
  * 并依据模式开启系统代理轮询。
  */
 export const initProxy = async (): Promise<void> => {
+    const mode = storeGet('proxy.mode') as ProxyMode;
     const config = await snapshotProxyConfig();
     stopSystemProxyMonitor();
-    if (config.mode === 'system') {
+    if (mode === 'system') {
         startSystemProxyMonitor();
     }
     await applyProxy(config);

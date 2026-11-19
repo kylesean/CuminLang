@@ -707,17 +707,24 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
         if (!record) {
             return;
         }
-        // 如果是 libraryPath 或子文件夹下的文件（使用 path.relative 边界判定，避免 /videos-backup 被 /videos 误匹配）
-        const filePath = path.resolve(record.base_path, record.file_name);
-        if (isPathInsideRoot(libraryPath, filePath)) {
-            await this.fileSystemGateway.removeFileIfExists(filePath);
-            this.rendererGateway.fireAndForget('ui/show-toast', {
-                message: '该文件位于视频库中，已为您删除原文件',
-                variant: 'info',
-            });
-        }
         await this.watchHistoryRepository.deleteById(id);
         await this.watchHistoryExtRepository.deleteByWatchHistoryId(id);
+        // 如果是 libraryPath 或子文件夹下的文件（使用 path.relative 边界判定，避免 /videos-backup 被 /videos 误匹配），
+        // 且没有其它观看记录仍指向同一物理文件时才删除原文件。
+        const filePath = path.resolve(record.base_path, record.file_name);
+        if (isPathInsideRoot(libraryPath, filePath)) {
+            const remainingFileRefs = (await this.watchHistoryRepository.findByBasePathFileName?.(
+                record.base_path,
+                record.file_name,
+            )) ?? [];
+            if (CollUtil.isEmpty(remainingFileRefs)) {
+                await this.fileSystemGateway.removeFileIfExists(filePath);
+                this.rendererGateway.fireAndForget('ui/show-toast', {
+                    message: '该文件位于视频库中，已为您删除原文件',
+                    variant: 'info',
+                });
+            }
+        }
         // 删除字幕文件
         if (record.srt_file) {
             const resolvedSrtFile = path.resolve(record.srt_file);

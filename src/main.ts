@@ -516,10 +516,23 @@ app.on('before-quit', (event) => {
     logger.info('app before quit', { forceExitAfterMs: QUIT_FORCE_EXIT_TIMEOUT_MS });
     armForceExitWatchdog();
     try {
-        container.get<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow).destroy();
+        const inRecoveryMode = getMigrationFailure() !== null;
+        if (!inRecoveryMode) {
+            container.get<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow).destroy();
+        }
         destroyAppTray();
         disposeProxyFeature();
         terminateAllActiveChildProcesses();
+        if (inRecoveryMode) {
+            try {
+                closeMainDatabase();
+            } catch (dbError) {
+                logger.error('main database close failed', { error: dbError });
+            }
+            appPhase = 'ready_to_quit';
+            app.quit();
+            return;
+        }
         // 语义向量运行时是独立的 llama-server 进程，不接入退出链会在每次正常
         // 退出后留下一个常驻孤儿进程（空闲卸载窗口内使用过语义推荐即触发）。
         const embeddingShutdown = container.get<LocalEmbeddingRuntime>(TYPES.LocalEmbeddingRuntime).shutdown()

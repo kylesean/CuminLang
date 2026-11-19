@@ -172,14 +172,11 @@ export default class StorageDirectoryProviderImpl implements StorageDirectoryPro
     }
 
     /**
-     * 等待当前恢复弹窗结束。
+     * 等待当前恢复弹窗结束；若用户在弹窗中取消或恢复失败，将拒绝结果直接传播给所有并发等待方，
+     * 避免并发请求在用户点击取消后连环弹出多个重复的文件夹选择框。
      */
     private async waitForRecoveryDialog(): Promise<void> {
-        try {
-            await this.activeRecoveryDialog;
-        } catch {
-            // 当前请求只负责等待既有弹窗结束，随后重新检查访问状态。
-        }
+        await this.activeRecoveryDialog;
     }
 
     /**
@@ -251,6 +248,10 @@ export default class StorageDirectoryProviderImpl implements StorageDirectoryPro
                 : undefined;
             if (errorCode === 'ENOENT') {
                 return null;
+            }
+            if (errorCode === 'EACCES' || errorCode === 'EPERM') {
+                // 目标路径本身或其父目录因无权限导致 stat 失败时，按已存在条目进入父目录权限恢复流程。
+                return 'file';
             }
             throw error;
         }

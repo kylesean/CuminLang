@@ -996,6 +996,9 @@ export default class MobileWebServer {
         start: number | undefined,
         end: number | undefined,
     ): void {
+        if (response.destroyed || response.writableEnded) {
+            return;
+        }
         const stream = fs.createReadStream(filePath, { start, end });
         stream.on('error', (error) => {
             this.logger.warn('video stream failed', { error });

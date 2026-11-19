@@ -53,7 +53,7 @@ export default abstract class AbstractOssServiceImpl<T> implements OssService<T>
         }
         const target = path.resolve(basePath, key);
         const relative = path.relative(basePath, target);
-        if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+        if (relative === '' || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
             throw new Error(`非法的片段 key：${key}`);
         }
         return target;

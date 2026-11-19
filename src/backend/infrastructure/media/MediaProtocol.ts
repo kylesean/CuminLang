@@ -84,7 +84,7 @@ export function isPathInsideRoot(rootPath: string, targetPath: string): boolean 
     if (relativePath === '') {
         return true;
     }
-    if (relativePath.startsWith('..')) {
+    if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`)) {
         return false;
     }
     return !path.isAbsolute(relativePath);

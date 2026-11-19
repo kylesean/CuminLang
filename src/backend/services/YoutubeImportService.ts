@@ -285,14 +285,22 @@ export class YoutubeImportServiceImpl implements YoutubeImportService {
             }
 
             const cookiesFilePath = this.getCookiesFilePath();
-            // 信号量必须包住“启动下载”，否则并发任务会同时 spawn yt-dlp。
+            // 信号量必须包住“启动下载”，否则并发任务会同时 spawn yt-dlp；
+            // 同时在排队等待信号量阶段即接入取消回调，避免排队任务被取消后仍卡在队列中。
             const queue = concurrency.semaphore('yt-dlp').snapshot();
             if (queue.inUse >= queue.capacity || queue.waiting > 0) {
                 this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'queued' } });
             }
-            const { videoPath, srtPaths } = await concurrency.withSemaphore('yt-dlp', async () => {
-                this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'connecting' } });
+            let abortQueuedWait: (() => void) | null = null;
+            this.dpTaskService.registerTask(taskId, {
+                cancel: () => {
+                    abortQueuedWait?.();
+                },
+            });
+            const semaphorePromise = concurrency.withSemaphore('yt-dlp', async () => {
+                abortQueuedWait = null;
                 this.dpTaskService.checkCancel(taskId);
+                this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'connecting' } });
                 const running = this.ytDlpGateway.download({
                     url,
                     outputDir: workDir,
@@ -307,6 +315,11 @@ export class YoutubeImportServiceImpl implements YoutubeImportService {
                 });
                 this.dpTaskService.registerTask(taskId, { cancel: () => running.cancel() });
                 return await running.result;
+            });
+            void semaphorePromise.catch(() => undefined);
+            const { videoPath, srtPaths } = await new Promise<{ videoPath: string; srtPaths: string[] }>((resolve, reject) => {
+                abortQueuedWait = () => reject(new CancelByUserError());
+                semaphorePromise.then(resolve, reject);
             });
 
             this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'finalizing' } });
