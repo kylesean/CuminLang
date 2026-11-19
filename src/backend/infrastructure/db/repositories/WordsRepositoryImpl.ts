@@ -67,14 +67,41 @@ export default class WordsRepositoryImpl implements WordsRepository {
         // 每行最多绑定约 10 个参数，300 行远低于 SQLite 32766 变量上限。
         const chunkSize = 300;
         this.db.transaction((tx) => {
+            // 保留已存在用户词条的学习状态与原始掌握度证据，仅更新释义并剔除未出现在导入表中的词条。
+            const existingUserRows = new Map(
+                tx
+                    .select()
+                    .from(words)
+                    .where(ne(words.source, 'default'))
+                    .all()
+                    .map((row) => [row.word.toLowerCase(), row]),
+            );
             tx.delete(words).where(ne(words.source, 'default')).run();
             if (values.length === 0) {
                 return;
             }
 
-            for (let index = 0; index < values.length; index += chunkSize) {
+            const mergedValues = values.map((item) => {
+                const existing = existingUserRows.get(item.word.toLowerCase());
+                if (!existing) {
+                    return item;
+                }
+                return {
+                    ...item,
+                    translate: item.translate ?? existing.translate,
+                    status: existing.status,
+                    source: existing.source,
+                    mastery: item.mastery ?? existing.mastery,
+                    confidence: item.confidence ?? existing.confidence,
+                    last_seen_at: item.last_seen_at !== undefined ? item.last_seen_at : existing.last_seen_at,
+                    mastered_at: item.mastered_at !== undefined ? item.mastered_at : existing.mastered_at,
+                    created_at: existing.created_at,
+                };
+            });
+
+            for (let index = 0; index < mergedValues.length; index += chunkSize) {
                 tx.insert(words)
-                    .values(values.slice(index, index + chunkSize))
+                    .values(mergedValues.slice(index, index + chunkSize))
                     .onConflictDoUpdate({
                         target: words.word,
                         set: {

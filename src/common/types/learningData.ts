@@ -93,6 +93,7 @@ export interface LearningDataSentencePracticeVO {
     transcript: string | null;
     audioFile: string | null;
     detailJson: string | null;
+    rhythmJson?: string | null;
     createdAt: string;
 }
 

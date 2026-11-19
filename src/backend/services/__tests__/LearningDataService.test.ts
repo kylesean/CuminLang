@@ -553,6 +553,7 @@ describe('LearningDataService 导出与清除', () => {
             mode: 'shadowing',
             score: 85,
             transcript: 'a long journey',
+            rhythm_json: '{"speechRatio":1.05}',
         });
         await memoryDb.db.insert(productionPracticeRecord).values({
             mode: 'retell',

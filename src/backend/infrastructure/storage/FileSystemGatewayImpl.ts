@@ -75,6 +75,14 @@ export default class FileSystemGatewayImpl implements FileSystemGateway {
      */
     public async readTextFile(filePath: string): Promise<string> {
         const buffer = await fs.readFile(filePath);
+        // 合法 UTF-8（且非 UTF-16 BOM）优先按 UTF-8 解码，防止 jschardet 将中英混排 JSON/SRT 误判为单字节编码导致乱码。
+        if (!(buffer.length >= 2 && ((buffer[0] === 0xff && buffer[1] === 0xfe) || (buffer[0] === 0xfe && buffer[1] === 0xff)))) {
+            try {
+                return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+            } catch {
+                // 非合法 UTF-8 字节序列（如 GBK / Big5 / Windows-1252），继续走编码探测。
+            }
+        }
         const detected = jschardetDetect(buffer);
         const candidate = detected.encoding || 'utf-8';
         const encoding = iconv.encodingExists(candidate) ? candidate : 'utf-8';

@@ -61,4 +61,50 @@ describe('WordsRepositoryImpl.replaceAll', () => {
         expect(overridden?.source).toBe('imported');
         expect(overridden?.translate).toBe('释义_0');
     });
+
+    it('重新导入词表时保留已存在用户词条的学习状态与原始掌握度，仅更新释义', async () => {
+        memoryDb = createMemoryDb();
+        const past = '2026-11-10T00:00:00.000Z';
+        const now = '2026-11-19T00:00:00.000Z';
+
+        memoryDb.db.insert(words).values([
+            {
+                word: 'orbit',
+                translate: '旧释义',
+                status: 'known',
+                source: 'manual',
+                mastery: 0.92,
+                confidence: 0.85,
+                last_seen_at: past,
+                mastered_at: past,
+                created_at: past,
+                updated_at: past,
+            },
+        ]).run();
+
+        const repo = new WordsRepositoryImpl(memoryDb.db);
+        await repo.replaceAll([
+            {
+                word: 'orbit',
+                translate: '新释义：轨道',
+                status: 'learning',
+                source: 'imported',
+                created_at: now,
+                updated_at: now,
+            },
+        ]);
+
+        const stored = memoryDb.db.select().from(words).where(eq(words.word, 'orbit')).get();
+        expect(stored).toMatchObject({
+            word: 'orbit',
+            translate: '新释义：轨道',
+            status: 'known',
+            source: 'manual',
+            mastery: 0.92,
+            confidence: 0.85,
+            last_seen_at: past,
+            mastered_at: past,
+            created_at: past,
+        });
+    });
 });

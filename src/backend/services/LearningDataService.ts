@@ -305,6 +305,7 @@ export class LearningDataServiceImpl implements LearningDataService {
                 transcript: record.transcript,
                 audioFile: record.audio_file,
                 detailJson: record.detail_json,
+                ...(record.rhythm_json !== null ? { rhythmJson: record.rhythm_json } : {}),
                 createdAt: record.created_at,
             })),
             productionPractices: productionPractices.map((record) => ({

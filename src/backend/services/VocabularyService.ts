@@ -218,13 +218,16 @@ export class VocabularyServiceImpl implements VocabularyService {
      * @returns 历史快照；查询失败时返回 null。
      */
     async getWordMemory(rawWord: string): Promise<WordMemoryVO | null> {
-        const lemma = lemmatizeWord(rawWord).toLowerCase().trim();
-        if (!lemma) {
+        const rawLower = (rawWord ?? '').trim().toLowerCase();
+        const lemmatized = lemmatizeWord(rawWord).toLowerCase().trim();
+        if (!rawLower && !lemmatized) {
             return null;
         }
         try {
+            const exactWord = rawLower ? await this.wordsRepository.findByWord(rawLower) : null;
+            const lemma = exactWord ? exactWord.word.toLowerCase() : (lemmatized || rawLower);
             const [word, card, contexts] = await Promise.all([
-                this.wordsRepository.findByWord(lemma),
+                exactWord ? Promise.resolve(exactWord) : this.wordsRepository.findByWord(lemma),
                 this.reviewCardRepository.findByWord(lemma),
                 this.wordEncounterRepository.findLatestContexts([lemma]),
             ]);
@@ -252,7 +255,7 @@ export class VocabularyServiceImpl implements VocabularyService {
             };
         } catch (error) {
             this.logger.warn('word memory read failed', {
-                word: lemma,
+                word: lemmatized || rawLower,
                 error: error instanceof Error ? error.message : String(error),
             });
             return null;
@@ -373,10 +376,15 @@ export class VocabularyServiceImpl implements VocabularyService {
             const addedCount = importedWords.length - retainedCount;
             const removedCount = existingWords.filter((item) => !importedWordSet.has(item.word)).length;
 
+            const existingStatusByWord = new Map(
+                existingWords.map((item) => [item.word.toLowerCase(), item.status]),
+            );
             await this.wordsRepository.replaceAll(importedWords);
-            // 导入词统一是 learning 状态，同样参与字幕标注与推荐，必须同步进入复习队列；
-            // 同时清掉已不在词表里的孤儿卡，避免同名再次导入时复活旧调度。
-            const activeWords = importedWords.map((item) => item.word);
+            // 仅对活跃学习态（新增或原本处于 learning/familiar）的词同步进入复习队列；
+            // 已掌握（known）或已忽略（ignored）的保留词不重新建卡，同时清理已不在词表里的孤儿卡。
+            const activeWords = importedWords
+                .filter((item) => isActiveWordStatus(existingStatusByWord.get(item.word.toLowerCase()) ?? 'learning'))
+                .map((item) => item.word);
             await this.reviewCardRepository.ensureForWords(activeWords, new Date().toISOString());
             await this.reviewCardRepository.deleteOrphans();
             this.wordMatchService.invalidateVocabularyCache();
@@ -431,8 +439,10 @@ export class VocabularyServiceImpl implements VocabularyService {
                 };
             }
 
-            const lemma = lemmatizeWord(input);
-            const existing = await this.wordsRepository.findByWord(lemma);
+            const rawLower = input.toLowerCase();
+            const exactWord = await this.wordsRepository.findByWord(rawLower);
+            const lemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
+            const existing = exactWord ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
             if (existing) {
                 const carriedTranslate = translate?.trim() ?? '';
                 const nextTranslate = existing.translate?.trim()
@@ -517,8 +527,10 @@ export class VocabularyServiceImpl implements VocabularyService {
                 return { success: false, error: '单词不能为空' };
             }
 
-            const lemma = lemmatizeWord(input);
-            const existing = await this.wordsRepository.findByWord(lemma);
+            const rawLower = input.toLowerCase();
+            const exactWord = await this.wordsRepository.findByWord(rawLower);
+            const lemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
+            const existing = exactWord ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
             if (existing) {
                 const source: WordSource = existing.source === 'default' ? 'manual' : existing.source;
                 await this.wordsRepository.updateState(lemma, {
@@ -644,7 +656,9 @@ export class VocabularyServiceImpl implements VocabularyService {
                 };
             }
 
-            const lemma = lemmatizeWord(input);
+            const rawLower = input.toLowerCase();
+            const exactWord = await this.wordsRepository.findByWord(rawLower);
+            const lemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
             await this.wordsRepository.deleteByWord(lemma);
             await this.reviewCardRepository.deleteByWord(lemma);
             await this.clipWordRepository.deleteByWord(lemma);

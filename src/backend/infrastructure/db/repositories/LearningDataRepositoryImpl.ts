@@ -386,6 +386,7 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
                         transcript: record.transcript,
                         audio_file: record.audioFile,
                         detail_json: record.detailJson,
+                        rhythm_json: record.rhythmJson ?? null,
                         created_at: record.createdAt,
                     }))).run();
                 });

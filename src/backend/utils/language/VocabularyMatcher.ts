@@ -148,9 +148,9 @@ export class WinkVocabularyMatcher<TPayload> implements VocabularyMatcher<TPaylo
                 continue;
             }
 
-            const entry = this.wordIndex.get(lemma);
+            const entry = this.wordIndex.get(lemma) ?? this.wordIndex.get(surface);
             if (entry) {
-                matches.push({ original: token.text, normalized: lemma, payload: entry.payload });
+                matches.push({ original: token.text, normalized: entry.text.trim().toLowerCase(), payload: entry.payload });
             }
         }
         return matches;

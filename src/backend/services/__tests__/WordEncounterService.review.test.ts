@@ -380,4 +380,19 @@ describe('WordEncounterService 复习闭环', () => {
         expect(afterCard?.reps).toBe(3);
         expect(afterCard?.due_at).toBe(futureDueAt);
     });
+
+    it('通过词表直接导入的非原形词（如 findings）在复习队列中可正常评分推进而不报词条不存在', async () => {
+        memoryDb = createMemoryDb();
+        const { service, words, cards } = buildService(memoryDb);
+        const past = new Date(Date.now() - DAY_MS).toISOString();
+        await words.insertOne({ word: 'findings', translate: '调查发现', status: 'learning', source: 'imported' });
+        await cards.ensureForWords(['findings'], past);
+
+        const queue = await service.getReviewQueue();
+        expect(queue.items.map((item) => item.word)).toContain('findings');
+
+        const rated = await service.rateReview({ word: 'findings', rating: 'good' });
+        expect(rated.card.word).toBe('findings');
+        expect(rated.card.schedule.reps).toBe(1);
+    });
 });

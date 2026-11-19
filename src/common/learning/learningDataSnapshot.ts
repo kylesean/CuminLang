@@ -239,6 +239,7 @@ const parseRecommendation = (value: unknown, path: string): LearningDataRecommen
 
 const parseSentencePractice = (value: unknown, path: string): LearningDataSentencePracticeVO => {
     const raw = record(value, path);
+    const rhythmJson = nullableStr(raw.rhythmJson, `${path}.rhythmJson`);
     return {
         fileHash: str(raw.fileHash, `${path}.fileHash`),
         sentenceIndex: int(raw.sentenceIndex, `${path}.sentenceIndex`),
@@ -247,6 +248,7 @@ const parseSentencePractice = (value: unknown, path: string): LearningDataSenten
         transcript: nullableStr(raw.transcript, `${path}.transcript`),
         audioFile: nullableStr(raw.audioFile, `${path}.audioFile`),
         detailJson: nullableStr(raw.detailJson, `${path}.detailJson`),
+        ...(rhythmJson !== null ? { rhythmJson } : {}),
         createdAt: dateStr(raw.createdAt, `${path}.createdAt`),
     };
 };

@@ -88,7 +88,9 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         if (!word) {
             return;
         }
-        const lemma = lemmatizeWord(word);
+        const rawLower = word.toLowerCase();
+        const exactExisting = await this.wordsRepository.findByWord(rawLower);
+        const lemma = exactExisting ? exactExisting.word.toLowerCase() : lemmatizeWord(word);
         if (!lemma) {
             return;
         }
@@ -106,7 +108,7 @@ export class WordEncounterServiceImpl implements WordEncounterService {
             rating: params.rating ?? null,
         });
 
-        const existing = await this.wordsRepository.findByWord(lemma);
+        const existing = exactExisting ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
         if (!existing) {
             return;
         }
@@ -228,11 +230,13 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         if (!input) {
             throw new Error('单词不能为空');
         }
-        const lemma = lemmatizeWord(input);
-        const word = await this.wordsRepository.findByWord(lemma);
+        const rawLower = input.toLowerCase();
+        const word = (await this.wordsRepository.findByWord(rawLower))
+            ?? (await this.wordsRepository.findByWord(lemmatizeWord(input)));
         if (!word) {
             throw new Error('词条不存在');
         }
+        const lemma = word.word.toLowerCase();
         if (!isActiveWordStatus(word.status)) {
             throw new Error('该词当前不在复习队列');
         }
