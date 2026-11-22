@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import TYPES from '@/backend/ioc/types';
 import { ObjUtil } from '@/backend/utils/ObjUtil';
-import { concurrency } from '@/backend/utils/concurrency';
+import { runCloudLlmRequest } from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import { analyzeWords } from '@/backend/utils/language/VocabularyMatcher';
 import type AiProviderService from '@/backend/services/AiProviderService';
 import type CacheService from '@/backend/services/CacheService';
@@ -759,7 +759,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         });
         const startedAt = Date.now();
         try {
-            const result = await concurrency.withRateLimit('gpt', () => generateObject({
+            const result = await runCloudLlmRequest(() => generateObject({
                 model: args.cloudModel,
                 schema: recapSchema,
                 prompt,
@@ -1016,7 +1016,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         });
 
         try {
-            const result = await concurrency.withRateLimit('gpt', () => generateObject({
+            const result = await runCloudLlmRequest(() => generateObject({
                 model: args.cloudModel,
                 schema: retellSchema,
                 prompt,
@@ -1089,7 +1089,7 @@ export class LearningRecapServiceImpl implements LearningRecapService {
         });
 
         try {
-            const result = await concurrency.withRateLimit('gpt', () => generateObject({
+            const result = await runCloudLlmRequest(() => generateObject({
                 model: args.cloudModel,
                 schema: rolePlayFeedbackSchema,
                 prompt,

@@ -9,7 +9,7 @@ import type {
     CompleteSentenceParams,
     CompleteSentenceResult,
 } from '@/common/types/chat';
-import { WithRateLimit } from '@/backend/utils/concurrency/decorators';
+import { runCloudLlmRequest } from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import { buildCompleteSentencePrompt } from '@/backend/services/chat/ChatPromptBuilder';
 
 /**
@@ -47,7 +47,6 @@ export class SentenceLearningServiceImpl implements SentenceLearningService {
         @inject(TYPES.AiProviderService) private readonly aiProviderService: AiProviderService,
     ) {}
 
-    @WithRateLimit('gpt')
     public async completeSentence(params: CompleteSentenceParams): Promise<CompleteSentenceResult> {
         const model = this.aiProviderService.getModel('sentenceLearning');
         if (!model) {
@@ -60,12 +59,13 @@ export class SentenceLearningServiceImpl implements SentenceLearningService {
             followingCount: params.followingLines.length,
         });
         try {
-            const result = await generateObject({
+            const result = await runCloudLlmRequest(() => generateObject({
                 model,
                 schema: CompleteSentenceSchema,
                 prompt: buildCompleteSentencePrompt(params),
+                maxRetries: 0,
                 abortSignal: AbortSignal.timeout(60_000),
-            });
+            }));
             this.logger.info('complete sentence done', {
                 durationMs: Date.now() - startedAt,
                 complete: result.object.complete,

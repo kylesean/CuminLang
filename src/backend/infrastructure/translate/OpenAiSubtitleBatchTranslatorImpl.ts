@@ -7,7 +7,7 @@ import type {
     SubtitleBatchTranslationInput,
     SubtitleTranslationResultItem,
 } from '@/backend/services/gateways/translate/SubtitleBatchTranslationInput';
-import { concurrency } from '@/backend/utils/concurrency';
+import { runCloudLlmRequest } from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import {
     buildSubtitleBatchPrompt,
     createSubtitleBatchResultSchema,
@@ -89,7 +89,7 @@ implements OpenAiSubtitleBatchTranslator {
         const prompt = buildSubtitleBatchPrompt(input, input.style);
 
         try {
-            const result = await concurrency.withRateLimit('gpt', () =>
+            const result = await runCloudLlmRequest(() =>
                 generateText({
                     model,
                     output: Output.object({ schema }),

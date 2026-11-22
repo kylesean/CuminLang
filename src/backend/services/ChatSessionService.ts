@@ -27,7 +27,10 @@ import type {
     SubtitleSearchHit,
     SubtitleToolLine,
 } from '@/common/types/chat';
-import { WithRateLimit } from '@/backend/utils/concurrency/decorators';
+import {
+    isRateLimitError,
+    runCloudLlmRequest,
+} from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import { isUserCancellation } from '@/common/utils/cancellation';
 import {
     buildSubtitleContext,
@@ -142,7 +145,6 @@ export class ChatSessionServiceImpl implements ChatSessionService {
         return undefined;
     }
 
-    @WithRateLimit('gpt')
     public async sendMessage(
         params: ChatSendMessageParams,
     ): Promise<ChatSendMessageResult> {
@@ -231,29 +233,6 @@ export class ChatSessionServiceImpl implements ChatSessionService {
         const { system, messages: promptMessages } = splitSystemMessages(effectiveMessages);
         const startedAt = Date.now();
         this.logger.info('chat stream start', { sessionId, messageId, allowTools: effectiveAllowTools });
-        const result = streamText({
-            model,
-            system,
-            messages: promptMessages,
-            ...(effectiveAllowTools
-                ? {
-                    tools: this.buildSubtitleTools(sessionId),
-                    stopWhen: isStepCount(20),
-                }
-                : {}),
-            // 仅 OpenAI Responses API 关闭服务端状态引用（store: false），避免在标准 /chat/completions 下注入非标准字段
-            ...(isOpenAiResponsesModel(model)
-                ? {
-                    providerOptions: {
-                        openai: {
-                            store: false,
-                        },
-                    },
-                }
-                : {}),
-            abortSignal,
-            timeout: { firstChunkMs: 30_000, chunkMs: 60_000 },
-        });
         let chunkCount = 0;
         let content = '';
         let aborted = false;
@@ -264,104 +243,146 @@ export class ChatSessionServiceImpl implements ChatSessionService {
         const blocks: LearningMessageBlock[] = [];
         const activeToolBlocks = new Map<string, LearningMessageBlock>();
 
-        const uiStream = toUIMessageStream({
-            stream: result.stream,
-            generateMessageId: () => messageId,
-            onError: (error) => describeStreamError(error),
-        });
+        await runCloudLlmRequest(async (attempt) => {
+            chunkCount = 0;
+            content = '';
+            aborted = false;
+            hasErrorChunk = false;
+            hasOutput = false;
+            shouldFallbackWithoutTools = false;
+            blocks.length = 0;
+            activeToolBlocks.clear();
 
-        try {
-            for await (const chunk of uiStream) {
-                chunkCount += 1;
-                if (chunk.type === 'start') {
-                    if (streamStarted) continue;
-                    streamStarted = true;
-                } else if (chunk.type === 'error') {
-                    if (effectiveAllowTools && !hasOutput && !abortSignal.aborted && isToolsUnsupportedError(chunk.errorText)) {
-                        if (toolsUnsupportedKey) {
-                            this.chatSessionStore.markToolsUnsupported(sessionId, toolsUnsupportedKey);
+            const result = streamText({
+                model,
+                system,
+                messages: promptMessages,
+                ...(effectiveAllowTools
+                    ? {
+                        tools: this.buildSubtitleTools(sessionId),
+                        stopWhen: isStepCount(20),
+                    }
+                    : {}),
+                // 仅 OpenAI Responses API 关闭服务端状态引用（store: false），避免在标准 /chat/completions 下注入非标准字段
+                ...(isOpenAiResponsesModel(model)
+                    ? {
+                        providerOptions: {
+                            openai: {
+                                store: false,
+                            },
+                        },
+                    }
+                    : {}),
+                maxRetries: 0,
+                abortSignal,
+                timeout: { firstChunkMs: 30_000, chunkMs: 60_000 },
+            });
+
+            const uiStream = toUIMessageStream({
+                stream: result.stream,
+                generateMessageId: () => messageId,
+                onError: (error) => describeStreamError(error),
+            });
+
+            try {
+                for await (const chunk of uiStream) {
+                    chunkCount += 1;
+                    if (chunk.type === 'start') {
+                        if (streamStarted) continue;
+                        streamStarted = true;
+                    } else if (chunk.type === 'error') {
+                        if (effectiveAllowTools && !hasOutput && !abortSignal.aborted && isToolsUnsupportedError(chunk.errorText)) {
+                            if (toolsUnsupportedKey) {
+                                this.chatSessionStore.markToolsUnsupported(sessionId, toolsUnsupportedKey);
+                            }
+                            shouldFallbackWithoutTools = true;
+                            this.logger.warn('chat stream tools unsupported, falling back without tools', {
+                                sessionId,
+                                messageId,
+                                modelId: toolsUnsupportedKey,
+                                reason: chunk.errorText,
+                            });
+                            break;
                         }
-                        shouldFallbackWithoutTools = true;
-                        this.logger.warn('chat stream tools unsupported, falling back without tools', {
-                            sessionId,
-                            messageId,
-                            modelId: toolsUnsupportedKey,
-                            reason: chunk.errorText,
-                        });
-                        break;
+                        if (attempt === 0 && !hasOutput && !abortSignal.aborted && isRateLimitError(chunk.errorText)) {
+                            throw new Error(chunk.errorText);
+                        }
+                        hasErrorChunk = true;
+                    } else if (chunk.type === 'text-delta') {
+                        hasOutput = true;
+                        content += chunk.delta;
+                        const last = blocks.at(-1);
+                        if (last && last.kind === 'text') {
+                            last.text += chunk.delta;
+                        } else if (chunk.delta.length > 0) {
+                            blocks.push({ kind: 'text', text: chunk.delta });
+                        }
+                    } else if (chunk.type === 'tool-input-available') {
+                        hasOutput = true;
+                        if (chunk.toolName === 'search_subtitles') {
+                            const input = chunk.input as { queries?: string[] } | undefined;
+                            const block: LearningMessageBlock = {
+                                kind: 'search',
+                                queries: input?.queries ?? [],
+                                hits: [],
+                                total: 0,
+                                running: true,
+                            };
+                            activeToolBlocks.set(chunk.toolCallId, block);
+                            blocks.push(block);
+                        } else if (chunk.toolName === 'get_subtitle_context') {
+                            const block: LearningMessageBlock = {
+                                kind: 'context',
+                                range: null,
+                                running: true,
+                            };
+                            activeToolBlocks.set(chunk.toolCallId, block);
+                            blocks.push(block);
+                        }
+                    } else if (chunk.type === 'tool-output-available') {
+                        hasOutput = true;
+                        const target = activeToolBlocks.get(chunk.toolCallId);
+                        if (target?.kind === 'search') {
+                            const output = chunk.output as SearchSubtitlesResult | undefined;
+                            const hits = output?.matches ?? [];
+                            target.hits = hits.map((hit) => ({ index: hit.index, text: hit.text }));
+                            target.total = output?.total ?? hits.length;
+                            target.running = false;
+                        } else if (target?.kind === 'context') {
+                            const output = chunk.output as GetSubtitleContextResult | undefined;
+                            target.range = output?.startIndex !== undefined && output?.endIndex !== undefined
+                                ? { start: output.startIndex, end: output.endIndex }
+                                : null;
+                            target.running = false;
+                        }
+                    } else if (chunk.type === 'abort') {
+                        aborted = true;
                     }
-                    hasErrorChunk = true;
-                } else if (chunk.type === 'text-delta') {
-                    hasOutput = true;
-                    content += chunk.delta;
-                    const last = blocks.at(-1);
-                    if (last && last.kind === 'text') {
-                        last.text += chunk.delta;
-                    } else if (chunk.delta.length > 0) {
-                        blocks.push({ kind: 'text', text: chunk.delta });
-                    }
-                } else if (chunk.type === 'tool-input-available') {
-                    hasOutput = true;
-                    if (chunk.toolName === 'search_subtitles') {
-                        const input = chunk.input as { queries?: string[] } | undefined;
-                        const block: LearningMessageBlock = {
-                            kind: 'search',
-                            queries: input?.queries ?? [],
-                            hits: [],
-                            total: 0,
-                            running: true,
-                        };
-                        activeToolBlocks.set(chunk.toolCallId, block);
-                        blocks.push(block);
-                    } else if (chunk.toolName === 'get_subtitle_context') {
-                        const block: LearningMessageBlock = {
-                            kind: 'context',
-                            range: null,
-                            running: true,
-                        };
-                        activeToolBlocks.set(chunk.toolCallId, block);
-                        blocks.push(block);
-                    }
-                } else if (chunk.type === 'tool-output-available') {
-                    hasOutput = true;
-                    const target = activeToolBlocks.get(chunk.toolCallId);
-                    if (target?.kind === 'search') {
-                        const output = chunk.output as SearchSubtitlesResult | undefined;
-                        const hits = output?.matches ?? [];
-                        target.hits = hits.map((hit) => ({ index: hit.index, text: hit.text }));
-                        target.total = output?.total ?? hits.length;
-                        target.running = false;
-                    } else if (target?.kind === 'context') {
-                        const output = chunk.output as GetSubtitleContextResult | undefined;
-                        target.range = output?.startIndex !== undefined && output?.endIndex !== undefined
-                            ? { start: output.startIndex, end: output.endIndex }
-                            : null;
-                        target.running = false;
-                    }
-                } else if (chunk.type === 'abort') {
-                    aborted = true;
+                    this.rendererGateway.fireAndForget('chat/stream', {
+                        sessionId,
+                        chunk,
+                    });
                 }
-                this.rendererGateway.fireAndForget('chat/stream', {
-                    sessionId,
-                    chunk,
-                });
-            }
-        } catch (error) {
-            if (effectiveAllowTools && !hasOutput && !abortSignal.aborted && isToolsUnsupportedError(describeStreamError(error))) {
-                if (toolsUnsupportedKey) {
-                    this.chatSessionStore.markToolsUnsupported(sessionId, toolsUnsupportedKey);
+            } catch (error) {
+                if (effectiveAllowTools && !hasOutput && !abortSignal.aborted && isToolsUnsupportedError(describeStreamError(error))) {
+                    if (toolsUnsupportedKey) {
+                        this.chatSessionStore.markToolsUnsupported(sessionId, toolsUnsupportedKey);
+                    }
+                    shouldFallbackWithoutTools = true;
+                    this.logger.warn('chat stream tools unsupported (thrown), falling back without tools', {
+                        sessionId,
+                        messageId,
+                        modelId: toolsUnsupportedKey,
+                        reason: describeStreamError(error),
+                    });
+                } else {
+                    throw error;
                 }
-                shouldFallbackWithoutTools = true;
-                this.logger.warn('chat stream tools unsupported (thrown), falling back without tools', {
-                    sessionId,
-                    messageId,
-                    modelId: toolsUnsupportedKey,
-                    reason: describeStreamError(error),
-                });
-            } else {
-                throw error;
             }
-        }
+        }, {
+            signal: abortSignal,
+            canRetry: () => !hasOutput,
+        });
 
         if (shouldFallbackWithoutTools) {
             return this.runStream(sessionId, messageId, model, messages, abortSignal, personaPrompt, false, streamStarted);

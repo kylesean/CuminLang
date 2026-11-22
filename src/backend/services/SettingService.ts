@@ -11,6 +11,7 @@ import {
     resolveProviderEndpointHost,
 } from '@/common/constants/cloud-ai-provider-presets';
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { runCloudLlmRequest } from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import type RendererEvents from '@/backend/services/gateways/renderer/RendererEvents';
 import type { SettingsStore } from '@/backend/services/gateways/SettingsStore';
 import type {
@@ -936,11 +937,15 @@ export class SettingServiceImpl implements SettingService {
             // 实测 qwen35-9b 一句 "Hello" 思考就 300+ tok，50 的预算必在思考中截断，
             // text 为空但 finish_reason=length —— 连通其实是好的。
             // 判定用 finishReason 而非正文：连通性测试只验证网关可达，不验证模型是否开口。
-            const result = await generateText({
-                model,
-                prompt: 'Hello',
-                maxOutputTokens: 512,
-            });
+            const result = await runCloudLlmRequest(
+                () => generateText({
+                    model,
+                    prompt: 'Hello',
+                    maxOutputTokens: 512,
+                    maxRetries: 0,
+                }),
+                { retryOnRateLimit: false },
+            );
 
             if (result.finishReason === 'stop' || result.finishReason === 'length') {
                 this.logger.info('openai test successful', { model: modelId, finishReason: result.finishReason });

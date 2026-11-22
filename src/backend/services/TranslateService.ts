@@ -16,6 +16,7 @@ import type BuiltinDictionaryStore from '@/backend/services/gateways/translate/B
 import type ImportedDictionaryService from '@/backend/services/ImportedDictionaryService';
 import type EnglishDictionaryService from '@/backend/services/EnglishDictionaryService';
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { runCloudLlmRequest } from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import {
     rankDefinitionsByContextPos,
     rankEnglishSensesByContextPos,
@@ -430,62 +431,74 @@ export class TranslateServiceImpl implements TranslateService {
 
             const prompt = buildDictionaryPrompt(word, context);
 
-            const { partialOutputStream } = streamText({
-                model,
-                output: Output.object({ schema: openAIDictionaryResultSchema }),
-                prompt,
-                timeout: { firstChunkMs: 30_000, chunkMs: 60_000 },
-            });
-
             const aggregated: OpenAIDictionaryResult = {
                 word: sanitizeString(word) ?? word,
                 phonetic: '',
-                definitions: []
+                definitions: [],
             };
             let hasStreamed = false;
-            let chunkCount = 0;
 
-            for await (const partialObject of partialOutputStream) {
-                // 词典流式 chunk 频率同样较高，按间隔采样，保留进度可见性。
-                chunkCount += 1;
-                if (chunkCount === 1 || chunkCount % 20 === 0) {
-                    streamLogger.debug('dictionary json chunk', {
-                        word,
-                        chunkCount,
-                        keys: Object.keys(partialObject ?? {}),
+            await runCloudLlmRequest(
+                async () => {
+                    aggregated.word = sanitizeString(word) ?? word;
+                    aggregated.phonetic = '';
+                    aggregated.definitions = [];
+                    let chunkCount = 0;
+
+                    const { partialOutputStream } = streamText({
+                        model,
+                        output: Output.object({ schema: openAIDictionaryResultSchema }),
+                        prompt,
+                        maxRetries: 0,
+                        timeout: { firstChunkMs: 30_000, chunkMs: 60_000 },
                     });
-                }
-                let changed = false;
 
-                if (partialObject.word !== undefined) {
-                    const sanitizedWord = sanitizeString(partialObject.word) ?? aggregated.word;
-                    if (sanitizedWord !== aggregated.word) {
-                        aggregated.word = sanitizedWord;
-                        changed = true;
+                    for await (const partialObject of partialOutputStream) {
+                        // 词典流式 chunk 频率同样较高，按间隔采样，保留进度可见性。
+                        chunkCount += 1;
+                        if (chunkCount === 1 || chunkCount % 20 === 0) {
+                            streamLogger.debug('dictionary json chunk', {
+                                word,
+                                chunkCount,
+                                keys: Object.keys(partialObject ?? {}),
+                            });
+                        }
+                        let changed = false;
+
+                        if (partialObject.word !== undefined) {
+                            const sanitizedWord = sanitizeString(partialObject.word) ?? aggregated.word;
+                            if (sanitizedWord !== aggregated.word) {
+                                aggregated.word = sanitizedWord;
+                                changed = true;
+                            }
+                        }
+
+                        if (partialObject.phonetic !== undefined) {
+                            const sanitizedPhoneticValue = sanitizePhonetic(partialObject.phonetic);
+                            if (sanitizedPhoneticValue !== aggregated.phonetic) {
+                                aggregated.phonetic = sanitizedPhoneticValue ?? '';
+                                changed = true;
+                            }
+                        }
+
+                        if (partialObject.definitions !== undefined) {
+                            const sanitizedDefinitions = sanitizeDefinitions(partialObject.definitions);
+                            if (!deepEqual(sanitizedDefinitions, aggregated.definitions)) {
+                                aggregated.definitions = sanitizedDefinitions;
+                                changed = true;
+                            }
+                        }
+
+                        if (changed && requestId) {
+                            await this.emitOpenAIDictionaryUpdate(streamId, aggregated.word, sanitizeDictionaryResult(aggregated), false);
+                            hasStreamed = true;
+                        }
                     }
-                }
-
-                if (partialObject.phonetic !== undefined) {
-                    const sanitizedPhoneticValue = sanitizePhonetic(partialObject.phonetic);
-                    if (sanitizedPhoneticValue !== aggregated.phonetic) {
-                        aggregated.phonetic = sanitizedPhoneticValue ?? '';
-                        changed = true;
-                    }
-                }
-
-                if (partialObject.definitions !== undefined) {
-                    const sanitizedDefinitions = sanitizeDefinitions(partialObject.definitions);
-                    if (!deepEqual(sanitizedDefinitions, aggregated.definitions)) {
-                        aggregated.definitions = sanitizedDefinitions;
-                        changed = true;
-                    }
-                }
-
-                if (changed && requestId) {
-                    await this.emitOpenAIDictionaryUpdate(streamId, aggregated.word, sanitizeDictionaryResult(aggregated), false);
-                    hasStreamed = true;
-                }
-            }
+                },
+                {
+                    canRetry: () => !hasStreamed,
+                },
+            );
 
             const finalResult = sanitizeDictionaryResult(aggregated);
             finalResult.source = 'ai';

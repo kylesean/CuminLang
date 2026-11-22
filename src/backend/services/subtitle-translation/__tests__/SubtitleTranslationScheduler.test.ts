@@ -278,4 +278,34 @@ describe('字幕翻译调度器', () => {
         await flushAsync();
         expect(inFlight).toHaveLength(2);
     });
+
+    it('单会话窗口包含 4 个批次时最多同时保持 2 个在途批次，避免冲爆低并发接口', async () => {
+        const inFlight: Array<{ request: SubtitleTranslationBatchRequest<TestContext>; deferred: DeferredBatch }> = [];
+        const scheduler = new SubtitleTranslationScheduler<TestContext>({
+            executeBatch: (request) => {
+                const deferred = createDeferred();
+                inFlight.push({ request, deferred });
+                return deferred.promise;
+            },
+        });
+
+        scheduler.updateDemand(buildDemand({
+            currentIndex: 5,
+            sentenceIndices: Array.from({ length: 20 }, (_, i) => i),
+        }));
+        expect(inFlight).toHaveLength(2);
+
+        inFlight[0].deferred.resolve({ completedIndices: inFlight[0].request.indices, failedIndices: [], cancelled: false });
+        await flushAsync();
+        expect(inFlight).toHaveLength(3);
+
+        inFlight[1].deferred.resolve({ completedIndices: inFlight[1].request.indices, failedIndices: [], cancelled: false });
+        await flushAsync();
+        expect(inFlight).toHaveLength(4);
+
+        for (const item of inFlight.slice(2)) {
+            item.deferred.resolve({ completedIndices: item.request.indices, failedIndices: [], cancelled: false });
+        }
+        await flushAsync();
+    });
 });

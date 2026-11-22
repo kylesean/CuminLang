@@ -3,6 +3,7 @@ import { inject, injectable } from 'inversify';
 import { z } from 'zod';
 
 import { getMainLogger } from '@/backend/infrastructure/logger';
+import { runCloudLlmRequest } from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import TYPES from '@/backend/ioc/types';
 import { ObjUtil } from '@/backend/utils/ObjUtil';
 import type AiProviderService from '@/backend/services/AiProviderService';
@@ -138,13 +139,13 @@ export class WordContextInsightServiceImpl implements WordContextInsightService 
         const prompt = buildWordContextInsightPrompt(args.word, args.sentence, args.definitions);
         const startedAt = Date.now();
         try {
-            const result = await generateObject({
+            const result = await runCloudLlmRequest(() => generateObject({
                 model: args.model,
                 schema: wordContextInsightSchema,
                 prompt,
                 maxRetries: 0,
                 abortSignal: AbortSignal.timeout(CLOUD_TIMEOUT_MS),
-            });
+            }));
             const insight = this.normalizeInsight(result.object, 'cloud');
             this.cacheService.set('cache:word-insight', args.cacheKey, insight, CACHE_TTL_MS);
             this.logger.info('word context insight ready', {

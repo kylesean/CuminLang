@@ -18,7 +18,7 @@ import type StorageDirectoryProvider from '@/backend/services/gateways/storage/S
 import { loadDefaultVocabulary } from '@/backend/utils/defaultVocabulary';
 import type SubtitleService from '@/backend/services/SubtitleService';
 import { lemmatizeWord } from '@/backend/utils/language/VocabularyMatcher';
-import { concurrency } from '@/backend/utils/concurrency';
+import { runCloudLlmRequest } from '@/backend/infrastructure/ai/runCloudLlmRequest';
 import { assertVocabularyPath } from '@/backend/utils/file-path-guard';
 import {
     addDefaultVocabularyRestoreNote,
@@ -753,7 +753,7 @@ export class VocabularyServiceImpl implements VocabularyService {
             throw new Error('词典 AI 模型未配置，请先在设置中完成模型配置');
         }
 
-        const result = await concurrency.withRateLimit('gpt', () =>
+        const result = await runCloudLlmRequest(() =>
             generateText({
                 model: cloudModel,
                 output: Output.object({ schema }),

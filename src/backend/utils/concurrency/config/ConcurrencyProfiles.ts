@@ -69,9 +69,12 @@ export const defaultConcurrencyProfiles: ConcurrencyProfiles = {
         tts: { capacity: 1 },
         // 外部 yt-dlp 下载串行：一次拉一个视频，避免多任务抢占带宽与 YouTube 风控。
         'yt-dlp': { capacity: 1 },
+        // 云端 LLM 统一最大在途并发数：收敛到保守值 2，兼容单卡/按 IP 限 2 并发的提供商。
+        gpt: { capacity: 2 },
     },
     rateLimiter: {
         whisper: { maxRequests: 5, windowMs: 1000 },
+        // 轻量防突发保护（每秒最多发 10 次），不设跨分钟硬墙，并发上限由 semaphore.gpt=2 兜底。
         gpt: { maxRequests: 10, windowMs: 1000 },
         tts: { maxRequests: 10, windowMs: 1000 },
     },
@@ -87,5 +90,6 @@ export const defaultConcurrencyProfiles: ConcurrencyProfiles = {
         'ffprobe',
         'whisper',
         'tts',
+        'gpt',
     ],
 };
