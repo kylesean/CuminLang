@@ -296,15 +296,23 @@ const readJsonBody = (
         let total = 0;
         let settled = false;
 
+        const cleanup = (): void => {
+            request.off('data', onData);
+            request.off('end', onEnd);
+            request.off('error', onError);
+            request.off('close', onClose);
+        };
+
         const fail = (error: Error): void => {
             if (settled) {
                 return;
             }
             settled = true;
+            cleanup();
             reject(error);
         };
 
-        request.on('data', (chunk: Buffer) => {
+        const onData = (chunk: Buffer): void => {
             if (settled) {
                 return;
             }
@@ -320,12 +328,14 @@ const readJsonBody = (
                 return;
             }
             chunks.push(chunk);
-        });
-        request.on('end', () => {
+        };
+
+        const onEnd = (): void => {
             if (settled) {
                 return;
             }
             settled = true;
+            cleanup();
             const text = Buffer.concat(chunks).toString('utf8');
             if (text.trim() === '') {
                 resolve({});
@@ -341,8 +351,22 @@ const readJsonBody = (
             } catch {
                 reject(new ClientRequestError('请求体不是合法 JSON'));
             }
-        });
-        request.on('error', (error) => fail(error));
+        };
+
+        const onError = (error: Error): void => {
+            fail(error);
+        };
+
+        const onClose = (): void => {
+            if (!settled && !request.complete) {
+                fail(new ClientRequestError('客户端提前断开连接', 400));
+            }
+        };
+
+        request.on('data', onData);
+        request.on('end', onEnd);
+        request.on('error', onError);
+        request.on('close', onClose);
     });
 };
 

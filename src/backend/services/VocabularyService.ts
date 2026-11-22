@@ -1,8 +1,10 @@
 import { Workbook } from 'exceljs';
 import { generateText, Output } from 'ai';
-import { inject, injectable } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 import { z } from 'zod';
 import TYPES from '@/backend/ioc/types';
+import type { Db } from '@/backend/infrastructure/db/createDb';
+import { runInDbTransaction } from '@/backend/infrastructure/db/utils';
 import type { VideoLearningService } from '@/backend/services/VideoLearningService';
 import type { WordMatchService } from '@/backend/services/WordMatchService';
 import type AiProviderService from '@/backend/services/AiProviderService';
@@ -205,6 +207,7 @@ export class VocabularyServiceImpl implements VocabularyService {
         @inject(TYPES.SubtitleService) private readonly subtitleService: SubtitleService,
         @inject(TYPES.StorageDirectoryProvider) private readonly storageDirectoryProvider: StorageDirectoryProvider,
         @inject(TYPES.FileSystemGateway) private readonly fileSystemGateway: FileSystemGateway,
+        @optional() @inject(TYPES.Database) private readonly db?: Db,
     ) {}
 
     /**
@@ -368,25 +371,29 @@ export class VocabularyServiceImpl implements VocabularyService {
                 };
             }
 
-            const existingWords = await this.wordsRepository.getAll();
-            const importedWords = parseImportedWords(rows);
-            const existingWordSet = new Set(existingWords.map((item) => item.word));
-            const importedWordSet = new Set(importedWords.map((item) => item.word));
-            const retainedCount = importedWords.filter((item) => existingWordSet.has(item.word)).length;
-            const addedCount = importedWords.length - retainedCount;
-            const removedCount = existingWords.filter((item) => !importedWordSet.has(item.word)).length;
+            const { retainedCount, addedCount, removedCount } = await runInDbTransaction(this.db, async () => {
+                const existingWords = await this.wordsRepository.getAll();
+                const importedWords = parseImportedWords(rows);
+                const existingWordSet = new Set(existingWords.map((item) => item.word.toLowerCase()));
+                const importedWordSet = new Set(importedWords.map((item) => item.word.toLowerCase()));
+                const retained = importedWords.filter((item) => existingWordSet.has(item.word.toLowerCase())).length;
+                const added = importedWords.length - retained;
+                const removed = existingWords.filter((item) => !importedWordSet.has(item.word.toLowerCase())).length;
 
-            const existingStatusByWord = new Map(
-                existingWords.map((item) => [item.word.toLowerCase(), item.status]),
-            );
-            await this.wordsRepository.replaceAll(importedWords);
-            // 仅对活跃学习态（新增或原本处于 learning/familiar）的词同步进入复习队列；
-            // 已掌握（known）或已忽略（ignored）的保留词不重新建卡，同时清理已不在词表里的孤儿卡。
-            const activeWords = importedWords
-                .filter((item) => isActiveWordStatus(existingStatusByWord.get(item.word.toLowerCase()) ?? 'learning'))
-                .map((item) => item.word);
-            await this.reviewCardRepository.ensureForWords(activeWords, new Date().toISOString());
-            await this.reviewCardRepository.deleteOrphans();
+                const existingStatusByWord = new Map(
+                    existingWords.map((item) => [item.word.toLowerCase(), item.status]),
+                );
+                await this.wordsRepository.replaceAll(importedWords);
+                // 仅对活跃学习态（新增或原本处于 learning/familiar）的词同步进入复习队列；
+                // 已掌握（known）或已忽略（ignored）的保留词不重新建卡，同时清理已不在词表里的孤儿卡。
+                const activeWords = importedWords
+                    .filter((item) => isActiveWordStatus(existingStatusByWord.get(item.word.toLowerCase()) ?? 'learning'))
+                    .map((item) => item.word);
+                await this.reviewCardRepository.ensureForWords(activeWords, new Date().toISOString());
+                await this.reviewCardRepository.deleteOrphans();
+                return { retainedCount: retained, addedCount: added, removedCount: removed };
+            });
+            const importedTotal = retainedCount + addedCount;
             this.wordMatchService.invalidateVocabularyCache();
             this.subtitleService.invalidateVocabularyAnalysisCache();
 
@@ -405,7 +412,7 @@ export class VocabularyServiceImpl implements VocabularyService {
 
             return {
                 success: true,
-                message: `导入完成：共 ${importedWords.length} 条，保留 ${retainedCount} 条，新增 ${addedCount} 条，删除 ${removedCount} 条，已同步单词管理片段`
+                message: `导入完成：共 ${importedTotal} 条，保留 ${retainedCount} 条，新增 ${addedCount} 条，删除 ${removedCount} 条，已同步单词管理片段`
             };
         } catch (error) {
             this.logger.error('导入单词失败', { error });
@@ -440,70 +447,84 @@ export class VocabularyServiceImpl implements VocabularyService {
             }
 
             const rawLower = input.toLowerCase();
-            const exactWord = await this.wordsRepository.findByWord(rawLower);
-            const lemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
-            const existing = exactWord ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
-            if (existing) {
-                const carriedTranslate = translate?.trim() ?? '';
-                const nextTranslate = existing.translate?.trim()
-                    || carriedTranslate
-                    || await this.generateDefinitionText(lemma);
-                if (nextTranslate && nextTranslate !== existing.translate) {
-                    await this.wordsRepository.updateByWord(lemma, { word: lemma, translate: nextTranslate });
-                }
-                if (!isActiveWordStatus(existing.status) || existing.source === 'default') {
-                    const nextSource: WordSource = existing.source === 'default' ? 'manual' : existing.source;
-                    await this.wordsRepository.updateState(lemma, {
-                        status: 'learning',
-                        source: nextSource,
-                    });
-                    await this.reviewCardRepository.ensureForWords([lemma], new Date().toISOString());
-                    this.invalidateVocabularyCaches();
-                }
-                return {
-                    success: true,
-                    data: {
-                        word: existing.word,
-                        translate: nextTranslate,
-                        alreadyExists: true
-                    }
-                };
-            }
-
+            const preExact = await this.wordsRepository.findByWord(rawLower);
+            const preLemma = preExact ? preExact.word.toLowerCase() : lemmatizeWord(input);
+            const preExisting = preExact ?? (preLemma !== rawLower ? await this.wordsRepository.findByWord(preLemma) : null);
             const carriedTranslate = translate?.trim() ?? '';
-            const finalTranslate = carriedTranslate || await this.generateDefinitionText(lemma);
-            try {
-                await this.wordsRepository.insertOne({
-                    word: lemma,
-                    translate: finalTranslate,
-                    status: 'learning',
-                    source: 'manual',
-                });
-                await this.reviewCardRepository.ensureForWords([lemma], new Date().toISOString());
-            } catch (insertError) {
-                // 并发收藏同一词的不同变体时会撞唯一约束；重新查到记录即转为已存在返回。
-                const raced = await this.wordsRepository.findByWord(lemma);
-                if (raced) {
+            // AI 释义生成是外部网络调用，必须在开启 SQLite 写事务之前完成，避免长持写锁。
+            const preparedTranslate = preExisting?.translate?.trim()
+                || carriedTranslate
+                || await this.generateDefinitionText(preLemma);
+
+            const txOutcome = await runInDbTransaction(this.db, async () => {
+                const exactWord = await this.wordsRepository.findByWord(rawLower);
+                const lemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
+                const existing = exactWord ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
+                if (existing) {
+                    const nextTranslate = existing.translate?.trim() || preparedTranslate;
+                    let cacheDirty = false;
+                    if (nextTranslate && nextTranslate !== existing.translate) {
+                        await this.wordsRepository.updateByWord(lemma, { word: lemma, translate: nextTranslate });
+                        cacheDirty = true;
+                    }
+                    if (!isActiveWordStatus(existing.status) || existing.source === 'default') {
+                        const nextSource: WordSource = existing.source === 'default' ? 'manual' : existing.source;
+                        await this.wordsRepository.updateState(lemma, {
+                            status: 'learning',
+                            source: nextSource,
+                        });
+                        await this.reviewCardRepository.ensureForWords([lemma], new Date().toISOString());
+                        cacheDirty = true;
+                    }
                     return {
-                        success: true,
+                        cacheDirty,
                         data: {
-                            word: raced.word,
-                            translate: raced.translate || '',
-                            alreadyExists: true
-                        }
+                            word: existing.word,
+                            translate: nextTranslate,
+                            alreadyExists: true,
+                        },
                     };
                 }
-                throw insertError;
+
+                try {
+                    await this.wordsRepository.insertOne({
+                        word: lemma,
+                        translate: preparedTranslate,
+                        status: 'learning',
+                        source: 'manual',
+                    });
+                    await this.reviewCardRepository.ensureForWords([lemma], new Date().toISOString());
+                    return {
+                        cacheDirty: true,
+                        data: {
+                            word: lemma,
+                            translate: preparedTranslate,
+                            alreadyExists: false,
+                        },
+                    };
+                } catch (insertError) {
+                    // 并发收藏同一词的不同变体时会撞唯一约束；重新查到记录即转为已存在返回。
+                    const raced = await this.wordsRepository.findByWord(lemma);
+                    if (raced) {
+                        return {
+                            cacheDirty: false,
+                            data: {
+                                word: raced.word,
+                                translate: raced.translate || '',
+                                alreadyExists: true,
+                            },
+                        };
+                    }
+                    throw insertError;
+                }
+            });
+            if (txOutcome.cacheDirty) {
+                this.invalidateVocabularyCaches();
             }
-            this.invalidateVocabularyCaches();
 
             return {
                 success: true,
-                data: {
-                    word: lemma,
-                    translate: finalTranslate,
-                    alreadyExists: false
-                }
+                data: txOutcome.data,
             };
         } catch (error) {
             this.logger.error('收藏单词失败', { error });
@@ -528,41 +549,44 @@ export class VocabularyServiceImpl implements VocabularyService {
             }
 
             const rawLower = input.toLowerCase();
-            const exactWord = await this.wordsRepository.findByWord(rawLower);
-            const lemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
-            const existing = exactWord ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
-            if (existing) {
-                const source: WordSource = existing.source === 'default' ? 'manual' : existing.source;
-                await this.wordsRepository.updateState(lemma, {
-                    status: params.status,
-                    source,
-                });
-            } else {
-                await this.wordsRepository.insertOne({
-                    word: lemma,
-                    translate: null,
-                    status: params.status,
-                    source: 'manual',
-                });
-            }
-            if (params.status === 'known' || params.status === 'ignored') {
-                await this.reviewCardRepository.deleteByWord(lemma);
-            } else {
-                // 手动设回学习中/熟悉时 mastery 已被清零，卡片必须重新到期，
-                // 否则会出现「掌握度 0、却要 30 天后才复习」的矛盾。
-                const schedule = createNewReviewSchedule();
-                await this.reviewCardRepository.upsert({
-                    word: lemma,
-                    due_at: schedule.dueAt,
-                    state: schedule.state,
-                    reps: schedule.reps,
-                    lapses: schedule.lapses,
-                    stability: schedule.stability,
-                    difficulty: schedule.difficulty,
-                    last_review_at: schedule.lastReviewAt,
-                    last_rating: schedule.lastRating,
-                });
-            }
+            const lemma = await runInDbTransaction(this.db, async () => {
+                const exactWord = await this.wordsRepository.findByWord(rawLower);
+                const resolvedLemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
+                const existing = exactWord ?? (resolvedLemma !== rawLower ? await this.wordsRepository.findByWord(resolvedLemma) : null);
+                if (existing) {
+                    const source: WordSource = existing.source === 'default' ? 'manual' : existing.source;
+                    await this.wordsRepository.updateState(resolvedLemma, {
+                        status: params.status,
+                        source,
+                    });
+                } else {
+                    await this.wordsRepository.insertOne({
+                        word: resolvedLemma,
+                        translate: null,
+                        status: params.status,
+                        source: 'manual',
+                    });
+                }
+                if (params.status === 'known' || params.status === 'ignored') {
+                    await this.reviewCardRepository.deleteByWord(resolvedLemma);
+                } else {
+                    // 手动设回学习中/熟悉时 mastery 已被清零，卡片必须重新到期，
+                    // 否则会出现「掌握度 0、却要 30 天后才复习」的矛盾。
+                    const schedule = createNewReviewSchedule();
+                    await this.reviewCardRepository.upsert({
+                        word: resolvedLemma,
+                        due_at: schedule.dueAt,
+                        state: schedule.state,
+                        reps: schedule.reps,
+                        lapses: schedule.lapses,
+                        stability: schedule.stability,
+                        difficulty: schedule.difficulty,
+                        last_review_at: schedule.lastReviewAt,
+                        last_rating: schedule.lastRating,
+                    });
+                }
+                return resolvedLemma;
+            });
             this.invalidateVocabularyCaches();
 
             return {
@@ -600,33 +624,37 @@ export class VocabularyServiceImpl implements VocabularyService {
                 };
             }
 
-            const target = await this.wordsRepository.findByWord(oldWord);
-            if (!target) {
-                return {
-                    success: false,
-                    error: '未找到要编辑的单词'
-                };
-            }
-
-            if (newWord !== oldWord) {
-                const conflict = await this.wordsRepository.findByWord(newWord);
-                if (conflict) {
+            const translate = params.translate?.trim() ?? '';
+            const outcome = await runInDbTransaction(this.db, async (): Promise<SimpleActionResult> => {
+                const target = await this.wordsRepository.findByWord(oldWord);
+                if (!target) {
                     return {
                         success: false,
-                        error: '目标单词已存在'
+                        error: '未找到要编辑的单词',
                     };
                 }
-            }
 
-            const translate = params.translate?.trim() ?? '';
-            await this.wordsRepository.updateByWord(oldWord, { word: newWord, translate });
-            if (newWord !== oldWord) {
-                await this.clipWordRepository.renameWord(oldWord, newWord);
-                await this.reviewCardRepository.renameWord(oldWord, newWord);
-            }
-            this.invalidateVocabularyCaches();
+                if (newWord !== oldWord) {
+                    const conflict = await this.wordsRepository.findByWord(newWord);
+                    if (conflict) {
+                        return {
+                            success: false,
+                            error: '目标单词已存在',
+                        };
+                    }
+                }
 
-            return { success: true };
+                await this.wordsRepository.updateByWord(oldWord, { word: newWord, translate });
+                if (newWord !== oldWord) {
+                    await this.clipWordRepository.renameWord(oldWord, newWord);
+                    await this.reviewCardRepository.renameWord(oldWord, newWord);
+                }
+                return { success: true };
+            });
+            if (outcome.success) {
+                this.invalidateVocabularyCaches();
+            }
+            return outcome;
         } catch (error) {
             this.logger.error('更新单词失败', { error });
             return {
@@ -657,11 +685,14 @@ export class VocabularyServiceImpl implements VocabularyService {
             }
 
             const rawLower = input.toLowerCase();
-            const exactWord = await this.wordsRepository.findByWord(rawLower);
-            const lemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
-            await this.wordsRepository.deleteByWord(lemma);
-            await this.reviewCardRepository.deleteByWord(lemma);
-            await this.clipWordRepository.deleteByWord(lemma);
+            const lemma = await runInDbTransaction(this.db, async () => {
+                const exactWord = await this.wordsRepository.findByWord(rawLower);
+                const resolvedLemma = exactWord ? exactWord.word.toLowerCase() : lemmatizeWord(input);
+                await this.wordsRepository.deleteByWord(resolvedLemma);
+                await this.reviewCardRepository.deleteByWord(resolvedLemma);
+                await this.clipWordRepository.deleteByWord(resolvedLemma);
+                return resolvedLemma;
+            });
             this.invalidateVocabularyCaches();
 
             return { success: true, data: { word: lemma } };

@@ -289,16 +289,31 @@ export class SubtitleServiceImpl implements SubtitleService {
         if (isUserEditedSubtitleFile(targetPath)) {
             throw new Error('目标恢复轨不能是人工编辑轨本身');
         }
+        if (params.videoPath && params.videoPath.trim()) {
+            const videoDir = path.dirname(path.resolve(params.videoPath));
+            const sameDir = path.dirname(targetPath) === videoDir;
+            const registryAllowed = typeof this.mediaPathRegistry.isAllowed === 'function'
+                && this.mediaPathRegistry.isAllowed(targetPath);
+            if (!sameDir && !registryAllowed) {
+                throw new Error('目标恢复轨不在授权路径范围内');
+            }
+        }
         await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(targetPath);
         // 先确保目标基线轨存在且可解析，再迁资产与删盘，防止基线失效时误删用户的修订版。
         const srt = await this.parseSrt(targetPath);
 
+        const derivedEditedPath = params.videoPath?.trim()
+            ? path.resolve(this.resolveEditedTargetPath(params.videoPath, targetPath))
+            : null;
         const editedPath = params.editedSubtitlePath?.trim()
             ? path.resolve(params.editedSubtitlePath)
-            : this.resolveEditedTargetPath(params.videoPath, targetPath);
+            : (derivedEditedPath ?? path.resolve(this.resolveEditedTargetPath(params.videoPath, targetPath)));
         assertSubtitlePath(editedPath);
         if (!isUserEditedSubtitleFile(editedPath)) {
             throw new Error(`非法的人工编辑轨路径：${editedPath}`);
+        }
+        if (derivedEditedPath && editedPath !== derivedEditedPath) {
+            throw new Error('人工编辑轨路径与当前视频不匹配');
         }
         await this.storageDirectoryProvider.ensurePathAccessPermissionIfExists(editedPath);
 
@@ -310,7 +325,8 @@ export class SubtitleServiceImpl implements SubtitleService {
             contentEn: item.text,
             contentZh: item.textZH ?? '',
         }));
-        await this.tryMigrateTrackAssets(oldSnapshot, srt.fileHash, newLines, editedPath);
+        // 放弃编辑轨时若学习资产迁移失败，必须中止删盘以保留用户的 .edited.srt，避免资产永久孤立。
+        await this.tryMigrateTrackAssets(oldSnapshot, srt.fileHash, newLines, editedPath, { throwOnError: true });
         await this.fileSystemGateway.removeFileIfExists(editedPath);
         return srt;
     }
@@ -320,6 +336,7 @@ export class SubtitleServiceImpl implements SubtitleService {
         newFileHash: string,
         newSentences: SrtLine[],
         logTargetPath: string,
+        options?: { throwOnError?: boolean },
     ): Promise<void> {
         if (
             !this.assetMigrationService
@@ -342,6 +359,9 @@ export class SubtitleServiceImpl implements SubtitleService {
                 targetPath: logTargetPath,
                 error: error instanceof Error ? error.message : String(error),
             });
+            if (options?.throwOnError) {
+                throw error;
+            }
         }
     }
 

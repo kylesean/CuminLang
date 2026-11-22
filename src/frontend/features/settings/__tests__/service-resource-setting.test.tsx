@@ -37,17 +37,11 @@ const baseCredentialsDetail = {
             },
         ],
     },
-    tencent: {
-        hasCredentials: false,
-        secretIdHint: '',
-    },
 };
 
 const baseEngineSelection = {
     openai: {
         enableSentenceLearning: false,
-        subtitleTranslationMode: 'zh' as const,
-        subtitleCustomStyle: '',
         featureModels: {
             sentenceLearning: '',
             subtitleTranslation: '',

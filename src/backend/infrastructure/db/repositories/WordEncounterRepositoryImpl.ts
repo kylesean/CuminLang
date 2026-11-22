@@ -96,10 +96,11 @@ export default class WordEncounterRepositoryImpl implements WordEncounterReposit
         // 已按时间倒序，每个 lemma 的第一条就是最近一次带语境的遭遇。
         const latest = new Map<string, EncounterContextRow>();
         for (const row of rows) {
-            if (!row.text || latest.has(row.lemma)) {
+            const key = row.lemma.toLowerCase();
+            if (!row.text || latest.has(key)) {
                 continue;
             }
-            latest.set(row.lemma, { ...row, text: row.text });
+            latest.set(key, { ...row, lemma: key, text: row.text });
         }
         return Array.from(latest.values());
     }

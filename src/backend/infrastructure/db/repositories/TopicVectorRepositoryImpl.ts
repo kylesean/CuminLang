@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { inject, injectable } from 'inversify';
 
 import type { Db } from '@/backend/infrastructure/db/createDb';
+import { collectInChunks, inChunks, SQLITE_MAX_BIND_PARAMS_CHUNK } from '@/backend/infrastructure/db/utils';
 import { topicVector, type TopicVectorRow } from '@/backend/infrastructure/db/tables/topicVector';
 import TYPES from '@/backend/ioc/types';
 import type TopicVectorRepository from '@/backend/services/repositories/TopicVectorRepository';
@@ -25,13 +26,14 @@ export default class TopicVectorRepositoryImpl implements TopicVectorRepository 
         if (videoIds.length === 0) {
             return [];
         }
-        return this.db
+        return collectInChunks(videoIds, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => this.db
             .select()
             .from(topicVector)
             .where(and(
                 eq(topicVector.model, model),
-                inArray(topicVector.video_id, [...videoIds]),
-            ));
+                inArray(topicVector.video_id, chunk),
+            ))
+            .all());
     }
 
     public async upsert(value: TopicVectorWrite): Promise<void> {
@@ -78,10 +80,16 @@ export default class TopicVectorRepositoryImpl implements TopicVectorRepository 
         if (videoIds.length === 0) {
             return 0;
         }
-        const result = this.db
-            .delete(topicVector)
-            .where(inArray(topicVector.video_id, [...videoIds]))
-            .run();
-        return Number(result.changes);
+        return this.db.transaction((tx) => {
+            let deleted = 0;
+            inChunks(videoIds, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => {
+                const result = tx
+                    .delete(topicVector)
+                    .where(inArray(topicVector.video_id, chunk))
+                    .run();
+                deleted += Number(result.changes);
+            });
+            return deleted;
+        });
     }
 }

@@ -1,14 +1,11 @@
-import type ClientProviderService from '@/backend/services/ClientProviderService';
 import type SettingService from '@/backend/services/SettingService';
 import type {
     SubtitleBatchTranslationInput,
     SubtitleTranslationTarget,
 } from '@/backend/services/gateways/translate/SubtitleBatchTranslationInput';
-import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
 import type { ResolvedSubtitleTranslationContext } from '@/backend/services/subtitle-translation/SubtitleTranslationContext';
 import type { SubtitleTranslationStorageMode } from '@/backend/services/subtitle-translation/SubtitleTranslationStorageMode';
 import { buildSentenceStorageKey, shouldTranslateSubtitleText } from '@/backend/services/subtitle-translation/SubtitleTranslationCacheKey';
-import { concurrency } from '@/backend/utils/concurrency';
 import type { TranslationProvider } from '@/common/types/TranslationResult';
 
 /**
@@ -44,10 +41,8 @@ export interface DirectSubtitleTranslatorHost {
 export interface DirectSubtitleTranslatorDeps {
     /** 设置业务服务：读取当前翻译 provider。 */
     settingService: SettingService;
-    /** 腾讯云翻译客户端提供器。 */
-    tencentProvider: ClientProviderService<TencentTranslateClient>;
     /** 当前设置到缓存模式/风格上下文的解析入口。 */
-    resolveContext: (provider: TranslationProvider) => Promise<ResolvedSubtitleTranslationContext>;
+    resolveContext: (provider: TranslationProvider) => ResolvedSubtitleTranslationContext;
     /** 宿主能力。 */
     host: DirectSubtitleTranslatorHost;
     /** 独立日志出口。 */
@@ -89,7 +84,7 @@ export class DirectSubtitleTranslator {
             throw new Error('未启用字幕翻译服务');
         }
 
-        const { mode, storageMode, style } = await this.deps.resolveContext(provider);
+        const { storageMode, style } = this.deps.resolveContext(provider);
 
         const targets = Array.from(targetsByKey.values());
         const cached = await this.deps.host.getTranslations(
@@ -110,9 +105,7 @@ export class DirectSubtitleTranslator {
         if (onlineTargets.length > 0) {
             const batchId = `direct-${Date.now()}`;
             const startedAt = Date.now();
-            const onlineResults = provider === 'tencent'
-                ? await this.translateWithTencent(onlineTargets, batchId)
-                : await this.translateWithGateway(onlineTargets, mode, style);
+            const onlineResults = await this.translateWithGateway(onlineTargets, style);
             onlineResults.forEach((translation, key) => {
                 result.set(key, translation);
                 freshResults.set(key, translation);
@@ -120,7 +113,6 @@ export class DirectSubtitleTranslator {
             this.deps.logger.info('独立字幕批次翻译完成', {
                 batchId,
                 provider,
-                mode,
                 cacheHitCount: cached.size,
                 targetCount: onlineTargets.length,
                 elapsedMs: Date.now() - startedAt,
@@ -141,60 +133,22 @@ export class DirectSubtitleTranslator {
         if (!provider) {
             throw new Error('未启用字幕翻译服务');
         }
-        const { storageMode } = await this.deps.resolveContext(provider);
+        const { storageMode } = this.deps.resolveContext(provider);
         const deleted = await this.deps.host.deleteTranslationsByMode(storageMode);
         this.deps.logger.info('已清除当前配置的字幕翻译缓存', { provider, storageMode, deleted });
         return deleted;
     }
 
     /**
-     * 使用腾讯接口翻译不属于播放窗口的独立文本批次。
-     *
-     * 与主路径一致走 `tencent` 限流，避免直翻批次绕过配额触发上游限流。
-     * @param targets 使用归一化原文作为 key 的目标条目。
-     * @param batchId 日志关联批次编号。
-     * @returns 归一化原文到翻译结果的映射。
-     */
-    private async translateWithTencent(
-        targets: DirectTranslationTarget[],
-        batchId: string
-    ): Promise<Map<string, string>> {
-        const client = this.deps.tencentProvider.getClient();
-        if (!client) {
-            throw new Error('腾讯翻译客户端未初始化，请检查密钥配置');
-        }
-
-        const holder = await concurrency.withRateLimit('tencent', () => client.batchTrans(
-            targets.map((target) => target.text),
-            {
-                batchId,
-                fileHash: 'direct',
-            }
-        ));
-        const translations = new Map<string, string>();
-        targets.forEach((target) => {
-            const translation = holder.get(target.text)?.trim();
-            if (translation) {
-                translations.set(target.key, translation);
-            }
-        });
-        return translations;
-    }
-
-    /**
      * 使用当前批量 Prompt 翻译不属于播放窗口的独立文本批次。
      *
      * @param targets 使用归一化原文作为 key 的目标条目。
-     * @param mode 当前字幕翻译模式。
      * @param style 已解析的风格约束。
-     * @param localModelId 本地引擎使用中的模型 ID；云端引擎为 null。
-     * @param provider 当前配置的引擎。
-     * @returns 归一化原文到翻译结果的映射及是否发生了本地回退。
+     * @returns 归一化原文到翻译结果的映射。
      */
     private async translateWithGateway(
         targets: DirectTranslationTarget[],
-        mode: ResolvedSubtitleTranslationContext['mode'],
-        style: string | undefined,
+        style: string,
     ): Promise<Map<string, string>> {
         if (!style) {
             throw new Error('OpenAI 字幕翻译风格配置缺失');
@@ -204,8 +158,7 @@ export class DirectSubtitleTranslator {
             targets: [...targets],
             contextBefore: [],
             contextAfter: [],
-            mode,
-            style: style ?? '',
+            style,
             signal: new AbortController().signal,
         };
         return this.deps.host.translateWithGateway(input, input.targets);

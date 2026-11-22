@@ -10,8 +10,6 @@ import {
     isLocalLlmEndpoint,
     resolveProviderEndpointHost,
 } from '@/common/constants/cloud-ai-provider-presets';
-import type ClientProviderService from '@/backend/services/ClientProviderService';
-import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import type RendererEvents from '@/backend/services/gateways/renderer/RendererEvents';
 import type { SettingsStore } from '@/backend/services/gateways/SettingsStore';
@@ -38,7 +36,6 @@ import {
     type AppearanceSettingVO,
 } from '@/common/contracts/appearance-setting-vo';
 import { VOCABULARY_GUIDANCE_LEVELS } from '@/common/types/vocabulary';
-import { getSubtitleDefaultStyle } from '@/common/constants/openaiSubtitlePrompts';
 import { readSystemProxy } from '@/backend/infrastructure/system/proxy/readSystemProxy';
 import { AI_API_FORMATS } from '@/common/utils/cloud-ai-api-format';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
@@ -52,7 +49,7 @@ import { TRANSCRIPTION_ENGINES, type TranscriptionEngine } from '@/common/contra
 import { SHERPA_TTS_VOICES, resolveSherpaTtsVoice } from '@/backend/services/models/sherpaTtsModel';
 
 /** 字幕翻译引擎的合法取值；设置校验与运行时查询共用，避免各处字面量漂移。 */
-const SUBTITLE_TRANSLATION_ENGINES = ['openai', 'tencent', 'none'] as const;
+const SUBTITLE_TRANSLATION_ENGINES = ['openai', 'none'] as const;
 /** 词典引擎的合法取值。 */
 const DICTIONARY_ENGINES = ['openai', 'none'] as const;
 /** 主题语义向量引擎的合法取值。 */
@@ -67,10 +64,7 @@ type FeatureEngine =
  * 判断某个功能的引擎是否由云端承担。
  *
  * 说明：'invalid' 是存储值非法的占位，此时无从判断，返回 null 让调用方保留用户原值；
- * 只有 openai 会落到云端模型槽位，本地、腾讯与关闭都不需要槽位。
- *
- * @param engine 设置里记着的引擎值。
- * @returns 是否走云端；`null` 表示存储值非法。
+ * 只有 openai 会落到云端模型槽位，关闭则不需要槽位。
  */
 const engineUsesCloud = (engine: FeatureEngine): boolean | null => (
     engine === 'invalid' ? null : engine === 'openai'
@@ -96,9 +90,7 @@ export default interface SettingService {
     getProxySettingDetail(): Promise<ProxySettingDetailVO>;
     saveProxySettings(settings: ProxySettingSaveVO): Promise<void>;
     getCurrentSentenceLearningProvider(): Promise<'openai' | null>;
-    getCurrentTranslationProvider(): Promise<'openai' | 'tencent' | null>;
-    getOpenAiSubtitleTranslationMode(): Promise<'zh' | 'simple_en' | 'custom'>;
-    getOpenAiSubtitleCustomStyle(): Promise<string>;
+    getCurrentTranslationProvider(): Promise<'openai' | null>;
     getCurrentDictionaryProvider(): Promise<'openai' | null>;
     /**
      * 读取离线朗读音色标识（见 SHERPA_TTS_VOICES）。
@@ -116,7 +108,6 @@ export default interface SettingService {
      */
     saveSherpaTtsVoice(voiceId: string): Promise<void>;
     testOpenAi(modelId: string, providerId?: string): Promise<{ success: boolean, message: string }>;
-    testTencent(): Promise<{ success: boolean, message: string }>;
 }
 
 
@@ -132,15 +123,12 @@ export class SettingServiceImpl implements SettingService {
      *
      * @param rendererEvents 渲染进程事件推送端口。
      * @param aiProviderService 云端模型提供服务。
-     * @param tencentProvider 腾讯云翻译客户端提供器。
      * @param settingsStore 设置持久化存储端口。
      * @param storageDirectoryProvider 外部存储目录提供器。
-     * @param localAi 本地大模型推理服务。
      */
     constructor(
         @inject(TYPES.RendererEvents) private readonly rendererEvents: RendererEvents,
         @inject(TYPES.AiProviderService) private readonly aiProviderService: AiProviderService,
-        @inject(TYPES.TencentClientProvider) private readonly tencentProvider: ClientProviderService<TencentTranslateClient>,
         @inject(TYPES.SettingsStore) private readonly settingsStore: SettingsStore,
         @inject(TYPES.StorageDirectoryProvider) private readonly storageDirectoryProvider: StorageDirectoryProvider,
     ) {}
@@ -292,11 +280,6 @@ export class SettingServiceImpl implements SettingService {
         );
         this.warnInvalidEnum(values['providers.dictionary'], DICTIONARY_ENGINES, 'providers.dictionary');
         this.warnInvalidEnum(values['providers.embedding'], EMBEDDING_ENGINES, 'providers.embedding');
-        this.warnInvalidEnum(
-            values['features.openai.subtitleTranslationMode'],
-            ['zh', 'simple_en', 'custom'] as const,
-            'features.openai.subtitleTranslationMode',
-        );
         if (!this.isValidPlaybackRateStack(values['userSelect.playbackRateStack'])) {
             this.logger.warn(
                 `设置项 userSelect.playbackRateStack 存储值非法: ${values['userSelect.playbackRateStack']}`,
@@ -414,7 +397,7 @@ export class SettingServiceImpl implements SettingService {
     }
 
     /**
-     * 查询服务凭据设置（包含 OpenAI 多服务商配置与腾讯云配置状态）。
+     * 查询服务凭据设置（OpenAI 兼容服务商配置与脱敏提示）。
      *
      * 注意这里只返回布尔标记和末四位脱敏提示，明文密钥由主进程独占、
      * 不随详情快照下发。
@@ -437,17 +420,11 @@ export class SettingServiceImpl implements SettingService {
                 disabledModels: profile.disabledModels,
             };
         });
-        const tencentSecretId = this.getValue('apiKeys.tencent.secretId');
-        const tencentSecretKey = this.getValue('apiKeys.tencent.secretKey');
         return {
             openai: {
                 embeddingModel: this.getValue('models.openai.embedding'),
                 activeProviderId: activeProvider?.id ?? '',
                 providers,
-            },
-            tencent: {
-                hasCredentials: !StrUtil.isBlank(tencentSecretId) && !StrUtil.isBlank(tencentSecretKey),
-                secretIdHint: maskSecret(tencentSecretId),
             },
         };
     }
@@ -534,18 +511,6 @@ export class SettingServiceImpl implements SettingService {
         if (settings.openai.embeddingModel !== undefined) {
             await this.setValue('models.openai.embedding', settings.openai.embeddingModel.trim());
         }
-
-        if (settings.tencent.clearTencent) {
-            await this.setValue('apiKeys.tencent.secretId', '');
-            await this.setValue('apiKeys.tencent.secretKey', '');
-        } else {
-            if (!StrUtil.isBlank(settings.tencent.secretId)) {
-                await this.setValue('apiKeys.tencent.secretId', settings.tencent.secretId as string);
-            }
-            if (!StrUtil.isBlank(settings.tencent.secretKey)) {
-                await this.setValue('apiKeys.tencent.secretKey', settings.tencent.secretKey as string);
-            }
-        }
     }
 
     /**
@@ -574,13 +539,6 @@ export class SettingServiceImpl implements SettingService {
             'providers.embedding',
             invalidValues,
         );
-        const subtitleMode = this.readEnumOrInvalid(
-            this.getValue('features.openai.subtitleTranslationMode'),
-            ['zh', 'simple_en', 'custom'] as const,
-            'features.openai.subtitleTranslationMode',
-            invalidValues,
-        );
-        const subtitleCustomStyle = this.getValue('features.openai.subtitleCustomStyle');
 
         return {
             openai: {
@@ -588,8 +546,6 @@ export class SettingServiceImpl implements SettingService {
                     this.getValue('features.openai.enableSentenceLearning'),
                     'features.openai.enableSentenceLearning',
                 ),
-                subtitleTranslationMode: subtitleMode,
-                subtitleCustomStyle,
                 featureModels: {
                     sentenceLearning: this.getValue('models.openai.sentenceLearning'),
                     subtitleTranslation: this.getValue('models.openai.subtitleTranslation'),
@@ -647,13 +603,6 @@ export class SettingServiceImpl implements SettingService {
                     EMBEDDING_ENGINES,
                     'providers.embeddingEngine',
                 ));
-        const subtitleTranslationMode = settings.openai.subtitleTranslationMode === 'invalid'
-            ? null
-            : this.requireEnumValue(
-                settings.openai.subtitleTranslationMode,
-                ['zh', 'simple_en', 'custom'] as const,
-                'openai.subtitleTranslationMode',
-            );
         const availableModels = flattenEnabledProviderModels(this.getStoredProviderProfiles());
         const sentenceLearningSlot = this.resolveFeatureModelSlot(
             settings.openai.featureModels.sentenceLearning,
@@ -691,12 +640,6 @@ export class SettingServiceImpl implements SettingService {
         }
 
         await this.setValue('features.openai.enableSentenceLearning', settings.openai.enableSentenceLearning ? 'true' : 'false');
-        if (subtitleTranslationMode === null) {
-            this.logger.warn('openai.subtitleTranslationMode 为非法占位值，跳过保存并保留原存储值');
-        } else {
-            await this.setValue('features.openai.subtitleTranslationMode', subtitleTranslationMode);
-        }
-        await this.setValue('features.openai.subtitleCustomStyle', settings.openai.subtitleCustomStyle);
 
         await this.setValue('models.openai.sentenceLearning', sentenceLearningSlot);
         await this.setValue('models.openai.subtitleTranslation', subtitleTranslationSlot);
@@ -927,32 +870,13 @@ export class SettingServiceImpl implements SettingService {
         return openaiEnabled ? 'openai' : null;
     }
 
-    public async getCurrentTranslationProvider(): Promise<'openai' | 'tencent' | null> {
+    public async getCurrentTranslationProvider(): Promise<'openai' | null> {
         const engine = this.requireEnumValue(
             this.getValue('providers.subtitleTranslation'),
             SUBTITLE_TRANSLATION_ENGINES,
             'providers.subtitleTranslation',
         );
-        if (engine === 'openai' || engine === 'tencent') {
-            return engine;
-        }
-        return null;
-    }
-
-    public async getOpenAiSubtitleTranslationMode(): Promise<'zh' | 'simple_en' | 'custom'> {
-        return this.requireEnumValue(
-            this.getValue('features.openai.subtitleTranslationMode'),
-            ['zh', 'simple_en', 'custom'] as const,
-            'features.openai.subtitleTranslationMode',
-        );
-    }
-
-    public async getOpenAiSubtitleCustomStyle(): Promise<string> {
-        const stored = this.getValue('features.openai.subtitleCustomStyle');
-        if (stored && stored.trim().length > 0) {
-            return stored.trim();
-        }
-        return getSubtitleDefaultStyle('custom');
+        return engine === 'openai' ? 'openai' : null;
     }
 
     public async getCurrentDictionaryProvider(): Promise<'openai' | null> {
@@ -1008,19 +932,21 @@ export class SettingServiceImpl implements SettingService {
                 return { success: false, message: 'API Key 或 API URL 未配置' };
             }
             const model = this.aiProviderService.createModelById(modelId, providerId);
-            // 推理类模型（如 deepseek-flash）会先把额度花在 reasoning_content 上，
-            // 5 个 token 时正文必为空且 finish_reason=length，连通性被误判为失败
+            // 思考型模型的 reasoning 计入 max_tokens（本地 llama.cpp/TabbyAPI、OpenAI o 系均如此；
+            // 实测 qwen35-9b 一句 "Hello" 思考就 300+ tok，50 的预算必在思考中截断，
+            // text 为空但 finish_reason=length —— 连通其实是好的。
+            // 判定用 finishReason 而非正文：连通性测试只验证网关可达，不验证模型是否开口。
             const result = await generateText({
                 model,
                 prompt: 'Hello',
-                maxOutputTokens: 50,
+                maxOutputTokens: 512,
             });
 
-            if (StrUtil.isNotBlank(result.text)) {
-                this.logger.info('openai test successful', { model: modelId });
+            if (result.finishReason === 'stop' || result.finishReason === 'length') {
+                this.logger.info('openai test successful', { model: modelId, finishReason: result.finishReason });
                 return { success: true, message: '测试成功' };
             }
-            this.logger.warn('openai returned empty response', { model: modelId });
+            this.logger.warn('openai returned empty response', { model: modelId, finishReason: result.finishReason });
             return { success: false, message: '返回了空响应' };
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : String(error);
@@ -1028,28 +954,4 @@ export class SettingServiceImpl implements SettingService {
             return { success: false, message: `测试失败: ${message}` };
         }
     }
-
-    public async testTencent(): Promise<{ success: boolean, message: string }> {
-        try {
-            this.logger.info('testing tencent connection');
-            const client = this.tencentProvider.getClient();
-            if (!client) {
-                this.logger.warn('tencent client not configured');
-                return { success: false, message: '腾讯云配置不完整' };
-            }
-
-            const result = await client.batchTrans(['Hello']);
-            if (result && !result.isEmpty()) {
-                this.logger.info('tencent test successful');
-                return { success: true, message: '腾讯云配置测试成功' };
-            }
-            this.logger.warn('tencent returned empty response');
-            return { success: false, message: '腾讯云返回了空响应' };
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.error('tencent test failed', { error: message });
-            return { success: false, message: `腾讯云测试失败: ${message}` };
-        }
-    }
-
 }

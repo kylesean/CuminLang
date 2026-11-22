@@ -112,7 +112,8 @@ export default class WhisperCppGatewayImpl implements SpeechRecognitionGateway {
             if (error.signal !== null && CRASH_SIGNALS.has(error.signal)) {
                 return true;
             }
-            return error.exitCode !== null && WINDOWS_CRASH_EXIT_CODES.has(error.exitCode);
+            // Windows NTSTATUS 退出码在 Node 中可能以有符号负 int32 返回（如 -1073741819），需无符号归一。
+            return error.exitCode !== null && WINDOWS_CRASH_EXIT_CODES.has(error.exitCode >>> 0);
         }
         return false;
     }

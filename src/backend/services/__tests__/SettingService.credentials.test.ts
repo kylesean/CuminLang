@@ -26,8 +26,6 @@ import { SettingKeyObj, type SettingKey } from '@/common/types/store_schema';
 
 /** 测试用假凭据；形态像真实密钥，但都是编出来的。 */
 const OPENAI_KEY = 'sk-test-aaaaaaaaaaaaaaaa1234';
-const TENCENT_ID = 'AKIDtesttencentsecretid01';
-const TENCENT_KEY = 'tencentsecretkey0000wxyz';
 
 /**
  * 内存版设置存储：只实现凭据链路实际用到的 get/set。
@@ -55,7 +53,6 @@ const createService = (store: ReturnType<typeof createStore>): SettingServiceImp
     return new SettingServiceImpl(
         { storeUpdate: vi.fn(), error: vi.fn(), info: vi.fn() } as never,
         { createModelById: vi.fn() } as never,
-        { get: vi.fn() } as never,
         store as unknown as SettingsStore,
         { getDirectory: vi.fn() } as never,
     );
@@ -86,7 +83,6 @@ const baseSave = {
             },
         ],
     },
-    tencent: {},
 };
 
 describe('服务凭据：不把明文送进渲染进程', () => {
@@ -98,8 +94,6 @@ describe('服务凭据：不把明文送进渲染进程', () => {
             'apiKeys.openAi.providerKeys': JSON.stringify({ deepseek: OPENAI_KEY }),
             'models.openai.activeProviderId': 'deepseek',
             'models.openai.providers': DEFAULT_PROVIDERS,
-            'apiKeys.tencent.secretId': TENCENT_ID,
-            'apiKeys.tencent.secretKey': TENCENT_KEY,
         });
         service = createService(store);
     });
@@ -111,10 +105,6 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         expect(detail.openai.providers[0]?.keyHint).toBe('••••1234');
         const serialized = JSON.stringify(detail);
         expect(serialized).not.toContain(OPENAI_KEY);
-        expect(serialized).not.toContain(TENCENT_ID);
-        expect(serialized).not.toContain(TENCENT_KEY);
-        expect(detail.tencent.hasCredentials).toBe(true);
-        expect(detail.tencent.secretIdHint).toBe(`••••${TENCENT_ID.slice(-4)}`);
     });
 
     it('未配置时 hasKey 为 false 且提示为空，并返回默认服务商档案', async () => {
@@ -124,7 +114,6 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         expect(detail.openai.providers).toHaveLength(1);
         expect(detail.openai.providers[0]?.hasKey).toBe(false);
         expect(detail.openai.providers[0]?.keyHint).toBe('');
-        expect(detail.tencent.hasCredentials).toBe(false);
     });
 
     /**
@@ -141,7 +130,6 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         });
 
         expect(JSON.parse(store.values.get('apiKeys.openAi.providerKeys')!)).toEqual({ deepseek: OPENAI_KEY });
-        expect(store.values.get('apiKeys.tencent.secretKey')).toBe(TENCENT_KEY);
     });
 
     /**
@@ -227,8 +215,6 @@ describe('服务凭据：不把明文送进渲染进程', () => {
         await service.saveEngineSelection({
             openai: {
                 enableSentenceLearning: true,
-                subtitleTranslationMode: 'zh',
-                subtitleCustomStyle: '',
                 featureModels: {
                     sentenceLearning: 'gpt-4o-mini',
                     subtitleTranslation: 'gpt-4o-mini',
@@ -267,7 +253,6 @@ describe('服务凭据：不把明文送进渲染进程', () => {
                     models: ['gpt-4o-mini'],
                 }],
             },
-            tencent: {},
         });
 
         expect(emptyKeysStore.values.get('apiKeys.openAi.providerKeys')).toBe('');

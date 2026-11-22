@@ -2,6 +2,7 @@ import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { inject, injectable } from 'inversify';
 
 import type { Db } from '@/backend/infrastructure/db/createDb';
+import { collectInChunks, inChunks, SQLITE_MAX_BIND_PARAMS_CHUNK } from '@/backend/infrastructure/db/utils';
 import { type InsertVideoLearningClip, type VideoLearningClip, videoLearningClip } from '@/backend/infrastructure/db/tables/videoLearningClip';
 import { type InsertVideoLearningClipWord, videoLearningClipWord } from '@/backend/infrastructure/db/tables/videoLearningClipWord';
 import TYPES from '@/backend/ioc/types';
@@ -26,10 +27,11 @@ export default class VideoLearningClipRepositoryImpl implements VideoLearningCli
             return new Set();
         }
 
-        const rows = await this.db
+        const rows = collectInChunks(keys, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => this.db
             .select({ key: videoLearningClip.key })
             .from(videoLearningClip)
-            .where(inArray(videoLearningClip.key, keys));
+            .where(inArray(videoLearningClip.key, chunk))
+            .all());
 
         return new Set(rows.map((r) => r.key));
     }
@@ -39,12 +41,25 @@ export default class VideoLearningClipRepositoryImpl implements VideoLearningCli
             return 0;
         }
 
-        const rows = await this.db
-            .select({ count: sql<number>`count(*)` })
-            .from(videoLearningClip)
-            .where(query.keys ? inArray(videoLearningClip.key, query.keys) : undefined);
+        if (!query.keys) {
+            const rows = await this.db
+                .select({ count: sql<number>`count(*)` })
+                .from(videoLearningClip);
+            return Number(rows?.[0]?.count ?? 0);
+        }
 
-        return Number(rows?.[0]?.count ?? 0);
+        // 先去重再分片求和：key 为唯一业务键，分片间互不相交且可避开 SQLite 变量上限。
+        const uniqueKeys = Array.from(new Set(query.keys));
+        let total = 0;
+        inChunks(uniqueKeys, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => {
+            const row = this.db
+                .select({ count: sql<number>`count(*)` })
+                .from(videoLearningClip)
+                .where(inArray(videoLearningClip.key, chunk))
+                .get();
+            total += Number(row?.count ?? 0);
+        });
+        return total;
     }
 
     public async listPage(query: VideoLearningClipPageQuery): Promise<VideoLearningClip[]> {
@@ -52,13 +67,24 @@ export default class VideoLearningClipRepositoryImpl implements VideoLearningCli
             return [];
         }
 
-        return this.db
+        if (!query.keys || query.keys.length <= SQLITE_MAX_BIND_PARAMS_CHUNK) {
+            return this.db
+                .select()
+                .from(videoLearningClip)
+                .where(query.keys ? inArray(videoLearningClip.key, query.keys) : undefined)
+                .orderBy(desc(videoLearningClip.created_at))
+                .offset(query.offset)
+                .limit(query.limit);
+        }
+
+        const uniqueKeys = Array.from(new Set(query.keys));
+        const allRows = collectInChunks(uniqueKeys, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => this.db
             .select()
             .from(videoLearningClip)
-            .where(query.keys ? inArray(videoLearningClip.key, query.keys) : undefined)
-            .orderBy(desc(videoLearningClip.created_at))
-            .offset(query.offset)
-            .limit(query.limit);
+            .where(inArray(videoLearningClip.key, chunk))
+            .all());
+        allRows.sort((a, b) => b.created_at.localeCompare(a.created_at));
+        return allRows.slice(query.offset, query.offset + query.limit);
     }
 
     public async exists(key: string): Promise<boolean> {

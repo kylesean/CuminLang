@@ -57,12 +57,6 @@ export type ServiceCredentialSettingDetailVO = {
         /** 多服务商配置列表（每家独立密钥、协议、URL 与模型清单）。 */
         providers: CloudAiProviderProfileDetailVO[];
     };
-    tencent: {
-        /** 是否已保存腾讯云凭据。 */
-        hasCredentials: boolean;
-        /** 已保存 SecretId 的末四位；未配置时为空串。 */
-        secretIdHint: string;
-    };
 };
 
 /**
@@ -70,7 +64,7 @@ export type ServiceCredentialSettingDetailVO = {
  *
  * 密钥字段缺省或为空串表示「保持原值不变」：设置页是自动保存的，
  * 用户改接口地址时表单里的密钥本来就是空的，不能把「没填」理解成「清空」。
- * 真要清空用 `clearKey` / `clearTencent` 显式表达。
+ * 真要清空用 `clearKey` 显式表达。
  */
 export type ServiceCredentialSettingSaveVO = {
     openai: {
@@ -80,14 +74,6 @@ export type ServiceCredentialSettingSaveVO = {
         activeProviderId?: string;
         /** 多服务商配置列表（每家独立密钥、协议、URL 与模型清单）。 */
         providers: CloudAiProviderProfileSaveVO[];
-    };
-    tencent: {
-        /** 新的腾讯云 SecretId；留空表示沿用已保存的值。 */
-        secretId?: string;
-        /** 新的腾讯云 SecretKey；留空表示沿用已保存的值。 */
-        secretKey?: string;
-        /** 显式清除已保存的腾讯云凭据。 */
-        clearTencent?: boolean;
     };
 };
 
@@ -102,13 +88,5 @@ export type ServiceCredentialSettingFormValues = {
     openai: Omit<ServiceCredentialSettingDetailVO['openai'], 'providers'> & {
         embeddingModel: string;
         providers: CloudAiProviderProfileFormValue[];
-    };
-    tencent: ServiceCredentialSettingDetailVO['tencent'] & {
-        /** 本次要写入的新 SecretId；空串表示沿用。 */
-        secretId: string;
-        /** 本次要写入的新 SecretKey；空串表示沿用。 */
-        secretKey: string;
-        /** 显式清除已保存的腾讯云凭据。 */
-        clearTencent: boolean;
     };
 };

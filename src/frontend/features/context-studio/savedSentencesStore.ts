@@ -11,14 +11,18 @@ interface SavedSentencesState {
     markRemoved: (sentenceKey: string) => void;
 }
 
+let loadEpoch = 0;
+
 export const useSavedSentences = create<SavedSentencesState>((set, get) => ({
     savedKeys: new Set<string>(),
     loadedVideoId: null,
 
     loadForVideo: async (videoId: string) => {
         if (!videoId) return;
+        const epoch = ++loadEpoch;
         try {
             const keys = await contextStudioApi.listSavedKeys(videoId);
+            if (epoch !== loadEpoch) return;
             set({ savedKeys: new Set(keys), loadedVideoId: videoId });
         } catch {
             // 忽略加载异常，不影响主播放流程

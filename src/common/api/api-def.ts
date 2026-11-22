@@ -440,7 +440,6 @@ interface SettingsDef {
     'settings/service-credentials/detail': { params: void, return: ServiceCredentialSettingDetailVO };
     'settings/service-credentials/save': { params: ServiceCredentialSettingSaveVO, return: void };
     'settings/service-credentials/test-openai': { params: { model: string; providerId?: string }, return: { success: boolean, message: string } };
-    'settings/service-credentials/test-tencent': { params: void, return: { success: boolean, message: string } };
     'settings/engine-selection/detail': { params: void, return: EngineSelectionSettingVO };
     'settings/resource-status/detail': { params: void, return: ResourceStatusSnapshot };
     'settings/engine-selection/save': { params: EngineSelectionSettingVO, return: void };
@@ -933,7 +932,6 @@ export const API_ROUTE_KEYS = [
     'settings/service-credentials/detail',
     'settings/service-credentials/save',
     'settings/service-credentials/test-openai',
-    'settings/service-credentials/test-tencent',
     'settings/shortcuts/detail',
     'settings/shortcuts/save',
     'settings/storage/detail',

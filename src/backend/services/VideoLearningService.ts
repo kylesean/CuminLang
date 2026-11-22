@@ -25,6 +25,7 @@ import { concurrency } from '@/backend/utils/concurrency';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
 import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
+import { assertMediaPathAllowed } from '@/backend/utils/file-path-guard';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
 import VideoLearningClipAnalysis, { type ClipCandidate } from '@/backend/services/VideoLearningClipAnalysis';
 import type { SubtitleVocabularyAnalysisService } from '@/backend/services/SubtitleVocabularyAnalysisService';
@@ -216,6 +217,7 @@ export class VideoLearningServiceImpl implements VideoLearningService {
      * @param srtPath 可选字幕路径，用于补充加载缓存。
      */
     public async autoClip(videoPath: string, srtKey: string, srtPath?: string): Promise<void> {
+        await assertMediaPathAllowed(videoPath, this.storageDirectoryProvider, this.mediaPathRegistry);
         const srt = await this.ensureSrtCached(srtKey, srtPath);
         if (!srt) {
             throw new Error(ErrorConstants.CACHE_NOT_FOUND);
@@ -847,6 +849,7 @@ export class VideoLearningServiceImpl implements VideoLearningService {
      * @returns 当前片段状态快照。
      */
     public async detectClipStatus(videoPath: string, srtKey: string, srtPath?: string): Promise<VideoLearningClipStatusVO> {
+        await assertMediaPathAllowed(videoPath, this.storageDirectoryProvider, this.mediaPathRegistry);
         const srt = await this.ensureSrtCached(srtKey, srtPath);
         if (!srt) {
             throw new Error(ErrorConstants.CACHE_NOT_FOUND);

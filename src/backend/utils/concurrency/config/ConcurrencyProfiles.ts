@@ -73,7 +73,6 @@ export const defaultConcurrencyProfiles: ConcurrencyProfiles = {
     rateLimiter: {
         whisper: { maxRequests: 5, windowMs: 1000 },
         gpt: { maxRequests: 10, windowMs: 1000 },
-        tencent: { maxRequests: 4, windowMs: 1000 },
         tts: { maxRequests: 10, windowMs: 1000 },
     },
     scheduler: {

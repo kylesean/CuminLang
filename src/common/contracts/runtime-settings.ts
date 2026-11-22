@@ -31,7 +31,6 @@ export const runtimeSettingKeys = [
     'providers.subtitleTranslation',
     'providers.dictionary',
     'providers.embedding',
-    'features.openai.subtitleTranslationMode',
     'learning.activePromptPresetId',
     'appearance.theme',
     'appearance.themeFamily',

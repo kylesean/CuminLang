@@ -145,7 +145,6 @@ export default class SubtitleController implements Controller {
         const videoPath = await this.resolveVideoPath(params.videoId, params.videoPath);
         const srt = await this.subtitleService.discardEditedTrack({
             videoPath,
-            editedSubtitlePath: params.editedSubtitlePath,
             targetSubtitlePath: params.targetSubtitlePath,
             currentFileHash: params.currentFileHash,
         });
@@ -153,9 +152,15 @@ export default class SubtitleController implements Controller {
     }
 
     private async resolveVideoPath(videoId: string, provided?: string): Promise<string | undefined> {
-        if (provided) return provided;
-        if (!this.watchHistoryService) return undefined;
-        return this.watchHistoryService.videoPath(videoId).catch(() => undefined);
+        // 服务端始终以 videoId 对应的数据库记录为权威路径，不盲信 IPC 入参，防止跨路径读写/删盘。
+        if (this.watchHistoryService) {
+            const resolved = await this.watchHistoryService.videoPath(videoId).catch(() => undefined);
+            if (!resolved) {
+                throw new Error(`找不到对应的视频记录：${videoId}`);
+            }
+            return resolved;
+        }
+        return provided;
     }
 
     private async attachAndResolveTrack(

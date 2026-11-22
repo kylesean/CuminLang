@@ -12,25 +12,42 @@ interface SceneBoundariesState {
     resolvedKey: string | null;
     boundaries: SceneBoundary[];
     inFlightKey: string | null;
-    setResolved: (key: string, boundaries: SceneBoundary[]) => void;
-    setInFlight: (key: string | null) => void;
+    latestRequestKey: string | null;
+    request: (key: string, sentences: SceneSentence[], videoPath?: string) => void;
     reset: () => void;
 }
 
-const useSceneBoundariesStore = create<SceneBoundariesState>((set) => ({
+const useSceneBoundariesStore = create<SceneBoundariesState>((set, get) => ({
     resolvedKey: null,
     boundaries: [],
     inFlightKey: null,
-    setResolved: (key, boundaries) => set({
-        resolvedKey: key,
-        boundaries,
-        inFlightKey: null,
-    }),
-    setInFlight: (key) => set({ inFlightKey: key }),
+    latestRequestKey: null,
+    request: (key, sentences, videoPath) => {
+        const state = get();
+        if (state.resolvedKey === key || state.inFlightKey === key) {
+            return;
+        }
+        set({ inFlightKey: key, latestRequestKey: key });
+        playerApi.getSceneBoundaries(sentences, videoPath)
+            .then((result) => {
+                if (get().latestRequestKey !== key) {
+                    return;
+                }
+                set({ resolvedKey: key, boundaries: result, inFlightKey: null });
+            })
+            .catch(() => {
+                // 场景提示是可选增强，取不到就静默隐藏，不回退到前端重算。
+                if (get().latestRequestKey !== key) {
+                    return;
+                }
+                set({ resolvedKey: key, boundaries: [], inFlightKey: null });
+            });
+    },
     reset: () => set({
         resolvedKey: null,
         boundaries: [],
         inFlightKey: null,
+        latestRequestKey: null,
     }),
 }));
 
@@ -69,30 +86,7 @@ export const useSceneBoundaries = (sentences: Sentence[]): SceneBoundary[] => {
         if (!requestKey) {
             return;
         }
-        const state = useSceneBoundariesStore.getState();
-        if (state.resolvedKey === requestKey || state.inFlightKey === requestKey) {
-            return;
-        }
-        state.setInFlight(requestKey);
-        let cancelled = false;
-        playerApi.getSceneBoundaries(sceneSentences, videoPath ?? undefined)
-            .then((result) => {
-                if (!cancelled) {
-                    useSceneBoundariesStore.getState().setResolved(requestKey, result);
-                }
-            })
-            .catch(() => {
-                // 场景提示是可选增强，取不到就静默隐藏，不回退到前端重算。
-                if (!cancelled) {
-                    useSceneBoundariesStore.getState().setResolved(requestKey, []);
-                }
-            });
-        return () => {
-            cancelled = true;
-            if (useSceneBoundariesStore.getState().inFlightKey === requestKey) {
-                useSceneBoundariesStore.getState().setInFlight(null);
-            }
-        };
+        useSceneBoundariesStore.getState().request(requestKey, sceneSentences, videoPath ?? undefined);
     }, [requestKey, sceneSentences, videoPath]);
 
     return useMemo<SceneBoundary[]>(

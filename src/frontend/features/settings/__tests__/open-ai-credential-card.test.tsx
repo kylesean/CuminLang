@@ -99,13 +99,6 @@ const buildDefaultValues = (
             },
         ],
     },
-    tencent: {
-        hasCredentials: false,
-        secretIdHint: '',
-        secretId: '',
-        secretKey: '',
-        clearTencent: false,
-    },
 });
 
 const renderCard = (

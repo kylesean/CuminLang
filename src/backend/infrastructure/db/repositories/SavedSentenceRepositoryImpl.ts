@@ -64,51 +64,61 @@ export default class SavedSentenceRepositoryImpl implements SavedSentenceReposit
 
     public async upsert(input: SaveSentenceInput): Promise<SavedSentenceVO> {
         const now = new Date().toISOString();
-        const existing = await this.findByKey(input.sentenceKey);
-        if (existing) {
-            await this.db
-                .update(savedSentence)
-                .set({
+        const row = this.db.transaction((tx) => {
+            const existing = tx
+                .select()
+                .from(savedSentence)
+                .where(eq(savedSentence.sentence_key, input.sentenceKey))
+                .limit(1)
+                .get();
+
+            if (existing) {
+                const updated = tx
+                    .update(savedSentence)
+                    .set({
+                        video_id: input.videoId,
+                        video_title: input.videoTitle ?? existing.video_title,
+                        file_hash: input.fileHash,
+                        sentence_index: input.sentenceIndex,
+                        start_time: input.startTime,
+                        end_time: input.endTime,
+                        text: input.text,
+                        text_zh: input.textZh ?? existing.text_zh,
+                        note: input.note ?? existing.note,
+                        tag: input.tag ?? existing.tag,
+                        updated_at: now,
+                    })
+                    .where(eq(savedSentence.sentence_key, input.sentenceKey))
+                    .returning()
+                    .get();
+                if (!updated) {
+                    throw new Error(`Failed to reload saved sentence: ${input.sentenceKey}`);
+                }
+                return updated;
+            }
+
+            return tx
+                .insert(savedSentence)
+                .values({
+                    sentence_key: input.sentenceKey,
                     video_id: input.videoId,
-                    video_title: input.videoTitle ?? existing.videoTitle,
+                    video_title: input.videoTitle ?? '',
                     file_hash: input.fileHash,
                     sentence_index: input.sentenceIndex,
                     start_time: input.startTime,
                     end_time: input.endTime,
                     text: input.text,
-                    text_zh: input.textZh ?? existing.textZh,
-                    note: input.note ?? existing.note,
-                    tag: input.tag ?? existing.tag,
+                    text_zh: input.textZh ?? '',
+                    note: input.note ?? '',
+                    tag: input.tag ?? 'general',
+                    created_at: now,
                     updated_at: now,
                 })
-                .where(eq(savedSentence.sentence_key, input.sentenceKey));
-            const updated = await this.findByKey(input.sentenceKey);
-            if (!updated) {
-                throw new Error(`Failed to reload saved sentence: ${input.sentenceKey}`);
-            }
-            return updated;
-        }
+                .returning()
+                .get();
+        });
 
-        const inserted = await this.db
-            .insert(savedSentence)
-            .values({
-                sentence_key: input.sentenceKey,
-                video_id: input.videoId,
-                video_title: input.videoTitle ?? '',
-                file_hash: input.fileHash,
-                sentence_index: input.sentenceIndex,
-                start_time: input.startTime,
-                end_time: input.endTime,
-                text: input.text,
-                text_zh: input.textZh ?? '',
-                note: input.note ?? '',
-                tag: input.tag ?? 'general',
-                created_at: now,
-                updated_at: now,
-            })
-            .returning();
-
-        return toVO(inserted[0]);
+        return toVO(row);
     }
 
     public async updateNoteOrTag(input: UpdateSavedSentenceInput): Promise<SavedSentenceVO | null> {

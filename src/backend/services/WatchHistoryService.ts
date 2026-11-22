@@ -376,7 +376,13 @@ export class WatchHistoryServiceImpl implements WatchHistoryService {
     public async create(filePaths: string[], concatLibrary = false): Promise<string[]> {
         if (concatLibrary) {
             const lp = await this.storageDirectoryProvider.provideDirectory(StorageDirectoryTarget.VIDEOS);
-            filePaths = filePaths.map((f) => path.join(lp, f));
+            filePaths = filePaths.map((f) => {
+                const resolved = path.resolve(lp, f);
+                if (!isPathInsideRoot(lp, resolved)) {
+                    throw new Error('媒体库路径越界，拒绝导入');
+                }
+                return resolved;
+            });
         }
         const ids = await this.watchHistoryLibrary.create(filePaths);
         // 仅对校验通过并实际入库的媒体文件（含目录扫描出的视频及首选 HTML5 变体）登记白名单，

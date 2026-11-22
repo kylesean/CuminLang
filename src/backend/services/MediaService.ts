@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import path from 'path';
 import { inject, injectable } from 'inversify';
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
@@ -6,7 +5,7 @@ import type StorageDirectoryProvider from '@/backend/services/gateways/storage/S
 import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import type FfmpegService from '@/backend/services/FfmpegService';
 import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
-import { isPathInsideRoot } from '@/backend/infrastructure/media/MediaProtocol';
+import { assertMediaPathAllowed as assertAllowedMediaPath } from '@/backend/utils/file-path-guard';
 import TYPES from '@/backend/ioc/types';
 import { ObjUtil } from '@/backend/utils/ObjUtil';
 import type { VideoInfo } from '@/common/types/video-info';
@@ -193,24 +192,7 @@ export class MediaServiceImpl implements MediaService {
      * @throws 路径不在允许范围内时抛出。
      */
     private async assertMediaPathAllowed(sourceFilePath: string): Promise<void> {
-        if (!sourceFilePath) {
-            throw new Error('媒体路径不能为空');
-        }
-        const libraryRoot = await this.storageDirectoryProvider.provideDirectory(StorageDirectoryTarget.LIBRARY_ROOT);
-        const literalAllowed = isPathInsideRoot(libraryRoot, sourceFilePath)
-            || this.mediaPathRegistry.isAllowed(sourceFilePath);
-        if (!literalAllowed) {
-            throw new Error(`媒体路径未授权：${sourceFilePath}`);
-        }
-
-        // 若目标在磁盘上存在，进一步校验 realpath，防止库内软链接逃逸到库外（与 media:// 协议保持一致）。
-        const realTargetPath = await fs.realpath(sourceFilePath).catch(() => null);
-        if (realTargetPath !== null) {
-            const realLibraryRoot = await fs.realpath(libraryRoot).catch(() => libraryRoot);
-            if (!isPathInsideRoot(realLibraryRoot, realTargetPath) && !this.mediaPathRegistry.isAllowed(realTargetPath)) {
-                throw new Error(`媒体路径未授权：${sourceFilePath}`);
-            }
-        }
+        await assertAllowedMediaPath(sourceFilePath, this.storageDirectoryProvider, this.mediaPathRegistry);
     }
 
     /**

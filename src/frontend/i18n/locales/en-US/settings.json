@@ -511,37 +511,6 @@
             "backupSource": "Backup source",
             "copyDownloadUrl": "Copy download link",
             "openInBrowser": "Open in browser"
-        },
-        "localAi": {
-            "inUse": "In use",
-            "readyNotInUse": "Ready",
-            "use": "Use this model",
-            "useSuccess": "Switched to this model; local translation and dictionary now share it",
-            "builtinModelName": "Built-in model",
-            "phaseDownloading": "Downloading",
-            "phaseVerifying": "Verifying",
-            "cancelDownload": "Cancel download",
-            "test": "Test",
-            "testing": "Testing…",
-            "deleteConfirmTitle": "Delete this local model?",
-            "deleteConfirmDescription": "This frees up local disk space; you can download or import it again anytime.",
-            "cancelDelete": "Cancel",
-            "confirmDelete": "Delete",
-            "deleteSuccess": "Model deleted",
-            "copyPath": "Copy path",
-            "speedWarm": "Daily response",
-            "speedTps": "Translation speed",
-            "speedTpsUnit": "chars/s",
-            "runtimeMissing": "The local enhancement pack component is missing; please reinstall the app.",
-            "customGuideTitle": "Manual download & import",
-            "customGuideStep1": "Download an instruct-tuned GGUF model file (Qwen series recommended; Q4_K_M offers the best balance of size and quality).",
-            "customGuideStep3": "Once the file is in place, come back to the app — the new model appears in the list automatically. Click \"Use\" to enable it.",
-            "aboutSize": "about {{size}}",
-            "fitRecommended": "Recommended",
-            "fitCompatible": "Compatible",
-            "fitHeavy": "High RAM",
-            "enableAllLocal": "Route translation, lookup & explanation to local model",
-            "enabledAllLocal": "Switched subtitle translation, dictionary and sentence explanation to local model"
         }
     },
     "resources": {
@@ -662,17 +631,7 @@
             "subtitleDesc": "Engine used to translate subtitles",
             "dictionaryLabel": "AI lookup & context",
             "dictionaryDesc": "Fallback for unlisted words and in-context word explanations",
-            "engineLocalAi": "Local enhancement resource pack",
-            "engineLocalBase": "Local base resource pack",
-            "engineLocalMtLegacy": "Lightweight local translation (retired, please pick another engine)",
             "engineNone": "Off",
-            "styleLabel": "Translation style",
-            "styleZh": "Translate into Chinese",
-            "styleSimpleEn": "Simplified English",
-            "styleCustom": "Custom",
-            "stylePlaceholder": "Leave empty to use the default style…",
-            "localMtZhOnlyHint": "Lightweight translation only supports Chinese",
-            "notReadyHint": "The local enhancement pack is not downloaded yet",
             "sentenceLabel": "Sentence explanation",
             "sentenceDesc": "Press the shortcut to explain the current sentence",
             "engineDisabled": "Disabled",
@@ -680,8 +639,7 @@
             "cacheLabel": "Translation cache",
             "cacheDesc": "Cleared entries are requested again next time",
             "clearCache": "Clear cache",
-            "clearCacheDone": "Cleared {{count}} cached entries",
-            "styleDesc": "How subtitle translations are phrased"
+            "clearCacheDone": "Cleared {{count}} cached entries"
         },
         "dictionaries": {
             "title": "Dictionaries",
@@ -743,7 +701,6 @@
         }
     },
     "runtime": {
-        "subtitleEngineInvalid": "Invalid subtitle translation engine ({{value}}). Pick one again in Feature Settings and save.",
-        "subtitleModeInvalid": "Invalid subtitle translation style ({{value}}). Pick one again in Feature Settings and save."
+        "subtitleEngineInvalid": "Invalid subtitle translation engine ({{value}}). Pick one again in Feature Settings and save."
     }
 }

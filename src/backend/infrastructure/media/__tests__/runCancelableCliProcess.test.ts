@@ -74,4 +74,19 @@ describe('runCancelableCliProcess 显式子进程生命周期', () => {
         vi.advanceTimersByTime(1000);
         expect(fakeChild.kill).toHaveBeenCalledTimes(1);
     });
+
+    it('rejects cleanly when resolveOnClose throws synchronously', async () => {
+        const fakeChild = new FakeChildProcess();
+        spawnMock.mockReturnValueOnce(fakeChild);
+
+        const task = startCancelableCliProcess<string>(
+            { executablePath: 'yt-dlp', args: ['--ignore-errors'] },
+            () => {
+                throw new Error('output artifact missing');
+            },
+        );
+
+        fakeChild.emit('close', 0);
+        await expect(task.result).rejects.toThrow('output artifact missing');
+    });
 });

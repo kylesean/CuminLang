@@ -73,6 +73,7 @@ export default class VideoLearningOssServiceImpl extends AbstractOssServiceImpl<
         // 生成缩略图
         const thumbnailFileName = `${key}-${this.THUMBNAIL_FILE}`;
         const tempThumbnailPath = path.join(tempFolder, thumbnailFileName);
+        let clipDirTouched = false;
         try {
             const length = await this.ffmpegService.duration(sourcePath);
             await this.ffmpegService.thumbnail({
@@ -81,6 +82,7 @@ export default class VideoLearningOssServiceImpl extends AbstractOssServiceImpl<
                 outputFolder: tempFolder,
                 time: length / 2
             });
+            clipDirTouched = true;
             await this.putFile(key, this.THUMBNAIL_FILE, tempThumbnailPath);
             await this.putFile(key, this.CLIP_FILE, sourcePath);
             await this.updateMetadata(key, {
@@ -88,6 +90,12 @@ export default class VideoLearningOssServiceImpl extends AbstractOssServiceImpl<
                 clip_file: this.CLIP_FILE,
                 thumbnail_file: this.THUMBNAIL_FILE
             });
+        } catch (error) {
+            if (clipDirTouched) {
+                // 写入中途失败时清理半成品目录，避免遗留缺少 metadata.json 的目录阻断后续 syncFromOss。
+                await this.delete(key).catch(() => undefined);
+            }
+            throw error;
         } finally {
             await this.fileSystemGateway.removeFileIfExists(tempThumbnailPath);
         }

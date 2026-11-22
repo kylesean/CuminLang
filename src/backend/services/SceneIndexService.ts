@@ -1,4 +1,4 @@
-import { inject, injectable } from 'inversify';
+import { inject, injectable, optional } from 'inversify';
 
 import TYPES from '@/backend/ioc/types';
 import { getMainLogger } from '@/backend/infrastructure/logger';
@@ -13,6 +13,9 @@ import { sceneInputHash } from '@/common/learning/sceneIndexKey';
 import type SpeakerDiarizationService from '@/backend/services/SpeakerDiarizationService';
 import type VisualSceneService from '@/backend/services/VisualSceneService';
 import type ProsodySignalService from '@/backend/services/ProsodySignalService';
+import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
+import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
+import { assertMediaPathAllowed } from '@/backend/utils/file-path-guard';
 
 /**
  * 场景切分索引服务契约。
@@ -60,6 +63,10 @@ export class SceneIndexServiceImpl implements SceneIndexService {
         private readonly visualScene: VisualSceneService,
         @inject(TYPES.ProsodySignalService)
         private readonly prosodySignal: ProsodySignalService,
+        @optional() @inject(TYPES.StorageDirectoryProvider)
+        private readonly storageDirectoryProvider?: StorageDirectoryProvider,
+        @optional() @inject(TYPES.MediaPathRegistry)
+        private readonly mediaPathRegistry?: MediaPathRegistry,
     ) {}
 
     public async getBoundaries(
@@ -69,17 +76,25 @@ export class SceneIndexServiceImpl implements SceneIndexService {
         if (sentences.length < 2) {
             return [];
         }
+        const normalizedVideoPath = videoPath?.trim() || undefined;
+        if (normalizedVideoPath && this.storageDirectoryProvider && this.mediaPathRegistry) {
+            await assertMediaPathAllowed(
+                normalizedVideoPath,
+                this.storageDirectoryProvider,
+                this.mediaPathRegistry,
+            );
+        }
         // 三类视频信号互不依赖，并发获取：串行等待会让首次进入某部视频的
         // 冷启动时间等于三者之和，而它们各自失败都只意味着降级。
         //
         // 声纹分离是可选增强：模型未安装或视频无音轨时返回 null，此时退回
         // 纯文本启发式；画面切分在多模态投影未安装时同样返回 null；语音韵律
         // 在无音轨或解码失败时返回 null。三者都不影响其他信号。
-        const [speakerIntervals, visualBoundaries, prosodyShifts] = videoPath
+        const [speakerIntervals, visualBoundaries, prosodyShifts] = normalizedVideoPath
             ? await Promise.all([
-                this.speakerDiarization.getIntervals(videoPath),
-                this.visualScene.getBoundaries(videoPath, sentences),
-                this.prosodySignal.getShifts(videoPath, sentences),
+                this.speakerDiarization.getIntervals(normalizedVideoPath),
+                this.visualScene.getBoundaries(normalizedVideoPath, sentences),
+                this.prosodySignal.getShifts(normalizedVideoPath, sentences),
             ])
             : [null, null, null];
         const visualShifts = visualBoundaries?.map((boundary) => boundary.atSec) ?? [];

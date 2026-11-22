@@ -1,5 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import WordsRepositoryImpl from '@/backend/infrastructure/db/repositories/WordsRepositoryImpl';
 import { words } from '@/backend/infrastructure/db/tables/words';
@@ -106,5 +110,80 @@ describe('WordsRepositoryImpl.replaceAll', () => {
             mastered_at: past,
             created_at: past,
         });
+    });
+
+    it('replaceAll 遇到仅大小写不同的内置默认词（如 Latin vs latin）时不会产生双行或约束冲突', async () => {
+        memoryDb = createMemoryDb();
+        const now = new Date().toISOString();
+        memoryDb.db.insert(words).values([
+            {
+                word: 'Latin',
+                translate: '拉丁语',
+                status: 'ignored',
+                source: 'default',
+                created_at: now,
+                updated_at: now,
+            },
+        ]).run();
+
+        const repo = new WordsRepositoryImpl(memoryDb.db);
+        await repo.replaceAll([
+            {
+                word: 'latin',
+                translate: '拉丁的',
+                status: 'learning',
+                source: 'imported',
+                created_at: now,
+                updated_at: now,
+            },
+        ]);
+
+        const all = memoryDb.db.select().from(words).where(eq(sql`lower(${words.word})`, 'latin')).all();
+        expect(all).toHaveLength(1);
+        expect(all[0]).toMatchObject({ word: 'latin', translate: '拉丁的', source: 'imported' });
+    });
+
+    it('0001 迁移会合并存量大小写重复词行并建立大小写不敏感唯一索引', () => {
+        const sqlite = new Database(':memory:');
+        try {
+            const migrationsDir = path.resolve(process.cwd(), 'drizzle', 'migrations');
+            const sql0 = fs.readFileSync(path.join(migrationsDir, '0000_initial_schema.sql'), 'utf8');
+            const sql1 = fs.readFileSync(path.join(migrationsDir, '0001_words_case_insensitive_unique.sql'), 'utf8');
+            for (const stmt of sql0.split('--> statement-breakpoint')) {
+                if (stmt.trim()) sqlite.exec(stmt);
+            }
+
+            sqlite.prepare(`
+                INSERT INTO dp_words (word, translate, status, source, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run('Latin', '拉丁语', 'ignored', 'default', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+            sqlite.prepare(`
+                INSERT INTO dp_words (word, translate, status, source, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run('latin', null, 'learning', 'manual', '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z');
+
+            for (const stmt of sql1.split('--> statement-breakpoint')) {
+                if (stmt.trim()) sqlite.exec(stmt);
+            }
+
+            const db = drizzle(sqlite);
+            const rows = db.select().from(words).where(eq(sql`lower(${words.word})`, 'latin')).all();
+            expect(rows).toHaveLength(1);
+            expect(rows[0]).toMatchObject({
+                word: 'latin',
+                translate: '拉丁语',
+                status: 'learning',
+                source: 'manual',
+            });
+
+            expect(() => {
+                sqlite.prepare(`
+                    INSERT INTO dp_words (word, translate, status, source)
+                    VALUES ('LATIN', '重复', 'ignored', 'default')
+                `).run();
+            }).toThrow(/UNIQUE constraint failed/);
+        } finally {
+            sqlite.close();
+        }
     });
 });

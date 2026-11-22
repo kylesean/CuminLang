@@ -29,7 +29,6 @@
             "ttsTitle": "Word & Sentence Pronunciation",
             "transcriptionTitle": "Speech-to-Subtitle",
             "dictionaryEnhancementTitle": "WordNet 3.1 English Dictionary",
-            "localAiTitle": "Local AI Language Model",
             "embeddingTitle": "Local Semantic Search Model",
             "manualGuideTitle": "Download not working? Manual install guide",
             "copyLink": "Copy link",
@@ -86,10 +85,6 @@
                     "title": "WordNet 3.1 English Dictionary",
                     "desc": "Offline English definitions, parts of speech & synonyms",
                     "size": "~16 MB"
-                },
-                "localAi": {
-                    "title": "Local AI Model ({{model}})",
-                    "desc": "Offline subtitle translation, AI lookup & sentence analysis matched to your RAM"
                 },
                 "embedding": {
                     "title": "Local Semantic Search (EmbeddingGemma 2)",

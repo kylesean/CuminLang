@@ -103,19 +103,12 @@ export const serviceCredentialSaveSchema: z.ZodType<ServiceCredentialSettingSave
         activeProviderId: z.string().optional(),
         providers: z.array(providerProfileSaveSchema),
     }),
-    tencent: z.object({
-        secretId: z.string().optional(),
-        secretKey: z.string().optional(),
-        clearTencent: z.boolean().optional(),
-    }),
 });
 
 /** 功能与引擎选择保存请求校验架构。 */
 export const engineSelectionSaveSchema: z.ZodType<EngineSelectionSettingVO> = z.object({
     openai: z.object({
         enableSentenceLearning: z.boolean(),
-        subtitleTranslationMode: z.enum(['zh', 'simple_en', 'custom', 'invalid']),
-        subtitleCustomStyle: z.string(),
         featureModels: z.object({
             sentenceLearning: z.string(),
             subtitleTranslation: z.string(),
@@ -123,7 +116,7 @@ export const engineSelectionSaveSchema: z.ZodType<EngineSelectionSettingVO> = z.
         }),
     }),
     providers: z.object({
-        subtitleTranslationEngine: z.enum(['openai', 'tencent', 'none', 'invalid']),
+        subtitleTranslationEngine: z.enum(['openai', 'none', 'invalid']),
         dictionaryEngine: z.enum(['openai', 'none', 'invalid']),
         embeddingEngine: z.enum(['auto', 'local', 'openai', 'none', 'invalid']).optional(),
     }),
@@ -131,7 +124,6 @@ export const engineSelectionSaveSchema: z.ZodType<EngineSelectionSettingVO> = z.
         'providers.subtitleTranslation': z.string().optional(),
         'providers.dictionary': z.string().optional(),
         'providers.embedding': z.string().optional(),
-        'features.openai.subtitleTranslationMode': z.string().optional(),
     }),
 });
 

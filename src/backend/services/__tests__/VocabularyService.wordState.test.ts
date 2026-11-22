@@ -23,7 +23,7 @@ import type { VideoLearningService } from '@/backend/services/VideoLearningServi
 import type { WordMatchService } from '@/backend/services/WordMatchService';
 import type VideoLearningClipWordRepository from '@/backend/services/repositories/VideoLearningClipWordRepository';
 
-const buildService = (memoryDb: MemoryDb) => {
+const buildService = (memoryDb: MemoryDb, overrides?: { clipWordRepository?: VideoLearningClipWordRepository }) => {
     const repository = new WordsRepositoryImpl(memoryDb.db);
     const reviewCardRepository = new ReviewCardRepositoryImpl(memoryDb.db);
     const service = new VocabularyServiceImpl(
@@ -36,13 +36,14 @@ const buildService = (memoryDb: MemoryDb) => {
         new WordEncounterRepositoryImpl(memoryDb.db),
         { invalidateVocabularyCache: vi.fn() } as unknown as WordMatchService,
         {} as unknown as AiProviderService,
-        {
+        overrides?.clipWordRepository ?? ({
             renameWord: vi.fn(async () => undefined),
             deleteByWord: vi.fn(async () => undefined),
-        } as unknown as VideoLearningClipWordRepository,
+        } as unknown as VideoLearningClipWordRepository),
         { invalidateVocabularyAnalysisCache: vi.fn() } as unknown as SubtitleService,
         {} as unknown as StorageDirectoryProvider,
         {} as unknown as FileSystemGateway,
+        memoryDb.db,
     );
     return { service, repository, reviewCardRepository };
 };
@@ -248,5 +249,31 @@ describe('VocabularyService 单词状态', () => {
         expect(reactivatedCard).not.toBeNull();
         const due = await reviewCardRepository.listDue(new Date(Date.now() + 1000).toISOString(), 20);
         expect(due.map((item) => item.word.word).sort()).toEqual(['cancel', 'serendipity']);
+    });
+
+    it('updateWord 中途失败时整个跨表事务回滚，不留旧卡新词撕裂状态', async () => {
+        memoryDb = createMemoryDb();
+        const failingClipRepo = {
+            renameWord: vi.fn(async () => {
+                throw new Error('clip rename boom');
+            }),
+            deleteByWord: vi.fn(async () => undefined),
+        } as unknown as VideoLearningClipWordRepository;
+        const { service, repository, reviewCardRepository } = buildService(memoryDb, {
+            clipWordRepository: failingClipRepo,
+        });
+        await repository.insertOne({ word: 'running', translate: '跑步', status: 'learning', source: 'manual' });
+        await reviewCardRepository.ensureForWords(['running'], new Date().toISOString());
+
+        const result = await service.updateWord({
+            oldWord: 'running',
+            word: 'sprinting',
+            translate: '冲刺',
+        });
+
+        expect(result.success).toBe(false);
+        expect(await repository.findByWord('running')).not.toBeNull();
+        expect(await repository.findByWord('sprinting')).toBeNull();
+        expect(await reviewCardRepository.findByWord('running')).not.toBeNull();
     });
 });

@@ -34,11 +34,7 @@
         "missingCredentials": "API key or API URL is not configured",
         "openAiSuccess": "Connection test succeeded",
         "emptyResponse": "Model returned an empty response",
-        "openAiFailed": "Test failed: {{detail}}",
-        "tencentIncomplete": "Tencent Cloud configuration is incomplete",
-        "tencentSuccess": "Tencent Cloud test succeeded",
-        "tencentEmptyResponse": "Tencent Cloud returned an empty response",
-        "tencentFailed": "Tencent Cloud test failed: {{detail}}"
+        "openAiFailed": "Test failed: {{detail}}"
     },
     "settings": {
         "sentenceLearningModelRequired": "No cloud model selected for Sentence Explanation. Please pick one in Available Models first.",
@@ -93,9 +89,7 @@
     },
     "subtitleTranslation": {
         "disabled": "Subtitle translation service is not enabled",
-        "tencentNotInitialized": "Tencent Translate client is not initialized. Check your credentials.",
-        "styleConfigMissing": "OpenAI subtitle translation style configuration is missing",
-        "tencentGatewayMismatch": "Tencent Translate engine does not use the subtitle translation gateway"
+        "styleConfigMissing": "OpenAI subtitle translation style configuration is missing"
     },
     "subtitleGeneration": {
         "inProgress": "Subtitles are already being generated for this video. Please wait for completion.",

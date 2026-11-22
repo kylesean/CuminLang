@@ -32,4 +32,16 @@ describe('mobileApi error localization', () => {
 
         await expect(mobileApi.getWatchDetail('42')).rejects.toThrow(expected);
     });
+
+    it('throws when a 2xx response body is not valid JSON', async () => {
+        setBrowserLang('zh-CN');
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response('<html>gateway error</html>', {
+                status: 200,
+                headers: { 'Content-Type': 'text/html' },
+            }),
+        );
+
+        await expect(mobileApi.getWatchDetail('42')).rejects.toThrow('服务器返回了无效响应');
+    });
 });

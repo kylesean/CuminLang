@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import type { WordSource, WordStatus } from '@/common/types/vocabulary';
 
@@ -30,7 +30,7 @@ export const words = sqliteTable('dp_words', {
         .notNull()
         .default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
-    lowerWordIdx: index('dp_words_lower_word_idx').on(sql`lower(${table.word})`),
+    lowerWordIdx: uniqueIndex('dp_words_lower_word_idx').on(sql`lower(${table.word})`),
     statusSourceIdx: index('dp_words_status_source_idx').on(table.status, table.source),
 }));
 

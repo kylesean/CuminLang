@@ -59,8 +59,8 @@ vi.mock('electron', () => ({
     },
 }));
 
-const SECRET_KEY = 'apiKeys.tencent.secretId';
-const PLAIN_SECRET = 'sk-very-secret-value-0123456789';
+const SECRET_KEY = 'apiKeys.openAi.providerKeys';
+const PLAIN_SECRET = '{"openai":"sk-very-secret-value-0123456789"}';
 
 const importStore = async () => {
     const module = await import('@/backend/infrastructure/settings/store');

@@ -523,7 +523,7 @@ describe('ScriptReaderPage - Refactored Book & Inspector Intensive Studio', () =
 
     it('merges split mid-sentence cues into one logical study unit, preserves chat session across note saves, and shows translation loading indicator', async () => {
         useSubtitleTranslation.setState({
-            engine: 'tencent',
+            engine: 'openai',
             activeFileHash: 'h-split',
             translations: new Map(),
         });

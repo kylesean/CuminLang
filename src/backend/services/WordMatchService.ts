@@ -127,12 +127,22 @@ export class WordMatchServiceImpl implements WordMatchService {
             return this.vocabularyWordsCache;
         }
 
+        const startRevision = this.vocabularyRevision;
+        const hadExpiredCache = this.vocabularyWordsCache !== null;
         const words = await this.wordsRepository.getAll();
-        this.vocabularyWordsCache = words.filter((word) => isActiveWordStatus(word.status));
+        const activeWords = words.filter((word) => isActiveWordStatus(word.status));
+        // 若查询期间发生了缓存失效，丢弃本次旧快照，防止把过期数据重新写回缓存并续期 TTL。
+        if (this.vocabularyRevision !== startRevision) {
+            return activeWords;
+        }
+        this.vocabularyWordsCache = activeWords;
         this.vocabularyCacheExpiresAt = Date.now() + VOCABULARY_CACHE_TTL_MS;
-        // 匹配器持有的是旧快照的 payload，刷新时必须一起丢弃，
-        // 否则命中结果里的 databaseWord 仍会带着过期掌握度。
+        // 匹配器持有的是旧快照的 payload，刷新时必须一起丢弃并递增版本，
+        // 否则命中结果里的 databaseWord 及上层字幕分析缓存仍会带着过期掌握度。
         this.vocabularyMatcherCache = null;
+        if (hadExpiredCache) {
+            this.vocabularyRevision += 1;
+        }
         return this.vocabularyWordsCache;
     }
 

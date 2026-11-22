@@ -375,7 +375,6 @@ export function useOnboardingBundle() {
                     activeProviderId: preset.id,
                     providers: nextProviders,
                 },
-                tencent: {},
             });
             cloudSavedModelRef.current = trimmedModel;
             setCloudSavedProvider(preset.name);

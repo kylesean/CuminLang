@@ -92,10 +92,12 @@ describe('WhisperCppGatewayImpl GPU 崩溃回退 CPU', () => {
         expect(calls[0].disableGpu).toBe(false);
     });
 
-    it('Windows NTSTATUS 崩溃退出码同样触发 CPU 重试', async () => {
+    it.each([
+        ['无符号 0xC0000005', 3221225477],
+        ['有符号 -1073741819', -1073741819],
+    ])('Windows NTSTATUS 崩溃退出码（%s）同样触发 CPU 重试', async (_label, exitCode) => {
         const { gateway, calls } = buildGateway([
-            // 3221225477 = 0xC0000005（STATUS_ACCESS_VIOLATION）：Windows 崩溃无 POSIX 信号
-            () => Promise.reject(new WhisperCppAbnormalExitError('whisper.cpp 退出码 3221225477：内存访问冲突', 3221225477, null)),
+            () => Promise.reject(new WhisperCppAbnormalExitError(`whisper.cpp 退出码 ${exitCode}：内存访问冲突`, exitCode, null)),
             () => Promise.resolve(OUTPUT),
         ]);
 

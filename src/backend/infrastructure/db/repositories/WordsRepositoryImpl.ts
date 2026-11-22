@@ -1,7 +1,8 @@
-import { and, eq, like, ne, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, like, ne, or, sql } from 'drizzle-orm';
 import { inject, injectable } from 'inversify';
 
 import type { Db } from '@/backend/infrastructure/db/createDb';
+import { inChunks, SQLITE_MAX_BIND_PARAMS_CHUNK } from '@/backend/infrastructure/db/utils';
 import { type InsertWord, type Word, words } from '@/backend/infrastructure/db/tables/words';
 import TYPES from '@/backend/ioc/types';
 import type WordsRepository from '@/backend/services/repositories/WordsRepository';
@@ -81,7 +82,12 @@ export default class WordsRepositoryImpl implements WordsRepository {
                 return;
             }
 
-            const mergedValues = values.map((item) => {
+            // 入参自身也可能存在仅大小写不同的重复词条，先按小写归一化去重（后写覆盖前写）。
+            const dedupedValues = Array.from(
+                new Map(values.map((item) => [item.word.toLowerCase(), item])).values(),
+            );
+
+            const mergedValues = dedupedValues.map((item) => {
                 const existing = existingUserRows.get(item.word.toLowerCase());
                 if (!existing) {
                     return item;
@@ -97,6 +103,13 @@ export default class WordsRepositoryImpl implements WordsRepository {
                     mastered_at: item.mastered_at !== undefined ? item.mastered_at : existing.mastered_at,
                     created_at: existing.created_at,
                 };
+            });
+
+            // 清理与本次导入词条仅大小写不同的残余内置默认词（如默认 'Latin' 与导入 'latin'），
+            // 避免撞上 lower(word) 大小写不敏感唯一索引。
+            const incomingLowerWords = mergedValues.map((item) => item.word.toLowerCase());
+            inChunks(incomingLowerWords, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => {
+                tx.delete(words).where(inArray(sql`lower(${words.word})`, chunk)).run();
             });
 
             for (let index = 0; index < mergedValues.length; index += chunkSize) {

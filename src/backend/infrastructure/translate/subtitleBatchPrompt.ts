@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { TranslationMode } from '@/common/types/TranslationResult';
 
 /**
  * 批量字幕翻译的提示词模板与结构化输出约定。
@@ -14,8 +13,6 @@ type SubtitleBatchPromptInput = {
     targets: BatchPromptItem[];
     contextBefore: BatchPromptItem[];
     contextAfter: BatchPromptItem[];
-    /** 当前翻译模式。 */
-    mode: TranslationMode;
 };
 
 type SubtitleBatchPromptOptions = {
@@ -59,25 +56,12 @@ export const buildSubtitleBatchPrompt = (
 };
 
 /**
- * 返回当前模式下 translation 字段的结构说明。
- */
-export const getSubtitleTranslationDescription = (mode: TranslationMode): string => {
-    if (mode === 'zh') {
-        return 'The translated sentence in Simplified Chinese.';
-    }
-    if (mode === 'simple_en') {
-        return 'The simplified English sentence that preserves the original meaning and subtitle readability.';
-    }
-    return 'The generated subtitle sentence that follows the custom style.';
-};
-
-/**
  * 构建批量字幕结果的结构化输出 schema。
  */
-export const createSubtitleBatchResultSchema = (mode: TranslationMode) =>
+export const createSubtitleBatchResultSchema = () =>
     z.object({
         items: z.array(z.object({
             key: z.string().describe('Original subtitle key.'),
-            translation: z.string().describe(getSubtitleTranslationDescription(mode)),
+            translation: z.string().describe('The translated sentence in Simplified Chinese.'),
         })),
     });

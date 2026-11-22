@@ -116,7 +116,7 @@ describe('ContextStudioService & SavedSentenceRepository', () => {
         await memoryDb.db.insert(sentenceTranslates).values({
             sentence: 'It was pure serendipity.',
             translate: '这纯粹是机缘巧合。',
-            mode: 'tencent',
+            mode: 'openai#gpt-4o-mini#zh-default',
         });
 
         const contexts = await service.getWordContexts('Serendipity');

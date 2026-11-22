@@ -34,11 +34,7 @@
         "missingCredentials": "API Key 或 API URL 未配置",
         "openAiSuccess": "测试成功",
         "emptyResponse": "返回了空响应",
-        "openAiFailed": "测试失败: {{detail}}",
-        "tencentIncomplete": "腾讯云配置不完整",
-        "tencentSuccess": "腾讯云配置测试成功",
-        "tencentEmptyResponse": "腾讯云返回了空响应",
-        "tencentFailed": "腾讯云测试失败: {{detail}}"
+        "openAiFailed": "测试失败: {{detail}}"
     },
     "settings": {
         "sentenceLearningModelRequired": "整句讲解还没选好云端模型，请先在「可用模型」里选一个",
@@ -93,9 +89,7 @@
     },
     "subtitleTranslation": {
         "disabled": "未启用字幕翻译服务",
-        "tencentNotInitialized": "腾讯翻译客户端未初始化，请检查密钥配置",
-        "styleConfigMissing": "OpenAI 字幕翻译风格配置缺失",
-        "tencentGatewayMismatch": "腾讯翻译引擎不经过字幕翻译网关"
+        "styleConfigMissing": "OpenAI 字幕翻译风格配置缺失"
     },
     "subtitleGeneration": {
         "inProgress": "该视频正在生成字幕中，请等待完成后再试",

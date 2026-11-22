@@ -29,7 +29,6 @@
             "ttsTitle": "单词与例句发音",
             "transcriptionTitle": "字幕语音识别",
             "dictionaryEnhancementTitle": "WordNet 3.1 英英词典",
-            "localAiTitle": "本地 AI 语言模型",
             "embeddingTitle": "本地语义搜索模型",
             "manualGuideTitle": "下载不下来？查看手动下载教程",
             "copyLink": "复制链接",
@@ -86,10 +85,6 @@
                     "title": "WordNet 3.1 英英词典",
                     "desc": "完整离线英英释义、词性与同义词库",
                     "size": "~16 MB"
-                },
-                "localAi": {
-                    "title": "本地 AI 模型（{{model}}）",
-                    "desc": "离线字幕翻译、AI 查词与整句深度讲解（已按内存匹配）"
                 },
                 "embedding": {
                     "title": "本地语义搜索（EmbeddingGemma 2）",

@@ -39,7 +39,7 @@ export const resolvePromptNeighbor = (sentence: Sentence | undefined): string | 
 /**
  * 构建不依赖上下文的单句存储键。
  *
- * 适用于一次请求只包含单句文本的场景（腾讯批量翻译、收藏片段直翻）。
+ * 适用于一次请求只包含单句文本的场景（如收藏片段直翻）。
  * 与收藏片段路径既有的键形态一致，因此两条链路天然共享同一行缓存。
  * @param text 字幕原文。
  * @returns 归一化后的原文；重复出现的同一句会收敛到同一行。

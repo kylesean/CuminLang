@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import i18n from '@/frontend/i18n';
 import { subscribeWithSelector } from 'zustand/middleware';
 import hash from 'object-hash';
-import type { RendererTranslationItem, TranslationMode } from '@/common/types/TranslationResult';
+import type { RendererTranslationItem } from '@/common/types/TranslationResult';
 import { playerApi } from '@/frontend/features/player/playerApi';
 import { getRendererLogger } from '@/frontend/log/simple-logger';
 import { showNotification } from '@/frontend/components/shared/toasts/notification';
@@ -13,9 +13,7 @@ import { rendererSessionId } from '@/frontend/infrastructure/electron/rendererSe
  */
 export interface TranslationState {
     /** 当前启用的翻译引擎。 */
-    engine: 'tencent' | 'openai' | 'none';
-    /** OpenAI 字幕模式。 */
-    openAiMode: TranslationMode;
+    engine: 'openai' | 'none';
     /** 当前激活字幕文件哈希。 */
     activeFileHash: string | null;
     /** 已返回且可直接展示的最终翻译文本。 */
@@ -36,8 +34,7 @@ export interface TranslationActions {
      * @param mode 启动快照中的 OpenAI 字幕模式。
      */
     initializeRuntimeSettings: (
-        engine: 'tencent' | 'openai' | 'none',
-        mode: TranslationMode
+        engine: 'openai' | 'none'
     ) => void;
 
     /**
@@ -68,14 +65,7 @@ export interface TranslationActions {
      *
      * @param engine 新翻译引擎。
      */
-    setEngine: (engine: 'tencent' | 'openai' | 'none') => void;
-
-    /**
-     * 设置 OpenAI 字幕模式。
-     *
-     * @param mode 新字幕模式。
-     */
-    setOpenAiMode: (mode: TranslationMode) => void;
+    setEngine: (engine: 'openai' | 'none') => void;
 
     /**
      * 设置当前激活的字幕文件哈希。
@@ -154,16 +144,14 @@ const showRequestFailure = (
 const useTranslation = create(
     subscribeWithSelector<TranslationState & TranslationActions>((set, get) => ({
         engine: 'none',
-        openAiMode: 'zh',
         activeFileHash: null,
         translations: new Map(),
 
-        initializeRuntimeSettings: (engine, openAiMode) => {
+        initializeRuntimeSettings: (engine) => {
             const state = get();
             set({
                 ...state,
                 engine,
-                openAiMode,
                 translations: new Map(),
             });
         },
@@ -202,7 +190,6 @@ const useTranslation = create(
                     currentIndex: target.currentIndex,
                     demandId,
                     engine: latest.engine,
-                    openAiMode: latest.openAiMode,
                 });
                 Promise.resolve(
                     playerApi.updateSubtitleTranslationDemand(
@@ -260,24 +247,6 @@ const useTranslation = create(
             });
         },
 
-        setOpenAiMode: (mode: TranslationMode) => {
-            const state = get();
-            if (state.openAiMode === mode) {
-                return;
-            }
-            if (state.engine === 'openai') {
-                cancelPendingDemand();
-                releaseSession(state.activeFileHash);
-            }
-            set({
-                ...state,
-                openAiMode: mode,
-                translations: state.engine === 'openai'
-                    ? new Map()
-                    : state.translations,
-            });
-        },
-
         setActiveFileHash: (fileHash: string | null) => {
             const state = get();
             if (state.activeFileHash === fileHash) {
@@ -299,19 +268,13 @@ const useTranslation = create(
  *
  * @param state 当前翻译状态。
  * @param item 后端返回的翻译条目。
- * @returns 文件、引擎和模式均匹配时返回 true。
+ * @returns 文件和引擎均匹配时返回 true。
  */
 const shouldAcceptTranslation = (
     state: TranslationState,
     item: RendererTranslationItem
 ): boolean => {
-    if (item.provider !== state.engine || state.activeFileHash !== item.fileHash) {
-        return false;
-    }
-    if (item.provider === 'openai') {
-        return (item.mode ?? 'zh') === state.openAiMode;
-    }
-    return true;
+    return item.provider === state.engine && state.activeFileHash === item.fileHash;
 };
 
 export default useTranslation;

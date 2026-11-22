@@ -111,65 +111,69 @@ export default class SentenceStudyNoteRepositoryImpl implements SentenceStudyNot
 
     public async upsert(params: SentenceStudyNoteSaveParams): Promise<SentenceStudyRecordVO> {
         const now = new Date().toISOString();
-        const existingRows = await this.db
-            .select()
-            .from(sentenceStudyNote)
-            .where(eq(sentenceStudyNote.sentence_key, params.sentenceKey))
-            .limit(1);
+        const row = this.db.transaction((tx) => {
+            const existing = tx
+                .select()
+                .from(sentenceStudyNote)
+                .where(eq(sentenceStudyNote.sentence_key, params.sentenceKey))
+                .limit(1)
+                .get();
 
-        if (existingRows.length > 0) {
-            const existing = existingRows[0];
-            const nextStudyCardJson = params.studyCard !== undefined
-                ? (params.studyCard ? JSON.stringify(params.studyCard) : null)
-                : existing.study_card_json;
-            const nextNoteSummary = params.noteSummary !== undefined
-                ? params.noteSummary
-                : existing.note_summary;
-            const nextMessagesJson = params.messages !== undefined
-                ? JSON.stringify(params.messages)
-                : existing.messages_json;
-            const nextPresetId = params.presetId !== undefined
-                ? params.presetId
-                : existing.preset_id;
+            if (existing) {
+                const nextStudyCardJson = params.studyCard !== undefined
+                    ? (params.studyCard ? JSON.stringify(params.studyCard) : null)
+                    : existing.study_card_json;
+                const nextNoteSummary = params.noteSummary !== undefined
+                    ? params.noteSummary
+                    : existing.note_summary;
+                const nextMessagesJson = params.messages !== undefined
+                    ? JSON.stringify(params.messages)
+                    : existing.messages_json;
+                const nextPresetId = params.presetId !== undefined
+                    ? params.presetId
+                    : existing.preset_id;
 
-            await this.db
-                .update(sentenceStudyNote)
-                .set({
+                const updated = tx
+                    .update(sentenceStudyNote)
+                    .set({
+                        video_id: params.videoId,
+                        original_text: params.originalText,
+                        study_card_json: nextStudyCardJson,
+                        note_summary: nextNoteSummary,
+                        messages_json: nextMessagesJson,
+                        preset_id: nextPresetId,
+                        updated_at: now,
+                    })
+                    .where(eq(sentenceStudyNote.id, existing.id))
+                    .returning()
+                    .get();
+
+                if (!updated) {
+                    throw new Error(`failed to read updated sentence study note: ${params.sentenceKey}`);
+                }
+                return updated;
+            }
+
+            return tx
+                .insert(sentenceStudyNote)
+                .values({
+                    sentence_key: params.sentenceKey,
                     video_id: params.videoId,
+                    file_hash: params.fileHash,
+                    sentence_index: params.sentenceIndex,
                     original_text: params.originalText,
-                    study_card_json: nextStudyCardJson,
-                    note_summary: nextNoteSummary,
-                    messages_json: nextMessagesJson,
-                    preset_id: nextPresetId,
+                    study_card_json: params.studyCard ? JSON.stringify(params.studyCard) : null,
+                    note_summary: params.noteSummary ?? '',
+                    messages_json: JSON.stringify(params.messages ?? []),
+                    preset_id: params.presetId ?? null,
+                    created_at: now,
                     updated_at: now,
                 })
-                .where(eq(sentenceStudyNote.id, existing.id));
+                .returning()
+                .get();
+        });
 
-            const updated = await this.findByKey(params.sentenceKey);
-            if (!updated) {
-                throw new Error(`failed to read updated sentence study note: ${params.sentenceKey}`);
-            }
-            return updated;
-        }
-
-        const [inserted] = await this.db
-            .insert(sentenceStudyNote)
-            .values({
-                sentence_key: params.sentenceKey,
-                video_id: params.videoId,
-                file_hash: params.fileHash,
-                sentence_index: params.sentenceIndex,
-                original_text: params.originalText,
-                study_card_json: params.studyCard ? JSON.stringify(params.studyCard) : null,
-                note_summary: params.noteSummary ?? '',
-                messages_json: JSON.stringify(params.messages ?? []),
-                preset_id: params.presetId ?? null,
-                created_at: now,
-                updated_at: now,
-            })
-            .returning();
-
-        return toVO(inserted, this.logger);
+        return toVO(row, this.logger);
     }
 
     public async saveStudyCard(params: {

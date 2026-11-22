@@ -212,13 +212,14 @@ export const useSentenceLearningChat = () => {
         if (!trimmedInput || isBusy || !chatSessionId) {
             return;
         }
-        const focusExpr = attachedFocusExpr?.trim();
+        // 直接从 Zustand store 读取最新焦点表达，避免同事件帧内先 setAttachedFocusExpr 再 handleSubmit 时命中陈旧闭包。
+        const focusExpr = useChatPanel.getState().attachedFocusExpr?.trim();
         const outboundText = focusExpr
             ? `[聚焦表达: ${focusExpr}]\n${trimmedInput}`
             : trimmedInput;
         setInput('');
         if (focusExpr) {
-            setAttachedFocusExpr(null);
+            useChatPanel.getState().setAttachedFocusExpr(null);
         }
         await sendMessage({ text: outboundText });
     };

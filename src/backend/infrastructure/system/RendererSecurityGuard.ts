@@ -64,7 +64,8 @@ export const isAppPageUrl = (
         const rendererDirectory = pathApi.resolve(options.rendererDirectory);
         const targetPath = pathApi.resolve(fileURLToPath(parsed, { windows: isWindows }));
         const relativePath = pathApi.relative(rendererDirectory, targetPath);
-        return relativePath === '' || (!relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath));
+        return relativePath === ''
+            || (relativePath !== '..' && !relativePath.startsWith(`..${pathApi.sep}`) && !pathApi.isAbsolute(relativePath));
     } catch {
         return false;
     }

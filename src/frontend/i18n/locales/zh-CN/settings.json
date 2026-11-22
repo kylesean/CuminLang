@@ -511,37 +511,6 @@
             "backupSource": "备用下载源",
             "copyDownloadUrl": "复制下载链接",
             "openInBrowser": "在浏览器中打开"
-        },
-        "localAi": {
-            "inUse": "当前使用",
-            "readyNotInUse": "已就绪",
-            "use": "设为使用",
-            "useSuccess": "已切换为当前模型，本地翻译与词典将共用它",
-            "builtinModelName": "内置模型",
-            "phaseDownloading": "下载中",
-            "phaseVerifying": "校验中",
-            "cancelDownload": "取消下载",
-            "test": "测试",
-            "testing": "测试中…",
-            "deleteConfirmTitle": "删除这个本地模型？",
-            "deleteConfirmDescription": "删除后会释放本地磁盘空间，随时可以重新下载或手动导入。",
-            "cancelDelete": "取消",
-            "confirmDelete": "确认删除",
-            "deleteSuccess": "模型已删除",
-            "copyPath": "复制路径",
-            "speedWarm": "日常响应",
-            "speedTps": "翻译速度",
-            "speedTpsUnit": "字/秒",
-            "runtimeMissing": "本地增强资源包组件缺失，请重新安装应用。",
-            "customGuideTitle": "手动下载与导入",
-            "customGuideStep1": "下载指令对话版（Instruct）的 GGUF 模型文件（推荐 Qwen 系列，量化版本选 Q4_K_M 体积与效果最平衡）。",
-            "customGuideStep3": "文件放好后回到应用，新模型会自动出现在列表里；点击「设为使用」即可启用。",
-            "aboutSize": "约 {{size}}",
-            "fitRecommended": "推荐本机",
-            "fitCompatible": "可运行",
-            "fitHeavy": "内存偏紧",
-            "enableAllLocal": "一键将本地模型用于翻译/查词/讲解",
-            "enabledAllLocal": "已将字幕翻译、词典查询与整句讲解切换为本地模型"
         }
     },
     "resources": {
@@ -662,17 +631,7 @@
             "subtitleDesc": "生成字幕译文时使用的引擎",
             "dictionaryLabel": "AI 查词与语境解读",
             "dictionaryDesc": "内置词典未收录时兜底，并支持单词卡结合上下文的语境解读",
-            "engineLocalAi": "本地增强资源包",
-            "engineLocalBase": "本地基础资源包",
-            "engineLocalMtLegacy": "本地轻量翻译（已下线，请改选其他引擎）",
             "engineNone": "关闭",
-            "styleLabel": "翻译风格",
-            "styleZh": "翻译成中文",
-            "styleSimpleEn": "简化英文",
-            "styleCustom": "自定义",
-            "stylePlaceholder": "留空时使用默认风格…",
-            "localMtZhOnlyHint": "轻量翻译只支持中文",
-            "notReadyHint": "本地增强资源包还没下载",
             "sentenceLabel": "整句讲解",
             "sentenceDesc": "按快捷键为当前句打开讲解",
             "engineDisabled": "禁用",
@@ -680,8 +639,7 @@
             "cacheLabel": "翻译缓存",
             "cacheDesc": "清除后，下次会重新请求",
             "clearCache": "清除缓存",
-            "clearCacheDone": "已清除 {{count}} 条缓存",
-            "styleDesc": "决定字幕译文的措辞方式"
+            "clearCacheDone": "已清除 {{count}} 条缓存"
         },
         "dictionaries": {
             "title": "词典",
@@ -743,7 +701,6 @@
         }
     },
     "runtime": {
-        "subtitleEngineInvalid": "字幕翻译引擎设置值无效（{{value}}），请到“功能设置”重新选择并保存",
-        "subtitleModeInvalid": "字幕翻译风格设置值无效（{{value}}），请到“功能设置”重新选择并保存"
+        "subtitleEngineInvalid": "字幕翻译引擎设置值无效（{{value}}），请到“功能设置”重新选择并保存"
     }
 }

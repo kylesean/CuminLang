@@ -9,9 +9,6 @@
 export type EngineSelectionSettingVO = {
     openai: {
         enableSentenceLearning: boolean;
-        /** OpenAI 字幕输出风格；`'invalid'` 表示存储值非法，等待用户重新选择。 */
-        subtitleTranslationMode: 'zh' | 'simple_en' | 'custom' | 'invalid';
-        subtitleCustomStyle: string;
         featureModels: {
             sentenceLearning: string;
             subtitleTranslation: string;
@@ -20,7 +17,7 @@ export type EngineSelectionSettingVO = {
     };
     providers: {
         /** 字幕翻译引擎；`'invalid'` 表示存储值非法，等待用户重新选择。 */
-        subtitleTranslationEngine: 'openai' | 'tencent' | 'none' | 'invalid';
+        subtitleTranslationEngine: 'openai' | 'none' | 'invalid';
         /** 词典引擎；`'invalid'` 表示存储值非法（含已移除旧值），等待用户重新选择。 */
         dictionaryEngine: 'openai' | 'none' | 'invalid';
         /** 语义向量路由策略；缺省按 `'auto'` 处理。 */
@@ -33,8 +30,7 @@ export type EngineSelectionSettingVO = {
     invalidValues: Partial<Record<
         | 'providers.subtitleTranslation'
         | 'providers.dictionary'
-        | 'providers.embedding'
-        | 'features.openai.subtitleTranslationMode',
+        | 'providers.embedding',
         string
     >>;
 };

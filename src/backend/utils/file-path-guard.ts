@@ -1,4 +1,8 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
+import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
+import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
+import type MediaPathRegistry from '@/backend/services/MediaPathRegistry';
 
 /**
  * IPC 传入的文件路径校验。
@@ -106,3 +110,46 @@ export const assertVocabularyPath = (filePath: string, sizeBytes?: number): void
  * 词汇表导入允许的最大体积（字节）；导出给调用方做前置判断。
  */
 export const MAX_VOCABULARY_FILE_SIZE_BYTES = MAX_VOCABULARY_FILE_BYTES;
+
+/**
+ * 判断目标路径是否严格位于根目录内部（含根目录本身）。
+ *
+ * 使用 `path.relative` 并仅将 `'..'` 或 `'..' + path.sep` 视为越界，
+ * 避免把以 `..` 开头的合法文件名（如 `..intro.mp4`）误判为路径穿越。
+ */
+export const isPathInsideRoot = (rootDir: string, targetPath: string): boolean => {
+    const resolvedRoot = path.resolve(rootDir);
+    const resolvedTarget = path.resolve(targetPath);
+    const relative = path.relative(resolvedRoot, resolvedTarget);
+    return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+};
+
+/**
+ * 校验待交给 FFmpeg / 声纹 / 视觉解析子进程的媒体路径是否经过授权。
+ *
+ * 拒绝非绝对路径（含 ffmpeg 协议头如 `http://`、`file:`、`concat:`）、
+ * 未入库/未登记的任意路径，以及通过媒体库内软链接逃逸到库外的路径。
+ */
+export const assertMediaPathAllowed = async (
+    sourceFilePath: string,
+    storageDirectoryProvider: StorageDirectoryProvider,
+    mediaPathRegistry: MediaPathRegistry,
+): Promise<void> => {
+    if (!sourceFilePath || !path.isAbsolute(sourceFilePath)) {
+        throw new Error(`媒体路径未授权：${sourceFilePath || '(empty)'}`);
+    }
+    const libraryRoot = await storageDirectoryProvider.provideDirectory(StorageDirectoryTarget.LIBRARY_ROOT);
+    const literalAllowed = isPathInsideRoot(libraryRoot, sourceFilePath)
+        || mediaPathRegistry.isAllowed(sourceFilePath);
+    if (!literalAllowed) {
+        throw new Error(`媒体路径未授权：${sourceFilePath}`);
+    }
+
+    const realTargetPath = await fs.realpath(sourceFilePath).catch(() => null);
+    if (realTargetPath !== null) {
+        const realLibraryRoot = await fs.realpath(libraryRoot).catch(() => libraryRoot);
+        if (!isPathInsideRoot(realLibraryRoot, realTargetPath) && !mediaPathRegistry.isAllowed(realTargetPath)) {
+            throw new Error(`媒体路径未授权：${sourceFilePath}`);
+        }
+    }
+};

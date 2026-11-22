@@ -143,16 +143,10 @@ describe('OnboardingView Component', () => {
                     },
                 ],
             },
-            tencent: {
-                hasCredentials: false,
-                secretIdHint: '',
-            },
         });
         vi.mocked(settingsApi.getEngineSelection).mockResolvedValue({
             openai: {
                 enableSentenceLearning: false,
-                subtitleTranslationMode: 'zh',
-                subtitleCustomStyle: '',
                 featureModels: {
                     sentenceLearning: 'gpt-4o-mini',
                     subtitleTranslation: 'gpt-4o-mini',
@@ -381,7 +375,6 @@ describe('OnboardingView Component', () => {
                         },
                     ],
                 },
-                tencent: { hasCredentials: false, secretIdHint: '' },
             })
             .mockResolvedValue({
                 openai: {
@@ -400,7 +393,6 @@ describe('OnboardingView Component', () => {
                         },
                     ],
                 },
-                tencent: { hasCredentials: false, secretIdHint: '' },
             });
 
         render(<OnboardingView />);
@@ -473,7 +465,6 @@ describe('OnboardingView Component', () => {
                         },
                     ],
                 },
-                tencent: { hasCredentials: false, secretIdHint: '' },
             })
             .mockResolvedValue({
                 openai: {
@@ -492,7 +483,6 @@ describe('OnboardingView Component', () => {
                         },
                     ],
                 },
-                tencent: { hasCredentials: false, secretIdHint: '' },
             });
 
         render(<OnboardingView />);

@@ -645,20 +645,29 @@ export const WordPopoverHost: React.FC = () => {
 
     // 划词短语弹出时自动提供可选短语朗读能力（点击收藏等仍不阻塞）
     useEffect(() => {
-        if (open && mode === 'selection' && target?.word) {
-            void (async () => {
-                try {
-                    const ttsUrl = await getTtsUrl(target.word);
-                    if (ttsUrl) {
-                        await playAudioUrl(ttsUrl);
-                    } else {
-                        await playWord(target.word);
-                    }
-                } catch {
-                    // 静默忽略划词朗读失败
-                }
-            })();
+        if (!open || mode !== 'selection' || !target?.word) {
+            return;
         }
+        let cancelled = false;
+        const wordToSpeak = target.word;
+        void (async () => {
+            try {
+                const ttsUrl = await getTtsUrl(wordToSpeak);
+                if (cancelled) {
+                    return;
+                }
+                if (ttsUrl) {
+                    await playAudioUrl(ttsUrl);
+                } else {
+                    await playWord(wordToSpeak);
+                }
+            } catch {
+                // 静默忽略划词朗读失败
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [mode, open, target?.word, target?.popKey]);
 
     if (!open || !target) {

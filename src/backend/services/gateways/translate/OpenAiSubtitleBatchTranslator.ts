@@ -12,7 +12,7 @@ export default interface OpenAiSubtitleBatchTranslator {
     /**
      * 执行一次非流式结构化批量翻译。
      *
-     * @param input 当前组、组前后句、模式、风格与取消信号。
+     * @param input 当前组、组前后句、风格与取消信号。
      * @returns 模型返回的结构化字幕条目。
      */
     translate(

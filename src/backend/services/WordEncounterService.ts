@@ -1,6 +1,8 @@
 import { inject, injectable, optional } from 'inversify';
 
 import TYPES from '@/backend/ioc/types';
+import type { Db } from '@/backend/infrastructure/db/createDb';
+import { runInDbTransaction } from '@/backend/infrastructure/db/utils';
 import {
     applyMasteryEvidence,
     type MasteryEvidence,
@@ -81,6 +83,7 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         @inject(TYPES.ReviewCardRepository) private readonly reviewCardRepository: ReviewCardRepository,
         @optional() @inject(TYPES.WordMatchService) private readonly wordMatchService?: WordMatchService,
         @optional() @inject(TYPES.SubtitleService) private readonly subtitleService?: SubtitleService,
+        @optional() @inject(TYPES.Database) private readonly db?: Db,
     ) {}
 
     public async record(params: WordEncounterInput): Promise<void> {
@@ -89,53 +92,60 @@ export class WordEncounterServiceImpl implements WordEncounterService {
             return;
         }
         const rawLower = word.toLowerCase();
-        const exactExisting = await this.wordsRepository.findByWord(rawLower);
-        const lemma = exactExisting ? exactExisting.word.toLowerCase() : lemmatizeWord(word);
-        if (!lemma) {
-            return;
-        }
+        const statusChange = await runInDbTransaction(this.db, async () => {
+            const exactExisting = await this.wordsRepository.findByWord(rawLower);
+            const lemma = exactExisting ? exactExisting.word.toLowerCase() : lemmatizeWord(word);
+            if (!lemma) {
+                return null;
+            }
 
-        await this.repository.record({
-            word,
-            lemma,
-            action: params.action,
-            video_id: params.videoId ?? null,
-            file_hash: params.fileHash ?? null,
-            sentence_index: params.sentenceIndex ?? null,
-            sentence_hash: params.sentenceHash ?? null,
-            context: params.context ?? null,
-            score: this.normalizeScore(params.score),
-            rating: params.rating ?? null,
-        });
-
-        const existing = exactExisting ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
-        if (!existing) {
-            return;
-        }
-
-        const now = new Date();
-        const evidence = this.evidenceFor(params);
-        const mastery: MasteryUpdate = evidence
-            ? applyMasteryEvidence(this.masteryOf(existing), evidence)
-            : this.masteryOf(existing);
-        const nextStatus = this.resolveNextStatus(existing.status, mastery.suggestedStatus);
-        // seen/hover/replay 只是曝光，不算学习证据（evidence 为 null）：掌握度不动，
-        // 也不得刷新 last_seen_at——遗忘衰减完全由 last_seen_at 驱动，悬停/重播把
-        // 时钟拨到当前会让 14 天半衰期对常查的词永不生效，掌握度虚高。
-        // 查词 (open) 仅表明用户需要查释义，若已有 last_seen_at 同样保留原遗忘时钟。
-        // 纯曝光且无状态建议时整次 UPDATE 都可跳过，避免高频悬停造成写放大。
-        const shouldRefreshLastSeen = evidence !== null && (params.action !== 'open' || !existing.last_seen_at);
-        if (evidence || nextStatus) {
-            await this.wordsRepository.updateLearning(lemma, {
-                mastery: mastery.mastery,
-                confidence: mastery.confidence,
-                status: nextStatus,
-                ...(shouldRefreshLastSeen ? { lastSeenAt: now.toISOString() } : {}),
+            await this.repository.record({
+                word,
+                lemma,
+                action: params.action,
+                video_id: params.videoId ?? null,
+                file_hash: params.fileHash ?? null,
+                sentence_index: params.sentenceIndex ?? null,
+                sentence_hash: params.sentenceHash ?? null,
+                context: params.context ?? null,
+                score: this.normalizeScore(params.score),
+                rating: params.rating ?? null,
             });
-            this.invalidateDerivedVocabularyCachesIfChanged(existing.status, nextStatus);
-        }
 
-        await this.updateReviewCard(lemma, nextStatus ?? existing.status, params, now);
+            const existing = exactExisting ?? (lemma !== rawLower ? await this.wordsRepository.findByWord(lemma) : null);
+            if (!existing) {
+                return null;
+            }
+
+            const now = new Date();
+            const evidence = this.evidenceFor(params);
+            const mastery: MasteryUpdate = evidence
+                ? applyMasteryEvidence(this.masteryOf(existing), evidence)
+                : this.masteryOf(existing);
+            const nextStatus = this.resolveNextStatus(existing.status, mastery.suggestedStatus);
+            // seen/hover/replay 只是曝光，不算学习证据（evidence 为 null）：掌握度不动，
+            // 也不得刷新 last_seen_at——遗忘衰减完全由 last_seen_at 驱动，悬停/重播把
+            // 时钟拨到当前会让 14 天半衰期对常查的词永不生效，掌握度虚高。
+            // 查词 (open) 仅表明用户需要查释义，若已有 last_seen_at 同样保留原遗忘时钟。
+            // 纯曝光且无状态建议时整次 UPDATE 都可跳过，避免高频悬停造成写放大。
+            const shouldRefreshLastSeen = evidence !== null && (params.action !== 'open' || !existing.last_seen_at);
+            if (evidence || nextStatus) {
+                await this.wordsRepository.updateLearning(lemma, {
+                    mastery: mastery.mastery,
+                    confidence: mastery.confidence,
+                    status: nextStatus,
+                    ...(shouldRefreshLastSeen ? { lastSeenAt: now.toISOString() } : {}),
+                });
+            }
+
+            await this.updateReviewCard(lemma, nextStatus ?? existing.status, params, now);
+            return evidence || nextStatus
+                ? { previousStatus: existing.status, nextStatus }
+                : null;
+        });
+        if (statusChange) {
+            this.invalidateDerivedVocabularyCachesIfChanged(statusChange.previousStatus, statusChange.nextStatus);
+        }
     }
 
     public async getReviewQueue(limit = 12, targetWords?: readonly string[]): Promise<ReviewQueueVO> {
@@ -176,7 +186,7 @@ export class WordEncounterServiceImpl implements WordEncounterService {
             );
             const contexts = await this.loadContexts(validEntries.map((entry) => entry.word.word));
             const items = validEntries.map(({ word, card }) => {
-                const context = contexts.get(word.word) ?? null;
+                const context = contexts.get(word.word.toLowerCase()) ?? null;
                 if (card) {
                     return this.toReviewCardVO(card, word, context);
                 }
@@ -218,7 +228,7 @@ export class WordEncounterServiceImpl implements WordEncounterService {
         const contexts = await this.loadContexts(dueCards.map(({ card }) => card.word));
 
         return {
-            items: dueCards.map(({ card, word }) => this.toReviewCardVO(card, word, contexts.get(card.word) ?? null)),
+            items: dueCards.map(({ card, word }) => this.toReviewCardVO(card, word, contexts.get(card.word.toLowerCase()) ?? null)),
             dueCount,
             nextDueAt,
             stats: { last7Days, last30Days },
@@ -231,63 +241,72 @@ export class WordEncounterServiceImpl implements WordEncounterService {
             throw new Error('单词不能为空');
         }
         const rawLower = input.toLowerCase();
-        const word = (await this.wordsRepository.findByWord(rawLower))
-            ?? (await this.wordsRepository.findByWord(lemmatizeWord(input)));
-        if (!word) {
-            throw new Error('词条不存在');
-        }
-        const lemma = word.word.toLowerCase();
-        if (!isActiveWordStatus(word.status)) {
-            throw new Error('该词当前不在复习队列');
-        }
+        const { lemma, nextWord, nextCard, previousStatus, nextStatus } = await runInDbTransaction(this.db, async () => {
+            const word = (await this.wordsRepository.findByWord(rawLower))
+                ?? (await this.wordsRepository.findByWord(lemmatizeWord(input)));
+            if (!word) {
+                throw new Error('词条不存在');
+            }
+            const resolvedLemma = word.word.toLowerCase();
+            if (!isActiveWordStatus(word.status)) {
+                throw new Error('该词当前不在复习队列');
+            }
 
-        const now = new Date();
-        const existingCard = await this.reviewCardRepository.findByWord(lemma);
-        const currentSchedule = existingCard
-            ? this.scheduleFromCard(existingCard)
-            : createNewReviewSchedule(now);
-        const nextSchedule = scheduleReview(currentSchedule, params.rating, now);
-        const mastery = applyMasteryEvidence(this.masteryOf(word), {
-            kind: 'review',
-            rating: params.rating,
-        });
-        const nextStatus = this.resolveNextStatus(word.status, mastery.suggestedStatus) ?? word.status;
+            const now = new Date();
+            const existingCard = await this.reviewCardRepository.findByWord(resolvedLemma);
+            const currentSchedule = existingCard
+                ? this.scheduleFromCard(existingCard)
+                : createNewReviewSchedule(now);
+            const nextSchedule = scheduleReview(currentSchedule, params.rating, now);
+            const mastery = applyMasteryEvidence(this.masteryOf(word), {
+                kind: 'review',
+                rating: params.rating,
+            });
+            const resolvedNextStatus = this.resolveNextStatus(word.status, mastery.suggestedStatus) ?? word.status;
 
-        await this.reviewCardRepository.upsert(this.toInsertCard(lemma, nextSchedule));
-        await this.wordsRepository.updateLearning(lemma, {
-            mastery: mastery.mastery,
-            confidence: mastery.confidence,
-            status: nextStatus,
-            lastSeenAt: now.toISOString(),
-        });
-        this.invalidateDerivedVocabularyCachesIfChanged(word.status, nextStatus);
-        await this.repository.record({
-            word: word.word,
-            lemma,
-            action: 'review',
-            video_id: params.videoId ?? null,
-            file_hash: params.fileHash ?? null,
-            sentence_index: null,
-            sentence_hash: null,
-            context: null,
-            score: null,
-            rating: params.rating,
-        });
+            await this.reviewCardRepository.upsert(this.toInsertCard(resolvedLemma, nextSchedule));
+            await this.wordsRepository.updateLearning(resolvedLemma, {
+                mastery: mastery.mastery,
+                confidence: mastery.confidence,
+                status: resolvedNextStatus,
+                lastSeenAt: now.toISOString(),
+            });
+            await this.repository.record({
+                word: word.word,
+                lemma: resolvedLemma,
+                action: 'review',
+                video_id: params.videoId ?? null,
+                file_hash: params.fileHash ?? null,
+                sentence_index: null,
+                sentence_hash: null,
+                context: null,
+                score: null,
+                rating: params.rating,
+            });
 
-        const nextWord = { ...word, status: nextStatus, mastery: mastery.mastery, confidence: mastery.confidence };
-        const nextCard = {
-            ...(existingCard ?? {}),
-            id: existingCard?.id ?? 0,
-            word: lemma,
-            due_at: nextSchedule.dueAt,
-            state: nextSchedule.state,
-            reps: nextSchedule.reps,
-            lapses: nextSchedule.lapses,
-            stability: nextSchedule.stability,
-            difficulty: nextSchedule.difficulty,
-            last_review_at: nextSchedule.lastReviewAt,
-            last_rating: nextSchedule.lastRating,
-        } as ReviewCard;
+            const updatedWord = { ...word, status: resolvedNextStatus, mastery: mastery.mastery, confidence: mastery.confidence };
+            const updatedCard = {
+                ...(existingCard ?? {}),
+                id: existingCard?.id ?? 0,
+                word: resolvedLemma,
+                due_at: nextSchedule.dueAt,
+                state: nextSchedule.state,
+                reps: nextSchedule.reps,
+                lapses: nextSchedule.lapses,
+                stability: nextSchedule.stability,
+                difficulty: nextSchedule.difficulty,
+                last_review_at: nextSchedule.lastReviewAt,
+                last_rating: nextSchedule.lastRating,
+            } as ReviewCard;
+            return {
+                lemma: resolvedLemma,
+                nextWord: updatedWord,
+                nextCard: updatedCard,
+                previousStatus: word.status,
+                nextStatus: resolvedNextStatus,
+            };
+        });
+        this.invalidateDerivedVocabularyCachesIfChanged(previousStatus, nextStatus);
         const contexts = await this.loadContexts([lemma]);
         return {
             card: this.toReviewCardVO(nextCard, nextWord, contexts.get(lemma) ?? null),
@@ -316,49 +335,56 @@ export class WordEncounterServiceImpl implements WordEncounterService {
                 .map((word) => lemmatizeWord(word))
                 .filter((lemma) => lemma.length > 0),
         ));
-        for (const lemma of unique) {
-            // 只对已经在用户词表里的词更新掌握度：产出型练习不该把没学过的词
-            // 静默加进个人词表，那会让词表变成「用户说过的一切」。
-            const existing = await this.wordsRepository.findByWord(lemma);
-            if (!existing || existing.source === 'default') {
-                continue;
-            }
-            const mastery = applyMasteryEvidence(this.masteryOf(existing), {
-                kind: 'practice',
-                score,
-            });
-            const nextStatus = this.resolveNextStatus(existing.status, mastery.suggestedStatus);
-            const effectiveStatus = nextStatus ?? existing.status;
-            await this.wordsRepository.updateLearning(lemma, {
-                mastery: mastery.mastery,
-                confidence: mastery.confidence,
-                status: nextStatus,
-                lastSeenAt: now.toISOString(),
-            });
-            this.invalidateDerivedVocabularyCachesIfChanged(existing.status, nextStatus);
-            await this.repository.record({
-                word: existing.word,
-                lemma,
-                action: params.action,
-                video_id: params.videoId ?? null,
-                file_hash: params.fileHash ?? null,
-                sentence_index: params.sentenceIndex ?? null,
-                sentence_hash: null,
-                context: params.context ?? null,
-                score: params.score,
-                rating: null,
-            });
-            if (effectiveStatus === 'known' || effectiveStatus === 'ignored') {
-                await this.reviewCardRepository.deleteByWord(lemma);
-                continue;
-            }
-            if (score >= 60 && isActiveWordStatus(effectiveStatus)) {
-                const existingCard = await this.reviewCardRepository.findByWord(lemma);
-                if (existingCard && Date.parse(existingCard.due_at) <= now.getTime()) {
-                    const deferred = scheduleReview(this.scheduleFromCard(existingCard), 'good', now);
-                    await this.reviewCardRepository.upsert(this.toInsertCard(lemma, deferred));
+        const statusChanges = await runInDbTransaction(this.db, async () => {
+            const changes: Array<{ previousStatus: WordStatus; nextStatus?: WordStatus }> = [];
+            for (const lemma of unique) {
+                // 只对已经在用户词表里的词更新掌握度：产出型练习不该把没学过的词
+                // 静默加进个人词表，那会让词表变成「用户说过的一切」。
+                const existing = await this.wordsRepository.findByWord(lemma);
+                if (!existing || existing.source === 'default') {
+                    continue;
+                }
+                const mastery = applyMasteryEvidence(this.masteryOf(existing), {
+                    kind: 'practice',
+                    score,
+                });
+                const nextStatus = this.resolveNextStatus(existing.status, mastery.suggestedStatus);
+                const effectiveStatus = nextStatus ?? existing.status;
+                await this.wordsRepository.updateLearning(lemma, {
+                    mastery: mastery.mastery,
+                    confidence: mastery.confidence,
+                    status: nextStatus,
+                    lastSeenAt: now.toISOString(),
+                });
+                changes.push({ previousStatus: existing.status, nextStatus });
+                await this.repository.record({
+                    word: existing.word,
+                    lemma,
+                    action: params.action,
+                    video_id: params.videoId ?? null,
+                    file_hash: params.fileHash ?? null,
+                    sentence_index: params.sentenceIndex ?? null,
+                    sentence_hash: null,
+                    context: params.context ?? null,
+                    score: params.score,
+                    rating: null,
+                });
+                if (effectiveStatus === 'known' || effectiveStatus === 'ignored') {
+                    await this.reviewCardRepository.deleteByWord(lemma);
+                    continue;
+                }
+                if (score >= 60 && isActiveWordStatus(effectiveStatus)) {
+                    const existingCard = await this.reviewCardRepository.findByWord(lemma);
+                    if (existingCard && Date.parse(existingCard.due_at) <= now.getTime()) {
+                        const deferred = scheduleReview(this.scheduleFromCard(existingCard), 'good', now);
+                        await this.reviewCardRepository.upsert(this.toInsertCard(lemma, deferred));
+                    }
                 }
             }
+            return changes;
+        });
+        for (const change of statusChanges) {
+            this.invalidateDerivedVocabularyCachesIfChanged(change.previousStatus, change.nextStatus);
         }
     }
 

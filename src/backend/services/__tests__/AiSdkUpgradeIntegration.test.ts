@@ -134,13 +134,10 @@ const runTests = (): void => {
                     saveProxySettings: vi.fn(),
                     getCurrentSentenceLearningProvider: vi.fn().mockResolvedValue('openai'),
                     getCurrentTranslationProvider: vi.fn().mockResolvedValue('openai'),
-                    getOpenAiSubtitleTranslationMode: vi.fn().mockResolvedValue('zh'),
-                    getOpenAiSubtitleCustomStyle: vi.fn().mockResolvedValue(''),
                     getCurrentDictionaryProvider: vi.fn().mockResolvedValue('openai'),
                     getSherpaTtsVoice: vi.fn().mockReturnValue('en-US-amy-low'),
                     saveSherpaTtsVoice: vi.fn().mockResolvedValue(undefined),
                     testOpenAi: vi.fn(),
-                    testTencent: vi.fn(),
                 };
                 const gateway: RendererGateway = {
                     call: vi.fn(async (_path: never, params: Record<string, unknown>) => {

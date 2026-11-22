@@ -216,4 +216,28 @@ describe('SubtitleService.discardEditedTrack', () => {
         expect(harness.files.has(path.normalize(editedPath))).toBe(true);
         expect(harness.migrateTrackAssets).not.toHaveBeenCalled();
     });
+
+    it('preserves .edited.srt when asset migration fails and rejects out-of-scope paths', async () => {
+        const videoPath = '/media/talk.mp4';
+        const localPath = '/media/talk.local.srt';
+        const editedPath = '/media/talk.edited.srt';
+        const harness = createHarness({
+            [localPath]: localL2,
+            [editedPath]: editedL3,
+            '/other/secret.srt': localL2,
+        });
+        harness.migrateTrackAssets.mockRejectedValueOnce(new Error('db busy'));
+
+        await expect(harness.service.discardEditedTrack({
+            videoPath,
+            targetSubtitlePath: localPath,
+            currentFileHash: ObjUtil.hash(editedL3),
+        })).rejects.toThrow('db busy');
+        expect(harness.files.has(path.normalize(editedPath))).toBe(true);
+
+        await expect(harness.service.discardEditedTrack({
+            videoPath,
+            targetSubtitlePath: '/other/secret.srt',
+        })).rejects.toThrow('目标恢复轨不在授权路径范围内');
+    });
 });

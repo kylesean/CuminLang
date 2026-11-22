@@ -53,8 +53,6 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
         };
         const settingService = {
             getCurrentTranslationProvider: vi.fn().mockResolvedValue('openai'),
-            getOpenAiSubtitleTranslationMode: vi.fn().mockResolvedValue('zh'),
-            getOpenAiSubtitleCustomStyle: vi.fn().mockResolvedValue(''),
         };
         const sentenceTranslatesRepository = {
             findByStorageKeys: vi.fn().mockResolvedValue(new Map()),
@@ -67,7 +65,6 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
             modelRoutingService as never,
             sentenceTranslatesRepository as never,
             rendererGateway as never,
-            {} as never,
             openAiTranslator,
         );
 
@@ -98,7 +95,7 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
         const targets = makeTargets();
 
         const translations = await service.translateWithGateway(
-            { targets, contextBefore: [], contextAfter: [], mode: 'zh', style: '自然简洁', signal: new AbortController().signal },
+            { targets, contextBefore: [], contextAfter: [], style: '自然简洁', signal: new AbortController().signal },
             targets,
         );
 
@@ -122,7 +119,7 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
         const targets = makeTargets();
 
         const translations = await service.translateWithGateway(
-            { targets, contextBefore: [], contextAfter: [], mode: 'zh', style: '自然简洁', signal: new AbortController().signal },
+            { targets, contextBefore: [], contextAfter: [], style: '自然简洁', signal: new AbortController().signal },
             targets,
         );
 
@@ -144,7 +141,6 @@ describe('SubtitleTranslationServiceImpl 局部补译与动态供应商名称', 
             indices: [0],
             context: {
                 provider: 'openai',
-                mode: 'zh',
                 storageMode: 'openai#v1',
                 style: '自然',
                 styleSignature: 'sig',

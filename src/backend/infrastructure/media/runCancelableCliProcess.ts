@@ -81,17 +81,21 @@ export function startCancelableCliProcess<TResult>(
             phase = 'exited';
             processRef = null;
             clearTimer();
-            resolveOnClose(
-                {
-                    code,
-                    exitCode: code ?? -1,
-                    durationMs: Date.now() - startedAt,
-                    cancelled,
-                    pid: child.pid,
-                },
-                resolve,
-                reject,
-            );
+            try {
+                resolveOnClose(
+                    {
+                        code,
+                        exitCode: code ?? -1,
+                        durationMs: Date.now() - startedAt,
+                        cancelled,
+                        pid: child.pid,
+                    },
+                    resolve,
+                    reject,
+                );
+            } catch (error) {
+                reject(error);
+            }
         });
     });
 

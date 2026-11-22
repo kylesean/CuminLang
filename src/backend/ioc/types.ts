@@ -98,7 +98,6 @@ const TYPES = {
     SysConfRepository: Symbol('SysConfRepository'),
     SubtitleTimestampAdjustmentsRepository: Symbol('SubtitleTimestampAdjustmentsRepository'),
     // Clients
-    TencentClientProvider: Symbol('TencentClientProvider'),
     AiProviderService: Symbol('AiProviderService'),
     OpenAiSubtitleBatchTranslator: Symbol('OpenAiSubtitleBatchTranslator'),
     ModelRoutingService: Symbol('ModelRoutingService'),

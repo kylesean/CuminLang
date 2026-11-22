@@ -2,7 +2,7 @@ import path from 'path';
 import { inject, injectable, optional } from 'inversify';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import TYPES from '@/backend/ioc/types';
-import { concurrency } from '@/backend/utils/concurrency';
+import { concurrency, ConcurrencyCancelledError } from '@/backend/utils/concurrency';
 import { CancelByUserError } from '@/backend/utils/errors/errors';
 import type DpTaskService from '@/backend/services/DpTaskService';
 import type SubtitleGenerationService from '@/backend/services/SubtitleGenerationService';
@@ -291,36 +291,46 @@ export class YoutubeImportServiceImpl implements YoutubeImportService {
             if (queue.inUse >= queue.capacity || queue.waiting > 0) {
                 this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'queued' } });
             }
-            let abortQueuedWait: (() => void) | null = null;
+            const queueAbort = new AbortController();
             this.dpTaskService.registerTask(taskId, {
                 cancel: () => {
-                    abortQueuedWait?.();
+                    queueAbort.abort();
                 },
             });
-            const semaphorePromise = concurrency.withSemaphore('yt-dlp', async () => {
-                abortQueuedWait = null;
-                this.dpTaskService.checkCancel(taskId);
-                this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'connecting' } });
-                const running = this.ytDlpGateway.download({
-                    url,
-                    outputDir: workDir,
-                    ytDlpBinaryPath,
-                    cookiesFilePath: cookiesFilePath || undefined,
-                    onProgress: (percent) => {
-                        this.dpTaskService.process(taskId, {
-                            progress: null,
-                            progressMeta: { code: 'downloading', percent },
+            let downloadResult: { videoPath: string; srtPaths: string[] };
+            try {
+                downloadResult = await concurrency.withSemaphore(
+                    'yt-dlp',
+                    async () => {
+                        if (queueAbort.signal.aborted) {
+                            throw new CancelByUserError();
+                        }
+                        this.dpTaskService.checkCancel(taskId);
+                        this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'connecting' } });
+                        const running = this.ytDlpGateway.download({
+                            url,
+                            outputDir: workDir,
+                            ytDlpBinaryPath,
+                            cookiesFilePath: cookiesFilePath || undefined,
+                            onProgress: (percent) => {
+                                this.dpTaskService.process(taskId, {
+                                    progress: null,
+                                    progressMeta: { code: 'downloading', percent },
+                                });
+                            },
                         });
+                        this.dpTaskService.registerTask(taskId, { cancel: () => running.cancel() });
+                        return await running.result;
                     },
-                });
-                this.dpTaskService.registerTask(taskId, { cancel: () => running.cancel() });
-                return await running.result;
-            });
-            void semaphorePromise.catch(() => undefined);
-            const { videoPath, srtPaths } = await new Promise<{ videoPath: string; srtPaths: string[] }>((resolve, reject) => {
-                abortQueuedWait = () => reject(new CancelByUserError());
-                semaphorePromise.then(resolve, reject);
-            });
+                    { signal: queueAbort.signal },
+                );
+            } catch (error) {
+                if (error instanceof ConcurrencyCancelledError || queueAbort.signal.aborted) {
+                    throw new CancelByUserError();
+                }
+                throw error;
+            }
+            const { videoPath, srtPaths } = downloadResult;
 
             this.dpTaskService.process(taskId, { progress: null, progressMeta: { code: 'finalizing' } });
             this.dpTaskService.checkCancel(taskId);

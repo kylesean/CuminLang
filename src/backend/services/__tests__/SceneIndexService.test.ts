@@ -17,6 +17,9 @@ import { sceneInputHash } from '@/common/learning/sceneIndexKey';
 import type SpeakerDiarizationService from '@/backend/services/SpeakerDiarizationService';
 import type VisualSceneService from '@/backend/services/VisualSceneService';
 import type ProsodySignalService from '@/backend/services/ProsodySignalService';
+import MediaPathRegistry from '@/backend/services/MediaPathRegistry';
+import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
+import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 
 /**
  * 声纹服务桩：默认「没有声纹能力」，让切分退回纯文本启发式。
@@ -354,5 +357,40 @@ describe('SceneIndexService', () => {
         expect(boundaries).toHaveLength(1);
         expect(boundaries[0].kinds).toContain('time-gap');
         expect(boundaries[0].kinds).not.toContain('prosody-shift');
+    });
+
+    it('配置路径守卫时拒绝未授权或协议前缀 videoPath，且不触发音视频分析', async () => {
+        const { repository } = memoryRepository();
+        const diarization = stubDiarization();
+        const visualScene = stubVisualScene();
+        const prosody = stubProsody();
+        const storageProvider = {
+            provideDirectory: vi.fn(async (target: StorageDirectoryTarget) =>
+                target === StorageDirectoryTarget.LIBRARY_ROOT ? '/library' : '/library/temp'),
+            ensurePathAccessPermissionIfExists: vi.fn(async () => undefined),
+        } as unknown as StorageDirectoryProvider;
+        const registry = new MediaPathRegistry();
+        const service = new SceneIndexServiceImpl(
+            repository,
+            diarization,
+            visualScene,
+            prosody,
+            storageProvider,
+            registry,
+        );
+        const sentences = [
+            sentence(0, 0, 2, 'First.'),
+            sentence(1, 2, 4, 'Second.'),
+        ];
+
+        await expect(service.getBoundaries(sentences, '/outside/secret.mp4')).rejects.toThrow('媒体路径未授权');
+        await expect(service.getBoundaries(sentences, 'file:///outside/secret.mp4')).rejects.toThrow('媒体路径未授权');
+        expect(diarization.getIntervals).not.toHaveBeenCalled();
+        expect(visualScene.getBoundaries).not.toHaveBeenCalled();
+        expect(prosody.getShifts).not.toHaveBeenCalled();
+
+        registry.allowFile('/outside/allowed.mp4');
+        await expect(service.getBoundaries(sentences, '/outside/allowed.mp4')).resolves.toEqual([]);
+        expect(diarization.getIntervals).toHaveBeenCalledWith('/outside/allowed.mp4');
     });
 });

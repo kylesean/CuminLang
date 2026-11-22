@@ -37,9 +37,6 @@ const EXACT_MESSAGES: ReadonlyMap<string, string> = new Map([
     ['API Key 或 API URL 未配置', 'aiTest.missingCredentials'],
     ['测试成功', 'aiTest.openAiSuccess'],
     ['返回了空响应', 'aiTest.emptyResponse'],
-    ['腾讯云配置不完整', 'aiTest.tencentIncomplete'],
-    ['腾讯云配置测试成功', 'aiTest.tencentSuccess'],
-    ['腾讯云返回了空响应', 'aiTest.tencentEmptyResponse'],
     ['整句讲解还没选好云端模型，请先在「可用模型」里选一个', 'settings.sentenceLearningModelRequired'],
     ['字幕翻译还没选好云端模型，请先在「可用模型」里选一个', 'settings.subtitleTranslationModelRequired'],
     ['词典查词还没选好云端模型，请先在「可用模型」里选一个', 'settings.dictionaryModelRequired'],
@@ -59,9 +56,7 @@ const EXACT_MESSAGES: ReadonlyMap<string, string> = new Map([
     ['目标恢复轨不能是人工编辑轨本身', 'subtitle.cannotRestoreFromEdited'],
     ['缺少视频或源字幕路径，无法保存人工编辑轨', 'subtitle.missingSourceForEdited'],
     ['未启用字幕翻译服务', 'subtitleTranslation.disabled'],
-    ['腾讯翻译客户端未初始化，请检查密钥配置', 'subtitleTranslation.tencentNotInitialized'],
     ['OpenAI 字幕翻译风格配置缺失', 'subtitleTranslation.styleConfigMissing'],
-    ['腾讯翻译引擎不经过字幕翻译网关', 'subtitleTranslation.tencentGatewayMismatch'],
     ['该视频正在生成字幕中，请等待完成后再试', 'subtitleGeneration.inProgress'],
     ['上传学习片段后未找到片段元数据', 'videoLearning.clipMetaMissing'],
     ['未启用词典服务', 'dictionary.disabled'],
@@ -154,10 +149,6 @@ const PATTERN_RULES: readonly PatternRule[] = [
     {
         pattern: /^测试失败: ([\s\S]+)$/,
         build: (m) => ({ key: 'aiTest.openAiFailed', params: { detail: m[1] }, nestedParam: 'detail' }),
-    },
-    {
-        pattern: /^腾讯云测试失败: ([\s\S]+)$/,
-        build: (m) => ({ key: 'aiTest.tencentFailed', params: { detail: m[1] }, nestedParam: 'detail' }),
     },
     {
         pattern: /^设置项 (.+) 非法: ([\s\S]+)$/,

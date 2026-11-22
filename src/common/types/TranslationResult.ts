@@ -1,7 +1,5 @@
 /** 字幕翻译结果来源，与持久化分区一一对应。 */
-export type TranslationProvider = 'tencent' | 'openai';
-
-export type TranslationMode = 'zh' | 'simple_en' | 'custom';
+export type TranslationProvider = 'openai';
 
 /**
  * 渲染层使用的字幕翻译条目。
@@ -17,6 +15,4 @@ export type RendererTranslationItem = {
     translation: string;
     /** 结果来源 provider。 */
     provider: TranslationProvider;
-    /** OpenAI 场景下的模式；腾讯固定视为 `zh`。 */
-    mode?: TranslationMode;
 };

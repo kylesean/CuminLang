@@ -125,11 +125,6 @@ const ServiceResourceSetting: React.FC = () => {
                         disabledModels: item.disabledModels ?? [],
                     })),
                 },
-                tencent: {
-                    ...(values.tencent.secretId ? { secretId: values.tencent.secretId } : {}),
-                    ...(values.tencent.secretKey ? { secretKey: values.tencent.secretKey } : {}),
-                    ...(values.tencent.clearTencent ? { clearTencent: true } : {}),
-                },
             });
         },
     });
@@ -202,12 +197,6 @@ const ServiceResourceSetting: React.FC = () => {
                     clearKey: false,
                 })),
             },
-            tencent: {
-                ...settings.tencent,
-                secretId: '',
-                secretKey: '',
-                clearTencent: false,
-            },
         });
     }, [initializeCredentials, settings]);
 
@@ -234,7 +223,7 @@ const ServiceResourceSetting: React.FC = () => {
         modelField: 'openai.featureModels.subtitleTranslation' | 'openai.featureModels.dictionary',
     ) => {
         const { engine, model } = parseEngineValue(value);
-        setValue(engineKey, engine as 'openai' | 'tencent' | 'none', { shouldDirty: true });
+        setValue(engineKey, engine as 'openai' | 'none', { shouldDirty: true });
         setValue(modelField, model ?? '', { shouldDirty: true });
     };
 

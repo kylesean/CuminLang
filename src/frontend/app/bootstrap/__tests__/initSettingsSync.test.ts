@@ -29,7 +29,6 @@ describe('initSettingsSync', () => {
         useSetting.setState({ values: new Map(), init: false });
         useTranslation.setState({
             engine: 'none',
-            openAiMode: 'zh',
         });
     });
 
@@ -52,7 +51,6 @@ describe('initSettingsSync', () => {
 
         resolveSnapshot({
             'providers.subtitleTranslation': 'openai',
-            'features.openai.subtitleTranslationMode': 'zh',
         } as unknown as RuntimeSettingsSnapshot);
         await Promise.resolve();
         await Promise.resolve();

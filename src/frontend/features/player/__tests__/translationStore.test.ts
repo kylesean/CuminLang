@@ -39,7 +39,6 @@ const flushDebounce = async (): Promise<void> => {
 const seedActiveOpenAi = (fileHash = 'h1'): void => {
     useTranslation.setState({
         engine: 'openai',
-        openAiMode: 'zh',
         activeFileHash: fileHash,
         translations: new Map(),
     });
@@ -53,7 +52,6 @@ describe('translationStore 需求防抖与会话生命周期（特征化钉住�
         vi.mocked(showNotification).mockClear();
         useTranslation.setState({
             engine: 'none',
-            openAiMode: 'zh',
             activeFileHash: null,
             translations: new Map(),
         });
@@ -115,53 +113,36 @@ describe('translationStore 需求防抖与会话生命周期（特征化钉住�
         expect(calls[0]?.[2]).toBeLessThan(calls[1]?.[2] as number);
     });
 
-    it('迟到结果按 provider+fileHash+mode 过滤：不匹配的批次不写入译文表', () => {
+    it('迟到结果按 provider+fileHash 过滤：不匹配的批次不写入译文表', () => {
         seedActiveOpenAi('h1');
         useTranslation.getState().updateTranslations([
-            { key: 'k1', translation: '对', provider: 'openai', fileHash: 'h1', mode: 'zh' },
-            { key: 'k2', translation: '引擎不符', provider: 'tencent', fileHash: 'h1' },
-            { key: 'k3', translation: '文件不符', provider: 'openai', fileHash: 'h2', mode: 'zh' },
-            { key: 'k4', translation: '模式不符', provider: 'openai', fileHash: 'h1', mode: 'simple_en' },
+            { key: 'k1', translation: '对', provider: 'openai', fileHash: 'h1' },
+            { key: 'k3', translation: '文件不符', provider: 'openai', fileHash: 'h2' },
         ]);
 
         const translations = useTranslation.getState().translations;
         expect(translations.get('k1')).toBe('对');
-        expect(translations.has('k2')).toBe(false);
         expect(translations.has('k3')).toBe(false);
-        expect(translations.has('k4')).toBe(false);
     });
 
     it('setEngine 切换：取消挂起防抖、释放旧会话、清空译文', async () => {
         seedActiveOpenAi();
         useTranslation.getState().requestTranslation('h1', 1);
-        useTranslation.getState().setEngine('tencent');
+        useTranslation.getState().setEngine('none');
         await flushDebounce();
 
         expect(playerApiMock.releaseSubtitleTranslationSession).toHaveBeenCalledWith('h1', 'test-session');
         expect(playerApiMock.updateSubtitleTranslationDemand).not.toHaveBeenCalled();
         expect(useTranslation.getState().translations.size).toBe(0);
-        expect(useTranslation.getState().engine).toBe('tencent');
+        expect(useTranslation.getState().engine).toBe('none');
     });
 
     it('initializeRuntimeSettings 只改配置：不释放当前字幕会话（首屏竞态保护）', () => {
         seedActiveOpenAi();
-        useTranslation.getState().initializeRuntimeSettings('openai', 'simple_en');
+        useTranslation.getState().initializeRuntimeSettings('none');
 
         expect(playerApiMock.releaseSubtitleTranslationSession).not.toHaveBeenCalled();
-        expect(useTranslation.getState().engine).toBe('openai');
-        expect(useTranslation.getState().openAiMode).toBe('simple_en');
-    });
-
-    it('setOpenAiMode 仅在 AI 引擎下释放会话并清空译文；普通引擎不动译文', () => {
-        useTranslation.setState({ engine: 'tencent', activeFileHash: 'h1', translations: new Map([['k', 'v']]) });
-        useTranslation.getState().setOpenAiMode('simple_en');
-        expect(playerApiMock.releaseSubtitleTranslationSession).not.toHaveBeenCalled();
-        expect(useTranslation.getState().translations.get('k')).toBe('v');
-
-        seedActiveOpenAi();
-        useTranslation.getState().setOpenAiMode('simple_en');
-        expect(playerApiMock.releaseSubtitleTranslationSession).toHaveBeenCalledWith('h1', 'test-session');
-        expect(useTranslation.getState().translations.size).toBe(0);
+        expect(useTranslation.getState().engine).toBe('none');
     });
 
     it('需求提交失败：错误提示带引擎与消息哈希 dedupeKey', async () => {

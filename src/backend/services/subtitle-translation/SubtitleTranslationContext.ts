@@ -1,25 +1,15 @@
 import type ModelRoutingService from '@/backend/services/ModelRoutingService';
-import type SettingService from '@/backend/services/SettingService';
 import {
     buildSubtitleStorageMode,
     type SubtitleTranslationStorageMode,
 } from '@/backend/services/subtitle-translation/SubtitleTranslationStorageMode';
 import { resolveSubtitleStyleWithSignature } from '@/common/constants/openaiSubtitlePrompts';
-import type { TranslationMode, TranslationProvider } from '@/common/types/TranslationResult';
+import type { TranslationProvider } from '@/common/types/TranslationResult';
 
 /**
- * 字幕翻译的 provider 设置取值。
- */
-export type TranslationProviderSetting = NonNullable<
-    Awaited<ReturnType<SettingService['getCurrentTranslationProvider']>>
->;
-
-/**
- * 上下文解析依赖：设置与模型路由服务。
+ * 上下文解析依赖：模型路由服务。
  */
 export interface SubtitleTranslationContextDeps {
-    /** 设置业务服务。 */
-    settingService: SettingService;
     /** 模型路由配置服务。 */
     modelRoutingService: ModelRoutingService;
 }
@@ -28,12 +18,10 @@ export interface SubtitleTranslationContextDeps {
  * 当前设置解析出的字幕翻译稳定上下文。
  */
 export interface ResolvedSubtitleTranslationContext {
-    /** 当前翻译模式（zh 等）。 */
-    mode: TranslationMode;
-    /** 持久化缓存模式（含引擎与模型标识）。 */
+    /** 持久化缓存模式（含引擎、模型标识与风格签名）。 */
     storageMode: SubtitleTranslationStorageMode;
-    /** OpenAI 兼容批量提示词使用的风格约束；腾讯引擎为 undefined。 */
-    style?: string;
+    /** 批量提示词使用的风格约束。 */
+    style: string;
     /** 风格签名。 */
     styleSignature: string;
     /** 调度器使用的 profileKey。 */
@@ -43,22 +31,14 @@ export interface ResolvedSubtitleTranslationContext {
 /**
  * 解析当前设置对应的风格、持久化缓存模式与调度 profileKey。
  */
-export const resolveSubtitleTranslationContext = async (
+export const resolveSubtitleTranslationContext = (
     deps: SubtitleTranslationContextDeps,
-    provider: TranslationProvider,
-): Promise<ResolvedSubtitleTranslationContext> => {
-    if (provider === 'tencent') {
-        return { mode: 'zh', storageMode: 'tencent', styleSignature: '', profileKey: 'tencent' };
-    }
-    const mode = await deps.settingService.getOpenAiSubtitleTranslationMode();
-    const customStyle = mode === 'custom'
-        ? await deps.settingService.getOpenAiSubtitleCustomStyle()
-        : undefined;
-    const resolved = resolveSubtitleStyleWithSignature(mode, customStyle);
+    _provider: TranslationProvider,
+): ResolvedSubtitleTranslationContext => {
+    const resolved = resolveSubtitleStyleWithSignature();
     const routed = deps.modelRoutingService.resolveOpenAiModel('subtitleTranslation');
-    const storageMode = buildSubtitleStorageMode('openai', routed.modelId, mode, resolved.signature);
+    const storageMode = buildSubtitleStorageMode('openai', routed.modelId, resolved.signature);
     return {
-        mode,
         storageMode,
         style: resolved.style,
         styleSignature: resolved.signature,

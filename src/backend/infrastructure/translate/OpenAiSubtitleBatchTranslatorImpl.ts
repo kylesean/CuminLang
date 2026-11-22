@@ -85,7 +85,7 @@ implements OpenAiSubtitleBatchTranslator {
             error.name = 'OpenAiSubtitleModelUnavailableError';
             throw error;
         }
-        const schema = createSubtitleBatchResultSchema(input.mode);
+        const schema = createSubtitleBatchResultSchema();
         const prompt = buildSubtitleBatchPrompt(input, input.style);
 
         try {

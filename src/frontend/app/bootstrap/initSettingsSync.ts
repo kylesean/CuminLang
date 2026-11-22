@@ -11,7 +11,7 @@ import type {
 } from '@/common/contracts/runtime-settings';
 
 /** 字幕翻译引擎的合法取值，需与后端 `providers.subtitleTranslation` 枚举保持一致。 */
-const SUBTITLE_ENGINE_VALUES = ['openai', 'tencent', 'none'] as const;
+const SUBTITLE_ENGINE_VALUES = ['openai', 'none'] as const;
 type SubtitleEngine = (typeof SUBTITLE_ENGINE_VALUES)[number];
 
 /**
@@ -48,7 +48,6 @@ export function initSettingsSync(): () => void {
         }
         useSetting.getState().initialize(snapshot);
         const subtitleProvider = snapshot['providers.subtitleTranslation'];
-        const subtitleMode = snapshot['features.openai.subtitleTranslationMode'];
         // 存储值非法（常见于多分支开发后枚举残留）时不抛错中断：
         // 其余设置已初始化完成，这里显式提示用户去设置页重新选择并保存。
         if (!isSubtitleEngine(subtitleProvider)) {
@@ -56,12 +55,7 @@ export function initSettingsSync(): () => void {
             logger.error('invalid subtitle translation provider', { value: subtitleProvider });
             return;
         }
-        if (subtitleMode !== 'zh' && subtitleMode !== 'simple_en' && subtitleMode !== 'custom') {
-            toast.error(i18n.t('settings:runtime.subtitleModeInvalid', { value: subtitleMode }));
-            logger.error('invalid OpenAI subtitle translation mode', { value: subtitleMode });
-            return;
-        }
-        useTranslation.getState().initializeRuntimeSettings(subtitleProvider, subtitleMode);
+        useTranslation.getState().initializeRuntimeSettings(subtitleProvider);
     }).catch((error) => {
         if (epoch !== syncEpoch) {
             return;
@@ -83,13 +77,6 @@ export function initSettingsSync(): () => void {
             useTranslation.getState().setEngine(value);
         }
 
-        if (key === 'features.openai.subtitleTranslationMode') {
-            if (value !== 'zh' && value !== 'simple_en' && value !== 'custom') {
-                logger.error('invalid OpenAI subtitle translation mode', {value});
-                return;
-            }
-            useTranslation.getState().setOpenAiMode(value);
-        }
     });
 
     cleanupFn = () => {

@@ -10,13 +10,10 @@ import type CacheService from '@/backend/services/CacheService';
 import type ModelRoutingService from '@/backend/services/ModelRoutingService';
 import type SentenceTranslatesRepository from '@/backend/services/repositories/SentenceTranslatesRepository';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
-import type ClientProviderService from '@/backend/services/ClientProviderService';
-import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
 import type OpenAiSubtitleBatchTranslator from '@/backend/services/gateways/translate/OpenAiSubtitleBatchTranslator';
 
 function createHarness(getCurrentTranslationProvider: SettingService['getCurrentTranslationProvider']) {
-    const batchTrans = vi.fn().mockResolvedValue(new Map([['hello', '你好']]));
-    const getClient = vi.fn().mockReturnValue({ batchTrans } as unknown as TencentTranslateClient);
+    const translate = vi.fn().mockResolvedValue([{ key: 'hash-1:0', translation: '你好' }]);
     const findBySentencesAndMode = vi.fn().mockResolvedValue([]);
     const upsertMany = vi.fn().mockResolvedValue(undefined);
     const fireAndForget = vi.fn();
@@ -34,19 +31,25 @@ function createHarness(getCurrentTranslationProvider: SettingService['getCurrent
                 }],
             }),
         } as unknown as CacheService,
-        {} as ModelRoutingService,
+        {
+            resolveOpenAiModel: vi.fn().mockReturnValue({
+                providerId: 'openai',
+                modelId: 'gpt-4o-mini',
+                fullModelId: 'openai:gpt-4o-mini',
+            }),
+            resolveProviderLabel: vi.fn().mockReturnValue('OpenAI'),
+        } as unknown as ModelRoutingService,
         { findBySentencesAndMode, upsertMany } as unknown as SentenceTranslatesRepository,
         { fireAndForget } as unknown as RendererGateway,
-        { getClient } as unknown as ClientProviderService<TencentTranslateClient>,
-        {} as OpenAiSubtitleBatchTranslator,
+        { translate } as unknown as OpenAiSubtitleBatchTranslator,
     );
 
-    return { service, batchTrans, getClient, findBySentencesAndMode, upsertMany, fireAndForget };
+    return { service, translate, findBySentencesAndMode, upsertMany, fireAndForget };
 }
 
 describe('SubtitleTranslationService updateDemand 与 releaseSession 竞态', () => {
     it('会话保持活跃时，updateDemand 会调度执行翻译并向渲染进程推送结果', async () => {
-        const harness = createHarness(vi.fn().mockResolvedValue('tencent'));
+        const harness = createHarness(vi.fn().mockResolvedValue('openai'));
 
         await harness.service.updateDemand({
             fileHash: 'hash-1',
@@ -65,14 +68,16 @@ describe('SubtitleTranslationService updateDemand 与 releaseSession 竞态', ()
                 }),
             );
         });
-        expect(harness.batchTrans).toHaveBeenCalledWith(['hello'], expect.objectContaining({ fileHash: 'hash-1' }));
+        expect(harness.translate).toHaveBeenCalledWith(expect.objectContaining({
+            targets: [{ key: 'hash-1:0', text: 'hello' }],
+        }));
     });
 
     it('updateDemand 等待配置解析期间若会话已 releaseSession，不应复活已关闭会话或触发翻译请求', async () => {
-        let resolveProvider!: (v: 'tencent') => void;
+        let resolveProvider!: (v: 'openai') => void;
         const harness = createHarness(
             vi.fn().mockImplementation(
-                () => new Promise<'tencent'>((resolve) => {
+                () => new Promise<'openai'>((resolve) => {
                     resolveProvider = resolve;
                 }),
             ),
@@ -87,7 +92,7 @@ describe('SubtitleTranslationService updateDemand 与 releaseSession 竞态', ()
 
         // 在异步解析尚未完成前释放会话
         harness.service.releaseSession('hash-1', 'renderer-a');
-        resolveProvider('tencent');
+        resolveProvider('openai');
         await pendingDemand;
 
         // 调度器若被误触发，微任务队列中会发起仓储查重和翻译请求；放行微任务后验证仍完全静默
@@ -95,8 +100,7 @@ describe('SubtitleTranslationService updateDemand 与 releaseSession 竞态', ()
         await Promise.resolve();
 
         expect(harness.findBySentencesAndMode).not.toHaveBeenCalled();
-        expect(harness.getClient).not.toHaveBeenCalled();
-        expect(harness.batchTrans).not.toHaveBeenCalled();
+        expect(harness.translate).not.toHaveBeenCalled();
         expect(harness.fireAndForget).not.toHaveBeenCalled();
     });
 });

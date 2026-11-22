@@ -118,6 +118,8 @@ type AppPhase =
 let appPhase: AppPhase = 'booting';
 let pendingFocusRequested = false;
 
+const isAppQuitting = (): boolean => appPhase === 'stopping' || appPhase === 'ready_to_quit';
+
 /**
  * 唤醒并聚焦主窗口；若窗口已销毁且已进入可建窗阶段则重建主窗口；
  * 启动迁移/服务初始化期内收到激活请求时先登记延迟聚焦，防止提前创建空控制器窗口或双窗覆写。
@@ -387,6 +389,9 @@ app.on('ready', async () => {
     // 启动期后台步骤相互独立：任一步失败只记日志，不能阻断后续步骤与建窗。
     // 否则用户看到的是「进程活着但没有窗口」，也没有恢复页。
     const runStartupStep = async (name: string, step: () => Promise<void> | void) => {
+        if (isAppQuitting()) {
+            return;
+        }
         try {
             await step();
         } catch (error) {
@@ -399,6 +404,9 @@ app.on('ready', async () => {
         container.get<StorageDirectoryProvider>(TYPES.StorageDirectoryProvider),
         container.get<MediaPathRegistry>(TYPES.MediaPathRegistry),
     );
+    if (isAppQuitting()) {
+        return;
+    }
     appPhase = 'migrating';
     configureIpcOriginGuard({
         devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL,
@@ -408,6 +416,9 @@ app.on('ready', async () => {
         await runStartupMigrations();
     } catch (error) {
         logger.error('startup migrations failed, entering recovery mode', { error });
+    }
+    if (isAppQuitting()) {
+        return;
     }
     if (getMigrationFailure() !== null) {
         // 恢复模式：迁移未完成，业务控制器与后台任务全部不启动（它们依赖数据库），
@@ -443,6 +454,9 @@ app.on('ready', async () => {
     await runStartupStep('mobile access', () => (
         container.get<MobileAccessService>(TYPES.MobileAccessService).startFromSettings()
     ));
+    if (isAppQuitting()) {
+        return;
+    }
     logStartupPhase('mobile access');
     // 生命周期标记：会话何时开始、以什么配置运行，便于回溯“有活动却无日志”的问题。
     logger.info('app ready', {
@@ -512,18 +526,24 @@ app.on('before-quit', (event) => {
         logger.info('app quit requested while shutting down');
         return;
     }
+    const previousPhase = appPhase;
     appPhase = 'stopping';
-    logger.info('app before quit', { forceExitAfterMs: QUIT_FORCE_EXIT_TIMEOUT_MS });
+    logger.info('app before quit', { previousPhase, forceExitAfterMs: QUIT_FORCE_EXIT_TIMEOUT_MS });
     armForceExitWatchdog();
     try {
-        const inRecoveryMode = getMigrationFailure() !== null;
-        if (!inRecoveryMode) {
+        // 仍在启动/迁移/恢复模式时，业务单例与控制器尚未初始化，不可 resolve MobileAccessService 等业务服务
+        // （否则会在关闭前反向触发 WatchHistoryServiceImpl.init 并发查库）。
+        const skipServiceShutdown = previousPhase === 'booting'
+            || previousPhase === 'migrating'
+            || previousPhase === 'recovery'
+            || getMigrationFailure() !== null;
+        if (!skipServiceShutdown) {
             container.get<DesktopLyricsWindowManager>(TYPES.DesktopLyricsWindow).destroy();
         }
         destroyAppTray();
         disposeProxyFeature();
         terminateAllActiveChildProcesses();
-        if (inRecoveryMode) {
+        if (skipServiceShutdown) {
             try {
                 closeMainDatabase();
             } catch (dbError) {

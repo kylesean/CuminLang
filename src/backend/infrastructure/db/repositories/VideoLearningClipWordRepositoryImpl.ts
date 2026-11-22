@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { inject, injectable } from 'inversify';
 
 import type { Db } from '@/backend/infrastructure/db/createDb';
+import { collectInChunks, inChunks, SQLITE_MAX_BIND_PARAMS_CHUNK } from '@/backend/infrastructure/db/utils';
 import { videoLearningClipWord } from '@/backend/infrastructure/db/tables/videoLearningClipWord';
 import TYPES from '@/backend/ioc/types';
 
@@ -39,13 +40,14 @@ export default class VideoLearningClipWordRepositoryImpl implements VideoLearnin
             return result;
         }
 
-        const rows = await this.db
+        const rows = collectInChunks(keys, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => this.db
             .select({
                 clipKey: videoLearningClipWord.clip_key,
                 word: videoLearningClipWord.word,
             })
             .from(videoLearningClipWord)
-            .where(inArray(videoLearningClipWord.clip_key, keys));
+            .where(inArray(videoLearningClipWord.clip_key, chunk))
+            .all());
 
         const tempMap = new Map<string, Set<string>>();
         for (const row of rows) {
@@ -117,12 +119,14 @@ export default class VideoLearningClipWordRepositoryImpl implements VideoLearnin
                 return;
             }
 
-            tx.delete(videoLearningClipWord)
-                .where(and(
-                    eq(videoLearningClipWord.word, newWord),
-                    inArray(videoLearningClipWord.clip_key, clipKeys),
-                ))
-                .run();
+            inChunks(clipKeys, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => {
+                tx.delete(videoLearningClipWord)
+                    .where(and(
+                        eq(videoLearningClipWord.word, newWord),
+                        inArray(videoLearningClipWord.clip_key, chunk),
+                    ))
+                    .run();
+            });
 
             tx.update(videoLearningClipWord)
                 .set({

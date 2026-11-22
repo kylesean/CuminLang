@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { inject, injectable } from 'inversify';
 
 import type { Db } from '@/backend/infrastructure/db/createDb';
+import { collectInChunks, SQLITE_MAX_BIND_PARAMS_CHUNK } from '@/backend/infrastructure/db/utils';
 import { sentenceTranslates } from '@/backend/infrastructure/db/tables/sentenceTranslates';
 import TYPES from '@/backend/ioc/types';
 import TimeUtil from '@/common/utils/TimeUtil';
@@ -25,10 +26,11 @@ export default class SentenceTranslatesRepositoryImpl implements SentenceTransla
         if (sentences.length === 0) {
             return [];
         }
-        return this.db
+        return collectInChunks(sentences, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => this.db
             .select()
             .from(sentenceTranslates)
-            .where(and(inArray(sentenceTranslates.sentence, sentences), eq(sentenceTranslates.mode, mode)));
+            .where(and(inArray(sentenceTranslates.sentence, chunk), eq(sentenceTranslates.mode, mode)))
+            .all());
     }
 
     public async upsert(params: SentenceTranslatesUpsertParams): Promise<void> {

@@ -2,7 +2,6 @@ import { inject, injectable } from 'inversify';
 import TYPES from '@/backend/ioc/types';
 import { getMainLogger } from '@/backend/infrastructure/logger';
 import type CacheService from '@/backend/services/CacheService';
-import type ClientProviderService from '@/backend/services/ClientProviderService';
 import type ModelRoutingService from '@/backend/services/ModelRoutingService';
 import type SettingService from '@/backend/services/SettingService';
 import type OpenAiSubtitleBatchTranslator from '@/backend/services/gateways/translate/OpenAiSubtitleBatchTranslator';
@@ -12,7 +11,6 @@ import type {
     SubtitleTranslationTarget,
 } from '@/backend/services/gateways/translate/SubtitleBatchTranslationInput';
 import type RendererGateway from '@/backend/services/gateways/renderer/RendererGateway';
-import type { TencentTranslateClient } from '@/backend/services/gateways/translate/TencentTranslateClient';
 import type SentenceTranslatesRepository from '@/backend/services/repositories/SentenceTranslatesRepository';
 import SubtitleTranslationScheduler, {
     type SubtitleTranslationBatchRequest,
@@ -28,16 +26,13 @@ import {
 } from '@/backend/services/subtitle-translation/SubtitleTranslationContext';
 import {
     buildContextStorageKeyForSentence,
-    buildSentenceStorageKey,
     resolvePromptNeighbor,
     shouldTranslateSubtitleText,
 } from '@/backend/services/subtitle-translation/SubtitleTranslationCacheKey';
 import type { SubtitleTranslationStorageMode } from '@/backend/services/subtitle-translation/SubtitleTranslationStorageMode';
-import { concurrency } from '@/backend/utils/concurrency';
 import type { Sentence } from '@/common/types/SentenceC';
 import type {
     RendererTranslationItem,
-    TranslationMode,
     TranslationProvider,
 } from '@/common/types/TranslationResult';
 import TimeUtil from '@/common/utils/TimeUtil';
@@ -50,8 +45,6 @@ interface SubtitleTranslationExecutionContext {
     provider: TranslationProvider;
     /** 当前持久化缓存模式。 */
     storageMode: SubtitleTranslationStorageMode;
-    /** 前端用于过滤过期结果的翻译模式。 */
-    mode: TranslationMode;
     /**
      * 当前字幕文件按稳定坐标（sentence.index）索引的句子映射。
      * 增量转录会话的坐标为「分片序号 × 100000 + 片内序号」，与数组下标不同，
@@ -60,8 +53,8 @@ interface SubtitleTranslationExecutionContext {
     sentencesByIndex: Map<number, Sentence>;
     /** 当前字幕文件哈希。 */
     fileHash: string;
-    /** OpenAI 批量提示词使用的风格约束。 */
-    style?: string;
+    /** 批量提示词使用的风格约束。 */
+    style: string;
     /** 风格签名。 */
     styleSignature: string;
 }
@@ -82,7 +75,7 @@ interface SubtitleBatchTarget {
     publishKey: string;
     /**
      * 数据库 sentence 列的存储键，由本次请求的实际输入形态派生：
-     * OpenAI 带上下文批量为三句键，腾讯批量与无上下文直翻为单句键。
+     * 带上下文批量为三句键，无上下文直翻为单句键。
      */
     storageKey: string;
     /** 字幕原文，保留大小写，用于送翻译与跳过判定。 */
@@ -192,11 +185,6 @@ const createAbortError = (): Error => {
     return error;
 };
 
-/** 批次失败提示里的引擎展示名；新引擎接入时在此补一行。 */
-const PROVIDER_LABELS: Partial<Record<TranslationProvider, string>> = {
-    tencent: '腾讯',
-};
-
 /**
  * 负责字幕缓存查询、在线翻译、结果持久化与窗口调度。
  */
@@ -216,15 +204,11 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
      * 构造字幕翻译编排服务。
      *
      * @param settingService 设置业务服务。
-     * @param localAiService 本地大模型推理服务。
      * @param cacheService 内存缓存服务。
      * @param modelRoutingService 模型路由配置服务。
      * @param sentenceTranslatesRepository 句子翻译缓存仓储。
      * @param rendererGateway 渲染进程 API 网关。
-     * @param tencentProvider 腾讯云翻译客户端提供器。
      * @param openAiSubtitleTranslator OpenAI 批量字幕翻译网关。
-     * @param localSubtitleTranslator 本地模型批量字幕翻译网关。
-     * @param resourceFallback 资源回退状态服务。
      */
     constructor(
         @inject(TYPES.SettingService) private readonly settingService: SettingService,
@@ -232,7 +216,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
         @inject(TYPES.ModelRoutingService) private readonly modelRoutingService: ModelRoutingService,
         @inject(TYPES.SentenceTranslatesRepository) private readonly sentenceTranslatesRepository: SentenceTranslatesRepository,
         @inject(TYPES.RendererGateway) private readonly rendererGateway: RendererGateway,
-        @inject(TYPES.TencentClientProvider) private readonly tencentProvider: ClientProviderService<TencentTranslateClient>,
         @inject(TYPES.OpenAiSubtitleBatchTranslator) private readonly openAiSubtitleTranslator: OpenAiSubtitleBatchTranslator,
     ) {
         this.scheduler = new SubtitleTranslationScheduler<SubtitleTranslationExecutionContext>({
@@ -256,7 +239,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                     batchId: request.batchId,
                     demandId: request.demandId,
                     provider: request.context.provider,
-                    mode: request.context.mode,
                     priority: request.priority,
                     requeueCount: request.requeueCount,
                     indexStart: request.indices[0],
@@ -270,7 +252,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                     batchId: request.batchId,
                     demandId: request.demandId,
                     provider: request.context.provider,
-                    mode: request.context.mode,
                     priority: request.priority,
                     requeueCount: request.requeueCount,
                     indexStart: request.indices[0],
@@ -284,7 +265,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                     batchId: request.batchId,
                     demandId: request.demandId,
                     provider: request.context.provider,
-                    mode: request.context.mode,
                     priority: request.priority,
                     requeueCount: request.requeueCount,
                     indexStart: request.indices[0],
@@ -295,7 +275,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
         });
         this.directTranslator = new DirectSubtitleTranslator({
             settingService: this.settingService,
-            tencentProvider: this.tencentProvider,
             resolveContext: (provider) => this.resolveCurrentStorageContext(provider),
             host: this,
             logger: this.logger,
@@ -331,11 +310,10 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
      *          对应引擎未配置模型时抛出显式错误。
      */
     private resolveCurrentStorageContext(
-        provider: NonNullable<Awaited<ReturnType<SettingService['getCurrentTranslationProvider']>>>
-    ): Promise<ResolvedSubtitleTranslationContext> {
+        provider: TranslationProvider,
+    ): ResolvedSubtitleTranslationContext {
         return resolveSubtitleTranslationContext(
             {
-                settingService: this.settingService,
                 modelRoutingService: this.modelRoutingService,
             },
             provider,
@@ -390,29 +368,9 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             throw new Error('未启用字幕翻译服务');
         }
 
-        if (provider === 'tencent') {
-            this.scheduler.updateDemand({
-                fileHash,
-                currentIndex: input.currentIndex,
-                demandId: input.demandId,
-                rendererSessionId: input.rendererSessionId,
-                sentenceIndices,
-                profileKey: 'tencent',
-                context: {
-                    provider,
-                    storageMode: 'tencent',
-                    mode: 'zh',
-                    styleSignature: '',
-                    sentencesByIndex: this.buildSentencesByIndex(srtData.sentences),
-                    fileHash,
-                },
-            });
-            return;
-        }
-
         let resolvedContext;
         try {
-            resolvedContext = await this.resolveCurrentStorageContext(provider);
+            resolvedContext = this.resolveCurrentStorageContext(provider);
         } catch (error) {
             if (this.latestDemandBySession.get(sessionKey) === input.demandId) {
                 this.latestDemandBySession.delete(sessionKey);
@@ -423,7 +381,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
         if (this.latestDemandBySession.get(sessionKey) !== input.demandId) {
             return;
         }
-        const { mode, storageMode, style, profileKey } = resolvedContext;
+        const { storageMode, style, profileKey } = resolvedContext;
         this.scheduler.updateDemand({
             fileHash,
             currentIndex: input.currentIndex,
@@ -434,7 +392,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             context: {
                 provider,
                 storageMode,
-                mode,
                 styleSignature: resolvedContext.styleSignature,
                 sentencesByIndex: this.buildSentencesByIndex(srtData.sentences),
                 fileHash,
@@ -487,7 +444,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             batchId: request.batchId,
             demandId: request.demandId,
             provider: request.context.provider,
-            mode: request.context.mode,
             priority: request.priority,
             requeueCount: request.requeueCount,
             indexStart: request.indices[0],
@@ -515,7 +471,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                     batchId: request.batchId,
                     demandId: request.demandId,
                     provider: request.context.provider,
-                    mode: request.context.mode,
                     priority: request.priority,
                     requeueCount: request.requeueCount,
                     indexStart: request.indices[0],
@@ -533,9 +488,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 };
             }
 
-            const onlineResults = request.context.provider === 'tencent'
-                ? await this.translateWithTencent(request, onlineTargets)
-                : await this.translateBatchWithGateway(request, onlineTargets);
+            const onlineResults = await this.translateBatchWithGateway(request, onlineTargets);
             this.throwIfAborted(request.signal);
             await this.saveTranslations(
                 this.toStorageKeyedTranslations(onlineResults, onlineTargets),
@@ -557,7 +510,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 batchId: request.batchId,
                 demandId: request.demandId,
                 provider: request.context.provider,
-                mode: request.context.mode,
                 priority: request.priority,
                 requeueCount: request.requeueCount,
                 indexStart: request.indices[0],
@@ -571,12 +523,10 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             });
 
             if (failedIndices.size > 0 && request.requeueCount > 0) {
-                const engineLabel = this.resolveEngineLabel(request.context.provider);
+                const engineLabel = this.resolveEngineLabel();
                 this.showFailureToast(
-                    request.context.provider !== 'tencent'
-                        ? `${engineLabel}字幕翻译未返回完整结果，失败 ${failedIndices.size} 条`
-                        : `腾讯字幕翻译未返回完整结果，失败 ${failedIndices.size} 条`,
-                    `subtitle-translation:${request.context.provider}-incomplete:${request.context.mode}`,
+                    `${engineLabel}字幕翻译未返回完整结果，失败 ${failedIndices.size} 条`,
+                    `subtitle-translation:${request.context.provider}-incomplete`,
                 );
             }
 
@@ -606,7 +556,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 priority: request.priority,
                 requeueCount: request.requeueCount,
                 provider: request.context.provider,
-                mode: request.context.mode,
                 indexStart: request.indices[0],
                 indexEnd: request.indices[request.indices.length - 1],
                 batchSize: request.indices.length,
@@ -614,12 +563,10 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 error,
             });
             if (request.requeueCount > 0) {
-                const engineLabel = this.resolveEngineLabel(request.context.provider);
+                const engineLabel = this.resolveEngineLabel();
                 this.showFailureToast(
-                    request.context.provider !== 'tencent'
-                        ? `${engineLabel}字幕翻译请求失败`
-                        : '腾讯字幕翻译请求失败',
-                    `subtitle-translation:${request.context.provider}-batch-failed:${request.context.mode}`,
+                    `${engineLabel}字幕翻译请求失败`,
+                    `subtitle-translation:${request.context.provider}-batch-failed`,
                     error,
                 );
             }
@@ -644,17 +591,14 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
     private buildBatchTargets(
         request: SubtitleTranslationBatchRequest<SubtitleTranslationExecutionContext>
     ): SubtitleBatchTarget[] {
-        const { provider, sentencesByIndex } = request.context;
+        const { sentencesByIndex } = request.context;
         return request.indices
             .map((index) => sentencesByIndex.get(index))
             .filter((sentence): sentence is Sentence => Boolean(sentence))
             .map((sentence) => ({
                 index: sentence.index,
                 publishKey: sentence.translationKey,
-                // 依赖上下文的引擎（OpenAI）用三句键，独立句翻译引擎（腾讯）用单句键。
-                storageKey: provider === 'openai'
-                    ? buildContextStorageKeyForSentence(sentence, sentencesByIndex)
-                    : buildSentenceStorageKey(sentence.text),
+                storageKey: buildContextStorageKeyForSentence(sentence, sentencesByIndex),
                 text: sentence.text,
             }));
     }
@@ -741,50 +685,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
     }
 
     /**
-     * 使用腾讯批量接口翻译当前目标。
-     *
-     * 腾讯接口只吃单句原文，因此结果按原文取回后以 renderer 定位键返回，
-     * 存储键转换由调用方在落库前统一完成。
-     *
-     * @param request 当前批次参数。
-     * @param targets 当前未命中缓存的字幕描述符。
-     * @returns 以 renderer 定位键索引的翻译结果。
-     */
-    private async translateWithTencent(
-        request: SubtitleTranslationBatchRequest<SubtitleTranslationExecutionContext>,
-        targets: SubtitleBatchTarget[],
-    ): Promise<Map<string, string>> {
-        const client = this.tencentProvider.getClient();
-        if (!client) {
-            throw new Error('腾讯翻译客户端未初始化，请检查密钥配置');
-        }
-
-        this.throwIfAborted(request.signal);
-        const holder = await concurrency.withRateLimit(
-            'tencent',
-            () => client.batchTrans(
-                targets.map((target) => target.text),
-                {
-                    batchId: request.batchId,
-                    fileHash: request.fileHash,
-                }
-            ),
-            { signal: request.signal }
-        );
-        this.throwIfAborted(request.signal);
-
-        const translations = new Map<string, string>();
-        targets.forEach((target) => {
-            const translation = holder.get(target.text)?.trim();
-            if (translation) {
-                translations.set(target.publishKey, translation);
-            }
-        });
-        return translations;
-    }
-
-    /**
-     * 通过字幕翻译网关（云端或本地引擎）对当前目标执行一次结构化翻译。
+     * 通过字幕翻译网关对当前目标执行一次结构化翻译。
      *
      * 失败后的重新执行由窗口调度器统一控制，当前方法本身只发起一次请求。
      * 提示词中的回显键使用 renderer 定位键而非数据库存储键：存储键是长哈希，
@@ -798,9 +699,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
         request: SubtitleTranslationBatchRequest<SubtitleTranslationExecutionContext>,
         targets: SubtitleBatchTarget[]
     ): Promise<Map<string, string>> {
-        if (request.context.provider === 'tencent') {
-            throw new Error('腾讯翻译引擎不经过字幕翻译网关');
-        }
         const style = request.context.style;
         if (!style) {
             throw new Error('OpenAI 字幕翻译风格配置缺失');
@@ -823,8 +721,7 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
             targets: targetItems,
             contextBefore: contextBefore ? [contextBefore] : [],
             contextAfter: contextAfter ? [contextAfter] : [],
-            mode: request.context.mode,
-            style: style ?? '',
+            style,
             signal: request.signal,
         };
         this.throwIfAborted(request.signal);
@@ -851,13 +748,10 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
     }
 
     /**
-     * 解析用于展示的真实供应商名称：OpenAI 兼容渠道从服务凭据配置中取用户配置名称，避免写死为 OpenAI。
+     * 解析用于展示的真实供应商名称：从服务凭据配置中取用户配置名称，避免写死为 OpenAI。
      */
-    private resolveEngineLabel(provider: TranslationProvider): string {
-        if (provider === 'openai') {
-            return this.modelRoutingService.resolveProviderLabel?.('subtitleTranslation') ?? 'AI';
-        }
-        return PROVIDER_LABELS[provider] ?? '翻译';
+    private resolveEngineLabel(): string {
+        return this.modelRoutingService.resolveProviderLabel?.('subtitleTranslation') ?? 'AI';
     }
 
     /**
@@ -1044,7 +938,6 @@ export class SubtitleTranslationServiceImpl implements SubtitleTranslationServic
                 fileHash: context.fileHash,
                 translation,
                 provider: context.provider,
-                mode: context.mode,
             }));
         this.rendererGateway.fireAndForget('translation/batch-result', {
             translations: items,

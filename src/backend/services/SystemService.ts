@@ -10,6 +10,13 @@ import type SysConfRepository from '@/backend/services/repositories/SysConfRepos
 import type FileSystemGateway from '@/backend/services/gateways/storage/FileSystemGateway';
 import type StorageDirectoryProvider from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
+import { isPathInsideRoot } from '@/backend/utils/file-path-guard';
+
+/** Windows UNC 网络路径前缀（`\\host\share` 或 `//host/share`），拒绝交给 shell.openPath 防止 SMB/NTLM 泄露。 */
+const UNC_PATH_RE = /^(\\\\|\/\/)/;
+
+/** macOS 可执行应用包扩展名：系统层面是目录，直接 shell.openPath 会启动程序而非打开目录。 */
+const EXECUTABLE_BUNDLE_EXTENSIONS = new Set(['.app', '.pkg', '.bundle', '.dmg', '.command']);
 
 /**
  * 系统维护与杂项应用服务。
@@ -110,9 +117,23 @@ export class SystemServiceImpl implements SystemService {
      * @returns 待打开的目录绝对路径。
      */
     public async prepareFolderForOpen(request: { path: string; createDirectory?: boolean }): Promise<string> {
-        const targetIsDirectory = await this.fileSystemGateway.directoryExists(request.path);
-        const folder = targetIsDirectory ? request.path : path.dirname(request.path);
+        const rawPath = request.path.trim();
+        if (!rawPath || UNC_PATH_RE.test(rawPath) || !path.isAbsolute(rawPath)) {
+            throw new Error('不支持打开该路径');
+        }
+        const resolvedTarget = path.resolve(rawPath);
+        const targetIsDirectory = await this.fileSystemGateway.directoryExists(resolvedTarget);
+        const targetExt = path.extname(resolvedTarget).toLowerCase();
+        // macOS .app/.bundle 等目录若直接传给 shell.openPath 会执行应用，改为打开其父目录。
+        const folder = targetIsDirectory && !EXECUTABLE_BUNDLE_EXTENSIONS.has(targetExt)
+            ? resolvedTarget
+            : path.dirname(resolvedTarget);
         if (request.createDirectory === true) {
+            const libraryRoot = await this.storageDirectoryProvider.provideDirectory(StorageDirectoryTarget.LIBRARY_ROOT);
+            const logsDir = getAppStatePath(AppStateDirectoryType.LOGS);
+            if (!isPathInsideRoot(libraryRoot, folder) && !isPathInsideRoot(logsDir, folder)) {
+                throw new Error('仅允许在应用受管目录内自动创建文件夹');
+            }
             await this.fileSystemGateway.ensureDirectory(folder);
         }
         return folder;

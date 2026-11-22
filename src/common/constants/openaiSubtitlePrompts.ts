@@ -1,19 +1,13 @@
 /**
- * 字幕翻译风格的设置键与解析逻辑。
+ * 字幕翻译风格的默认值与签名逻辑。
  *
- * 批量提示词模板与拼装已下放到各引擎网关自持
+ * 批量提示词模板与拼装已下放到网关实现
  * （见 src/backend/infrastructure/translate/subtitleBatchPrompt.ts），
- * 这里只保留风格默认值、设置键与风格签名，供设置与缓存键使用。
+ * 这里只保留中文翻译风格文案与签名，供提示词与缓存分区使用。
  */
-import type { TranslationMode } from '@/common/types/TranslationResult';
 
-export const OPENAI_SUBTITLE_DEFAULT_STYLES: Record<TranslationMode, string> = {
-    zh: '将原句自然、口语化地翻译成简体中文，语序可适度调整以保证流畅易读，保留原句语气与情感。译文以字幕节奏为准：简洁凝练，长度与源文信息量相称，避免逐词直译造成的冗长。',
-    simple_en: '使用简洁易懂的英文重写字幕，尽量保留原有语序和标点，仅将难懂词汇替换为常见表达，同时保持原意与语气。',
-    custom: '将原句自然、口语化地翻译成简体中文，语序可适度调整以保证流畅易读，保留原句语气与情感。',
-};
-
-export const OPENAI_SUBTITLE_CUSTOM_STYLE_KEY = 'subtitle.openai.customStyle';
+export const OPENAI_SUBTITLE_ZH_STYLE =
+    '将原句自然、口语化地翻译成简体中文，语序可适度调整以保证流畅易读，保留原句语气与情感。译文以字幕节奏为准：简洁凝练，长度与源文信息量相称，避免逐词直译造成的冗长。';
 
 const normalizeStyle = (value: string): string =>
     value
@@ -32,27 +26,8 @@ const hashString = (value: string): string => {
     return (hash >>> 0).toString(16).padStart(8, '0');
 };
 
-const formatStyleValue = (value: string | undefined, fallback: string): string => {
-    const trimmed = value ? value.trim() : '';
-    return trimmed.length > 0 ? trimmed : fallback;
-};
-
-export const getSubtitleDefaultStyle = (mode: TranslationMode): string =>
-    OPENAI_SUBTITLE_DEFAULT_STYLES[mode];
-
-export const resolveSubtitleStyle = (mode: TranslationMode, customStyle?: string): string => {
-    if (mode === 'custom') {
-        return formatStyleValue(customStyle, OPENAI_SUBTITLE_DEFAULT_STYLES.custom);
-    }
-    return OPENAI_SUBTITLE_DEFAULT_STYLES[mode];
-};
-
-export const resolveSubtitleStyleWithSignature = (
-    mode: TranslationMode,
-    customStyle?: string
-): { style: string; signature: string } => {
-    const style = resolveSubtitleStyle(mode, customStyle);
-    const normalized = normalizeStyle(style);
-    const signature = `${mode}_${hashString(`${mode}::${normalized}`)}`;
-    return { style, signature };
+export const resolveSubtitleStyleWithSignature = (): { style: string; signature: string } => {
+    const normalized = normalizeStyle(OPENAI_SUBTITLE_ZH_STYLE);
+    const signature = `zh_${hashString(`zh::${normalized}`)}`;
+    return { style: OPENAI_SUBTITLE_ZH_STYLE, signature };
 };

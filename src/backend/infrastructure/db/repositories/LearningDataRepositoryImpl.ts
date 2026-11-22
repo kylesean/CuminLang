@@ -2,6 +2,7 @@ import { and, asc, eq, gte, inArray, isNotNull, ne, or, sql } from 'drizzle-orm'
 import { inject, injectable } from 'inversify';
 
 import type { Db } from '@/backend/infrastructure/db/createDb';
+import { collectInChunks, inChunks, SQLITE_MAX_BIND_PARAMS_CHUNK } from '@/backend/infrastructure/db/utils';
 import {
     recommendationEvent,
     type InsertRecommendationEvent,
@@ -39,13 +40,6 @@ import TimeUtil from '@/common/utils/TimeUtil';
  * ensureForWords 的分批先例同一口径。
  */
 const RESTORE_BATCH_ROWS = 400;
-
-/** 按 size 切片逐批执行 fn；用于把大数组拆成多条多值 INSERT。 */
-const inChunks = <T>(items: readonly T[], size: number, fn: (chunk: T[]) => void): void => {
-    for (let index = 0; index < items.length; index += size) {
-        fn(items.slice(index, index + size));
-    }
-};
 
 /**
  * 学习数据 SQLite 仓储。
@@ -115,10 +109,12 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
         if (lemmas.length === 0) {
             return [];
         }
-        const rows = await this.db
+        const uniqueLower = Array.from(new Set(lemmas.map((lemma) => lemma.toLowerCase())));
+        const rows = collectInChunks(uniqueLower, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => this.db
             .select()
             .from(words)
-            .where(inArray(sql`lower(${words.word})`, lemmas.map((lemma) => lemma.toLowerCase())));
+            .where(inArray(sql`lower(${words.word})`, chunk))
+            .all());
         return rows.map((row) => ({ ...row, mastery: effectiveWordMastery(row) }));
     }
 
@@ -126,10 +122,12 @@ export default class LearningDataRepositoryImpl implements LearningDataRepositor
         if (wordsToFind.length === 0) {
             return [];
         }
-        return this.db
+        const uniqueLower = Array.from(new Set(wordsToFind.map((word) => word.toLowerCase())));
+        return collectInChunks(uniqueLower, SQLITE_MAX_BIND_PARAMS_CHUNK, (chunk) => this.db
             .select()
             .from(reviewCard)
-            .where(inArray(reviewCard.word, wordsToFind.map((word) => word.toLowerCase())));
+            .where(inArray(reviewCard.word, chunk))
+            .all());
     }
 
     public async listReviewOutcomesSince(since: string): Promise<ReviewOutcome[]> {

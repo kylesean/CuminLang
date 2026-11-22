@@ -237,11 +237,6 @@ export default class SettingsController implements Controller {
         return this.settingService.testOpenAi(request.model, request.providerId);
     }
 
-    public async testTencent(): Promise<{ success: boolean, message: string }> {
-        this.logger.info('testing tencent connection');
-        return this.settingService.testTencent();
-    }
-
     registerRoutes(): void {
         registerRoute('settings/runtime/detail', () => this.getRuntimeSettings());
         registerRoute('settings/runtime/save', (p) => this.saveRuntimeSetting(p), {
@@ -257,7 +252,6 @@ export default class SettingsController implements Controller {
             schema: z.object({ model: z.string(), providerId: z.string().optional() }),
             broadcastError: false,
         });
-        registerRoute('settings/service-credentials/test-tencent', () => this.testTencent(), { broadcastError: false });
         registerRoute('settings/engine-selection/detail', () => this.getEngineSelectionDetail());
         registerRoute('settings/resource-status/detail', () => this.getResourceStatusDetail());
         registerRoute('settings/engine-selection/save', (p) => this.saveEngineSelection(p), {

@@ -75,7 +75,6 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
 
     const requestTranslation = useTranslation(state => state.requestTranslation);
     const engine = useTranslation(state => state.engine);
-    const openAiMode = useTranslation(state => state.openAiMode);
     const activeFileHash = useTranslation(state => state.activeFileHash);
     const matchedFileHash = useVocabularyState(state => state.matchedFileHash);
     const vocabReady = Boolean(activeFileHash) && matchedFileHash === activeFileHash;
@@ -155,7 +154,7 @@ export default function MainSubtitle({ variant = 'panel' }: { variant?: 'panel' 
         if (sentence && engine !== 'none' && activeFileHash === sentence.fileHash) {
             requestTranslation(sentence.fileHash, sentence.index);
         }
-    }, [logger, sentence, engine, openAiMode, activeFileHash, requestTranslation]);
+    }, [logger, sentence, engine, activeFileHash, requestTranslation]);
 
     // 两种不会触发胶囊区 mouseleave 的情况兜底关闭悬停临时循环：当前句清空（切视频，胶囊区随早退分支卸载）、组件卸载（离开播放页）
     useEffect(() => {

@@ -15,7 +15,7 @@ const buildService = (memoryDb: MemoryDb) => {
     const words = new WordsRepositoryImpl(memoryDb.db);
     const encounters = new WordEncounterRepositoryImpl(memoryDb.db);
     const cards = new ReviewCardRepositoryImpl(memoryDb.db);
-    const service = new WordEncounterServiceImpl(encounters, words, cards);
+    const service = new WordEncounterServiceImpl(encounters, words, cards, undefined, undefined, memoryDb.db);
     return { service, words, encounters, cards };
 };
 
@@ -394,5 +394,60 @@ describe('WordEncounterService 复习闭环', () => {
         const rated = await service.rateReview({ word: 'findings', rating: 'good' });
         expect(rated.card.word).toBe('findings');
         expect(rated.card.schedule.reps).toBe(1);
+    });
+
+    it('词表为大写形式（如 Latin）而遭遇记录为小写 lemma 时，复习队列仍能关联语境', async () => {
+        memoryDb = createMemoryDb();
+        const { service, words, cards } = buildService(memoryDb);
+        await words.insertOne({ word: 'Latin', translate: '拉丁语', status: 'learning', source: 'manual' });
+        await cards.ensureForWords(['latin'], new Date(Date.now() - DAY_MS).toISOString());
+
+        await service.record({
+            word: 'Latin',
+            action: 'open',
+            context: 'Classical Latin shaped European languages.',
+            sentenceIndex: 0,
+        });
+
+        const queue = await service.getReviewQueue(12, ['Latin']);
+        expect(queue.items).toHaveLength(1);
+        expect(queue.items[0].context?.text).toBe('Classical Latin shaped European languages.');
+    });
+
+    it('rateReview 写遭遇日志失败时整事务回滚复习卡与掌握度', async () => {
+        memoryDb = createMemoryDb();
+        const wordsRepo = new WordsRepositoryImpl(memoryDb.db);
+        const cardsRepo = new ReviewCardRepositoryImpl(memoryDb.db);
+        const baseEncounters = new WordEncounterRepositoryImpl(memoryDb.db);
+        let failRecord = false;
+        const encountersProxy: typeof baseEncounters = Object.assign(Object.create(baseEncounters), {
+            record: async (value: Parameters<typeof baseEncounters.record>[0]) => {
+                if (failRecord) {
+                    throw new Error('encounter log write failed');
+                }
+                return baseEncounters.record(value);
+            },
+            findLatestContexts: baseEncounters.findLatestContexts.bind(baseEncounters),
+            listReviewOutcomesSince: baseEncounters.listReviewOutcomesSince.bind(baseEncounters),
+            listActionsSince: baseEncounters.listActionsSince.bind(baseEncounters),
+        });
+        const service = new WordEncounterServiceImpl(
+            encountersProxy,
+            wordsRepo,
+            cardsRepo,
+            undefined,
+            undefined,
+            memoryDb.db,
+        );
+        await wordsRepo.insertOne({ word: 'resilient', translate: '有韧性的', status: 'learning', source: 'manual' });
+        await cardsRepo.ensureForWords(['resilient'], new Date(Date.now() - DAY_MS).toISOString());
+
+        failRecord = true;
+        await expect(service.rateReview({ word: 'resilient', rating: 'good' })).rejects.toThrow('encounter log write failed');
+
+        const card = await cardsRepo.findByWord('resilient');
+        const word = await wordsRepo.findByWord('resilient');
+        expect(card?.reps).toBe(0);
+        expect(word?.mastery).toBe(0);
     });
 });

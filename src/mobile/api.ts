@@ -29,16 +29,21 @@ function localizeMobileApiError(rawMessage: string): string {
 const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const response = await fetch(path, init);
     let payload: unknown = null;
+    let parseFailed = false;
     try {
         payload = await response.json();
     } catch {
         payload = null;
+        parseFailed = true;
     }
     if (!response.ok) {
         const rawMessage = payload && typeof payload === 'object' && 'error' in payload
             ? String((payload as { error: unknown }).error)
             : `HTTP ${response.status}`;
         throw new Error(localizeMobileApiError(rawMessage));
+    }
+    if (parseFailed || payload === null) {
+        throw new Error(localizeMobileApiError('服务器返回了无效响应'));
     }
     return payload as T;
 };

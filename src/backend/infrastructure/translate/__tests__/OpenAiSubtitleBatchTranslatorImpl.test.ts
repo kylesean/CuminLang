@@ -24,7 +24,6 @@ const makeInput = (): SubtitleBatchTranslationInput => ({
     ],
     contextBefore: [],
     contextAfter: [],
-    mode: 'zh',
     style: '自然简洁中文字幕',
     signal: new AbortController().signal,
 });
