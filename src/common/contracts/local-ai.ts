@@ -1,10 +1,64 @@
 /**
- * 随包分发的 llama.cpp 运行时版本（供本地语义向量运行时使用）。
+ * 按需下载的 llama.cpp 运行时版本（供本地语义向量运行时使用）。
  *
  * EmbeddingGemma 2 的 `gemma-embedding2` 架构需要 b11500+。
- * 升级版本时同步更新 `scripts/download.mjs` 的资源名与 SHA-256。
  */
 export const LLAMA_RUNTIME_VERSION = 'b12292';
+
+/** llama.cpp 运行时下载归档坐标（按 `process.platform` / `process.arch` 索引）。 */
+export interface LlamaRuntimeArchive {
+    readonly url: string;
+    readonly sha256: string;
+    /** 归档近似大小（字节），用于下载响应缺少 Content-Length 时的进度回退。 */
+    readonly estimatedBytes: number;
+}
+
+const LLAMA_RELEASE_BASE = `https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_RUNTIME_VERSION}`;
+
+export const LLAMA_RUNTIME_ARCHIVES: Readonly<Record<string, Readonly<Record<string, LlamaRuntimeArchive>>>> = {
+    darwin: {
+        arm64: {
+            url: `${LLAMA_RELEASE_BASE}/llama-${LLAMA_RUNTIME_VERSION}-bin-macos-arm64.tar.gz`,
+            sha256: '94b860a529a64aecfe20c4b9ccb9ca6fb4cf9126b019f3380ee02d7951ca11ef',
+            estimatedBytes: 25_000_000,
+        },
+        x64: {
+            url: `${LLAMA_RELEASE_BASE}/llama-${LLAMA_RUNTIME_VERSION}-bin-macos-x64.tar.gz`,
+            sha256: 'cf07bb8d2232bf48fbd2a11c75c1305bf5165e342201c563a8c89df3c7832690',
+            estimatedBytes: 25_000_000,
+        },
+    },
+    linux: {
+        arm64: {
+            url: `${LLAMA_RELEASE_BASE}/llama-${LLAMA_RUNTIME_VERSION}-bin-ubuntu-vulkan-arm64.tar.gz`,
+            sha256: '462b22e035311435d6f9708150216718e3480394cc6033c59d993e41a252ef27',
+            estimatedBytes: 45_000_000,
+        },
+        x64: {
+            url: `${LLAMA_RELEASE_BASE}/llama-${LLAMA_RUNTIME_VERSION}-bin-ubuntu-vulkan-x64.tar.gz`,
+            sha256: '01a6e2a7caa8d6ab6cb2dd906bd7c5c435440849c259440b1c3d3724850fa8e7',
+            estimatedBytes: 45_000_000,
+        },
+    },
+    win32: {
+        arm64: {
+            url: `${LLAMA_RELEASE_BASE}/llama-${LLAMA_RUNTIME_VERSION}-bin-win-cpu-arm64.zip`,
+            sha256: 'd6a19ced6a43c02fd541ff6a14e4d30a52ada0fc3c621af5338fb66d615561fa',
+            estimatedBytes: 35_000_000,
+        },
+        x64: {
+            url: `${LLAMA_RELEASE_BASE}/llama-${LLAMA_RUNTIME_VERSION}-bin-win-vulkan-x64.zip`,
+            sha256: '0be8bc703e92734646bfadda874e5c16e28d9ea42dde8e6c08fe2431f6b4700b',
+            estimatedBytes: 50_000_000,
+        },
+    },
+};
+
+/** 解析当前平台/架构对应的 llama.cpp 运行时下载坐标；不支持时返回 null。 */
+export const resolveLlamaRuntimeArchive = (
+    platform: string = process.platform,
+    arch: string = process.arch,
+): LlamaRuntimeArchive | null => LLAMA_RUNTIME_ARCHIVES[platform]?.[arch] ?? null;
 
 /** 本地模型完整性校验标记后缀。 */
 export const LOCAL_AI_INTEGRITY_MARKER_SUFFIX = '.sha256.ok';
@@ -13,8 +67,10 @@ import type { CommonDownloadPhase } from '@/common/contracts/model-download-phas
 
 /** 语义向量模型安装与下载状态。 */
 export interface LocalEmbeddingStatus {
-    /** 基础文本语义模型是否就绪。 */
+    /** 基础文本语义模型与推理运行时是否均已就绪。 */
     ready: boolean;
+    /** 推理运行时（llama-server）是否已安装就绪。 */
+    runtimeReady?: boolean;
     /** 展示名。 */
     name: string;
     /** 展示用大小标签。 */

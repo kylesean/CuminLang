@@ -12,6 +12,7 @@ import MakerDMG from '@electron-forge/maker-dmg';
 import packageJson from './package.json';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -100,6 +101,70 @@ const pruneForeignNativeVariants = async (buildPath: string, platform: string, a
                     }
                 }
             }
+        }
+    }
+
+    // macOS arm64 下 onnxruntime-node 随包带了两份完全相同的 43MB 实体文件：
+    // libonnxruntime.1.dylib 与 libonnxruntime.1.31.1.dylib，而绑定加载的是 .1.dylib，
+    // 将版本号文件改为相对符号链接可无损省 ~43MB。
+    if (nativePlatform === 'darwin') {
+        const darwinArchDir = path.join(ortBinRoot, 'napi-v6', 'darwin', arch);
+        const primaryDylib = path.join(darwinArchDir, 'libonnxruntime.1.dylib');
+        if (await pathExists(primaryDylib)) {
+            const primarySha = createHash('sha256').update(await fs.readFile(primaryDylib)).digest('hex');
+            for (const entry of await fs.readdir(darwinArchDir)) {
+                if (!/^libonnxruntime\.\d+\.\d+\.\d+\.dylib$/.test(entry)) continue;
+                const duplicatePath = path.join(darwinArchDir, entry);
+                const stat = await fs.lstat(duplicatePath).catch(() => null);
+                if (!stat || stat.isSymbolicLink() || !stat.isFile()) continue;
+                const duplicateSha = createHash('sha256').update(await fs.readFile(duplicatePath)).digest('hex');
+                if (duplicateSha === primarySha) {
+                    await fs.unlink(duplicatePath);
+                    await fs.symlink('libonnxruntime.1.dylib', duplicatePath);
+                    console.log(`[prune-native] 符号链接去重 ${path.relative(buildPath, duplicatePath)} -> libonnxruntime.1.dylib`);
+                }
+            }
+        }
+    }
+};
+
+/**
+ * 裁剪 Chromium 多语言包，仅保留应用实际支持的英文与简体中文，省去其余 ~50 个语言文件（约 7MB）。
+ *
+ * @param packageResult postPackage 提供的打包结果。
+ */
+const pruneChromiumLocales = async (packageResult: { platform: string; outputPaths: string[] }): Promise<void> => {
+    const keptPaks = new Set(['en-US.pak', 'zh-CN.pak']);
+    const keptLprojs = new Set(['base.lproj', 'en.lproj', 'en_us.lproj', 'zh_cn.lproj', 'zh-hans.lproj']);
+
+    for (const outputPath of packageResult.outputPaths) {
+        if (packageResult.platform === 'darwin') {
+            const appBundles = (await fs.readdir(outputPath)).filter((entry) => entry.endsWith('.app'));
+            for (const bundle of appBundles) {
+                const fwResources = path.join(
+                    outputPath,
+                    bundle,
+                    'Contents',
+                    'Frameworks',
+                    'Electron Framework.framework',
+                    'Versions',
+                    'A',
+                    'Resources',
+                );
+                if (!await pathExists(fwResources)) continue;
+                for (const entry of await fs.readdir(fwResources)) {
+                    if (!entry.toLowerCase().endsWith('.lproj')) continue;
+                    if (keptLprojs.has(entry.toLowerCase())) continue;
+                    await fs.rm(path.join(fwResources, entry), { recursive: true, force: true });
+                }
+            }
+            continue;
+        }
+        const localesDir = path.join(outputPath, 'locales');
+        if (!await pathExists(localesDir)) continue;
+        for (const entry of await fs.readdir(localesDir)) {
+            if (!entry.endsWith('.pak') || keptPaks.has(entry)) continue;
+            await fs.rm(path.join(localesDir, entry), { force: true });
         }
     }
 };
@@ -331,13 +396,19 @@ const config: ForgeConfig = {
         },
     ],
     hooks: {
+        // 先清理历史 .vite 产物，再交由 VitePlugin prePackage 重新生成；避免开发期累积的
+        // 过期 hashed chunk 被 `/.vite` 白名单一并打进 app.asar。
+        generateAssets: async () => {
+            await fs.rm(path.resolve(__dirname, '.vite'), { recursive: true, force: true });
+        },
         // 在 @electron/rebuild 完成原生重建之后、写入 asar 之前：裁掉异平台/异架构原生库与编译期源码
         // （若放在 packageAfterCopy 会早于 rebuild 执行，导致 node-gyp 因缺 deps/common.gypi 失败）
         packageAfterPrune: async (_forgeConfig, buildPath, _electronVersion, platform, arch) => {
             await pruneForeignNativeVariants(buildPath, platform, arch);
         },
-        // 把 mac 产物重签为有效 ad-hoc 签名（否则 TCC 麦克风授权静默失败，见函数注释）
+        // 先裁剪 Chromium 无关语言包，再对 macOS 产物重签 ad-hoc（否则重签后再改 Resources 会破坏签名）
         postPackage: async (_forgeConfig, packageResult) => {
+            await pruneChromiumLocales(packageResult);
             await adhocResignMacApp(packageResult);
         },
         postMake: async (_forgeConfig, makeResults) => {

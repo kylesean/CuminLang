@@ -20,8 +20,18 @@ import {
     LOCAL_EMBEDDING_MODEL,
     LOCAL_EMBEDDING_MMPROJ,
     LLAMA_RUNTIME_VERSION,
+    resolveLlamaRuntimeArchive,
+    type LlamaRuntimeArchive,
     type LocalEmbeddingStatus,
 } from '@/common/contracts/local-ai';
+import {
+    ensureLlamaSonameAliases,
+    getLlamaExecutablePath,
+    getLlamaRuntimeBaseDir,
+    getLlamaRuntimeDir,
+    installLlamaRuntimeFromArchive,
+    isLlamaRuntimeReady,
+} from '@/backend/infrastructure/ai/llamaRuntimeInstaller';
 import { probeReachableDownloadUrl } from '@/backend/utils/probeDownloadUrl';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -94,14 +104,28 @@ export class LocalEmbeddingRuntime {
         return path.join(directory, LOCAL_EMBEDDING_MMPROJ.id, LOCAL_EMBEDDING_MMPROJ.file);
     }
 
-    /** 模型是否已完整安装；只做体积判断，哈希校验在下载与加载时完成。 */
-    public async isReady(): Promise<boolean> {
+    /** 模型文件是否已完整安装；只做体积判断，哈希校验在下载与加载时完成。 */
+    private async isModelReady(): Promise<boolean> {
         try {
             const stat = await fs.promises.stat(await this.modelPath());
             return stat.size === LOCAL_EMBEDDING_MODEL.bytes;
         } catch {
             return false;
         }
+    }
+
+    /** 推理运行时（llama-server）是否已完整安装。 */
+    private async isRuntimeReady(): Promise<boolean> {
+        return (await this.resolveRuntimeExecutablePath()) !== null;
+    }
+
+    /** 模型与推理运行时是否均已安装就绪。 */
+    public async isReady(): Promise<boolean> {
+        const [modelReady, runtimeReady] = await Promise.all([
+            this.isModelReady(),
+            this.isRuntimeReady(),
+        ]);
+        return modelReady && runtimeReady;
     }
 
     /**
@@ -120,15 +144,18 @@ export class LocalEmbeddingRuntime {
 
     /** 语义模型状态：是否已安装、体积、下载进度与下载源，供设置页与引导页展示。 */
     public async getStatus(): Promise<LocalEmbeddingStatus> {
-        const [ready, multimodalReady, modelFilePath, multimodalFilePath] = await Promise.all([
-            this.isReady(),
+        const [modelReady, runtimeReady, multimodalReady, modelFilePath, multimodalFilePath] = await Promise.all([
+            this.isModelReady(),
+            this.isRuntimeReady(),
             this.isMultimodalReady(),
             this.modelPath(),
             this.mmprojPath(),
         ]);
+        const ready = modelReady && runtimeReady;
         const activelyDownloading = this.downloadTask !== null && !this.downloadCancelled;
         return {
             ready,
+            runtimeReady,
             name: LOCAL_EMBEDDING_MODEL.name,
             sizeLabel: LOCAL_EMBEDDING_MODEL.sizeLabel,
             bytes: LOCAL_EMBEDDING_MODEL.bytes,
@@ -236,23 +263,95 @@ export class LocalEmbeddingRuntime {
     }
 
     /**
-     * 下载并安装可选的语义模型。
+     * 下载并安装可选的语义模型及配套 llama.cpp 推理运行时。
      *
-     * 与对话模型下载互不影响：单独目录、单独进度，不占用对话模型的「正在下载」状态。
-     * 同一时间只允许一个语义模型下载任务（含多模态投影），防止两个写入器
-     * 互相覆写 `.part` 后产出「通过校验」的损坏模型。
+     * 按需安装运行时（`llama-server`），避免将 ~96 MB 原生二进制打进基础安装包；
+     * 若运行时或模型已存在且校验通过则自动跳过对应步骤。
      *
-     * @param onProgress 可选进度回调，参数为已下载字节数。
-     * @returns 下载完成时为 true；失败抛错。
+     * @param onProgress 可选进度回调，参数为累计已下载字节数。
      */
     public async download(onProgress?: (downloaded: number) => void): Promise<void> {
-        const modelFilePath = await this.modelPath();
-        await this.runExclusiveDownload('base', LOCAL_EMBEDDING_MODEL.bytes, async (signal) => this.downloadOne(
-            LOCAL_EMBEDDING_MODEL,
-            modelFilePath,
-            signal,
-            onProgress,
-        ));
+        const modelsDir = await this.directories.provideDirectory(StorageDirectoryTarget.MODELS);
+        const modelFilePath = path.join(modelsDir, LOCAL_EMBEDDING_MODEL.id, LOCAL_EMBEDDING_MODEL.file);
+        const needsRuntime = !(await this.isRuntimeReady());
+        let runtimeArchive: LlamaRuntimeArchive | null = null;
+        if (needsRuntime) {
+            runtimeArchive = resolveLlamaRuntimeArchive();
+            if (!runtimeArchive) {
+                throw new Error(`当前平台暂不支持本地语义推理运行时：${process.platform}/${process.arch}`);
+            }
+        }
+        const initialTotal = LOCAL_EMBEDDING_MODEL.bytes + (runtimeArchive?.estimatedBytes ?? 0);
+
+        await this.runExclusiveDownload('base', initialTotal, async (signal) => {
+            let progressOffset = 0;
+            if (runtimeArchive) {
+                progressOffset = await this.installRuntimeWithProgress(
+                    modelsDir,
+                    runtimeArchive,
+                    signal,
+                    onProgress,
+                );
+            }
+            this.downloadPhase = 'downloading';
+            this.downloadedBytes = progressOffset;
+            this.totalBytes = progressOffset + LOCAL_EMBEDDING_MODEL.bytes;
+            this.emitDownloadProgress(true);
+            await this.downloadOne(
+                LOCAL_EMBEDDING_MODEL,
+                modelFilePath,
+                signal,
+                onProgress,
+                progressOffset,
+            );
+        });
+    }
+
+    /** 下载、SHA-256 校验并解压安装 `llama-server` 运行时。 */
+    private async installRuntimeWithProgress(
+        modelsDir: string,
+        archive: LlamaRuntimeArchive,
+        signal: AbortSignal,
+        onProgress?: (downloaded: number) => void,
+    ): Promise<number> {
+        const runtimeBaseDir = getLlamaRuntimeBaseDir(modelsDir);
+        await fs.promises.mkdir(runtimeBaseDir, { recursive: true });
+        const ext = archive.url.endsWith('.zip') ? '.zip' : '.tar.gz';
+        const archivePath = path.join(runtimeBaseDir, `.tmp-llama-${LLAMA_RUNTIME_VERSION}${ext}`);
+        const response = await fetch(archive.url, { signal });
+        if (!response.ok || !response.body) {
+            throw new Error(`本地语义运行时下载失败：HTTP ${response.status}`);
+        }
+        const headerBytes = Number.parseInt(response.headers.get('content-length') ?? '0', 10);
+        const expectedArchiveBytes = headerBytes > 0 ? headerBytes : archive.estimatedBytes;
+        this.totalBytes = expectedArchiveBytes + LOCAL_EMBEDDING_MODEL.bytes;
+        this.emitDownloadProgress(true);
+
+        let downloaded = 0;
+        const sink = fs.createWriteStream(archivePath);
+        const source = Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>);
+        source.on('data', (chunk: Buffer) => {
+            downloaded += chunk.length;
+            this.downloadedBytes = downloaded;
+            this.emitDownloadProgress();
+            onProgress?.(downloaded);
+        });
+        try {
+            await pipeline(source, sink, { signal });
+            this.downloadPhase = 'verifying';
+            this.emitDownloadProgress(true);
+            if (await this.sha256File(archivePath, signal) !== archive.sha256) {
+                throw new Error('本地语义运行时 SHA256 校验失败，请重试');
+            }
+            await installLlamaRuntimeFromArchive({
+                archivePath,
+                modelsDir,
+                signal,
+            });
+            return downloaded;
+        } finally {
+            await fs.promises.rm(archivePath, { force: true }).catch(() => undefined);
+        }
     }
 
     /**
@@ -304,7 +403,7 @@ export class LocalEmbeddingRuntime {
         try {
             await running;
             this.downloadPhase = 'idle';
-            this.downloadedBytes = expectedBytes;
+            this.downloadedBytes = this.totalBytes;
             this.emitDownloadProgress(true);
         } catch (error) {
             const cancelled = this.downloadCancelled || controller.signal.aborted;
@@ -335,12 +434,14 @@ export class LocalEmbeddingRuntime {
      * @param definition 模型定义（含体积、哈希与下载源）。
      * @param modelPath 目标路径。
      * @param onProgress 可选进度回调。
+     * @param progressOffset 前置步骤（如运行时下载）已计入的总进度偏移字节数。
      */
     private async downloadOne(
         definition: typeof LOCAL_EMBEDDING_MODEL,
         modelPath: string,
         signal: AbortSignal,
         onProgress?: (downloaded: number) => void,
+        progressOffset = 0,
     ): Promise<void> {
         try {
             const stat = await fs.promises.stat(modelPath);
@@ -349,6 +450,9 @@ export class LocalEmbeddingRuntime {
                 // 校验失败（文件已被删除）时继续走重新下载，而不是把错误抛给用户。
                 try {
                     await this.verifyModelIntegrity(definition, modelPath);
+                    this.downloadedBytes = progressOffset + definition.bytes;
+                    this.emitDownloadProgress(true);
+                    onProgress?.(this.downloadedBytes);
                     return;
                 } catch {
                     // 继续下载。
@@ -370,9 +474,10 @@ export class LocalEmbeddingRuntime {
         const source = Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>);
         source.on('data', (chunk: Buffer) => {
             downloaded += chunk.length;
-            this.downloadedBytes = downloaded;
+            const cumulative = progressOffset + downloaded;
+            this.downloadedBytes = cumulative;
             this.emitDownloadProgress();
-            onProgress?.(downloaded);
+            onProgress?.(cumulative);
         });
         try {
             await pipeline(source, sink, { signal });
@@ -404,12 +509,12 @@ export class LocalEmbeddingRuntime {
     }
 
     /**
-     * 删除已安装的语义模型与多模态投影。
+     * 删除已安装的语义模型、多模态投影与按需下载的 llama.cpp 运行时。
      *
      * 先停进程（等待真正退出）再删文件：Windows 下运行中的文件无法删除，
      * 只发 SIGTERM 不等待会在 Windows 上静默删不掉。续传残留与完整性标记一并清理。
      *
-     * @returns 实际删除的文件数。
+     * @returns 实际删除的模型文件数。
      */
     public async remove(): Promise<number> {
         this.downloadController?.abort();
@@ -426,6 +531,8 @@ export class LocalEmbeddingRuntime {
             await fs.promises.rm(`${target}.part`, { force: true }).catch(() => undefined);
             await fs.promises.rm(`${target}${LOCAL_AI_INTEGRITY_MARKER_SUFFIX}`, { force: true }).catch(() => undefined);
         }
+        const modelsDir = await this.directories.provideDirectory(StorageDirectoryTarget.MODELS);
+        await fs.promises.rm(getLlamaRuntimeBaseDir(modelsDir), { recursive: true, force: true }).catch(() => undefined);
         return removed;
     }
 
@@ -568,11 +675,12 @@ export class LocalEmbeddingRuntime {
         if (generation !== this.generation) {
             return null;
         }
-        const runtimePath = this.runtimePath();
-        if (!fs.existsSync(runtimePath)) {
-            this.logger.warn('embedding runtime missing, skip semantic index', { runtimePath });
+        const runtimePath = await this.resolveRuntimeExecutablePath();
+        if (!runtimePath) {
+            this.logger.warn('embedding runtime missing, skip semantic index');
             return null;
         }
+        ensureLlamaSonameAliases(path.dirname(runtimePath), process.platform);
         const port = await this.reservePort();
         if (!port || generation !== this.generation) {
             return null;
@@ -747,15 +855,26 @@ export class LocalEmbeddingRuntime {
         this.idleTimer.unref?.();
     }
 
-    private runtimePath(): string {
-        const exeName = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server';
-        return getRuntimeResourcePath(
+    /**
+     * 优先解析用户模型目录下按需安装的 `llama-server`，若开发机手动预置了
+     * 遗留的 `resources/lib/llama` 目录则回退读取，兼容离线开发调试。
+     */
+    private async resolveRuntimeExecutablePath(): Promise<string | null> {
+        const modelsDir = await this.directories.provideDirectory(StorageDirectoryTarget.MODELS);
+        const userRuntimeDir = getLlamaRuntimeDir(modelsDir);
+        if (isLlamaRuntimeReady(userRuntimeDir)) {
+            return getLlamaExecutablePath(userRuntimeDir);
+        }
+        const legacyRuntimeDir = getRuntimeResourcePath(
             'lib',
             'llama',
             LLAMA_RUNTIME_VERSION,
             `${process.platform}-${process.arch}`,
-            exeName,
         );
+        if (isLlamaRuntimeReady(legacyRuntimeDir)) {
+            return getLlamaExecutablePath(legacyRuntimeDir);
+        }
+        return null;
     }
 
     private async reservePort(): Promise<number | null> {

@@ -14,11 +14,29 @@ vi.mock('electron', () => ({
 }));
 
 import { LocalEmbeddingRuntime } from '@/backend/infrastructure/ai/LocalEmbeddingRuntime';
+import {
+    getLlamaExecutablePath,
+    getLlamaRuntimeDir,
+    llamaDependencyPrefixesFor,
+} from '@/backend/infrastructure/ai/llamaRuntimeInstaller';
 import { StorageDirectoryTarget } from '@/backend/services/gateways/storage/StorageDirectoryProvider';
 import {
     LOCAL_EMBEDDING_MODEL,
     LOCAL_EMBEDDING_MMPROJ,
+    LLAMA_RUNTIME_VERSION,
 } from '@/common/contracts/local-ai';
+
+async function seedMockRuntime(modelsDir: string): Promise<string> {
+    const runtimeDir = getLlamaRuntimeDir(modelsDir);
+    await fs.mkdir(runtimeDir, { recursive: true });
+    await fs.writeFile(path.join(runtimeDir, '.complete'), `${LLAMA_RUNTIME_VERSION}\n`);
+    await fs.writeFile(getLlamaExecutablePath(runtimeDir), 'stub-llama-server');
+    for (const prefix of llamaDependencyPrefixesFor()) {
+        const suffix = process.platform === 'win32' ? '.dll' : process.platform === 'darwin' ? '.dylib' : '.so';
+        await fs.writeFile(path.join(runtimeDir, `${prefix}${suffix}`), 'stub-lib');
+    }
+    return runtimeDir;
+}
 
 describe('LocalEmbeddingRuntime', () => {
     let directory: string | null = null;
@@ -95,7 +113,7 @@ describe('LocalEmbeddingRuntime', () => {
         expect(await runtime.isMultimodalReady()).toBe(false);
     });
 
-    it('状态同时报告文本模型与多模态投影', async () => {
+    it('状态同时报告文本模型与多模态投影（缺失 llama-server 运行时视为未就绪）', async () => {
         directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dashplayer-embedding-'));
         const modelDir = path.join(directory, LOCAL_EMBEDDING_MODEL.id);
         const mmprojDir = path.join(directory, LOCAL_EMBEDDING_MMPROJ.id);
@@ -108,9 +126,16 @@ describe('LocalEmbeddingRuntime', () => {
             ensurePathAccessible: async () => undefined,
         } as never);
 
+        const withoutRuntime = await runtime.getStatus();
+        expect(withoutRuntime.ready).toBe(false);
+        expect(withoutRuntime.runtimeReady).toBe(false);
+        expect(await runtime.embed(['hello'])).toBeNull();
+
+        await seedMockRuntime(directory);
         const status = await runtime.getStatus();
 
         expect(status.ready).toBe(true);
+        expect(status.runtimeReady).toBe(true);
         expect(status.multimodalReady).toBe(true);
         expect(status.bytes).toBe(LOCAL_EMBEDDING_MODEL.bytes);
         expect(status.multimodalBytes).toBe(LOCAL_EMBEDDING_MMPROJ.bytes);
@@ -118,7 +143,7 @@ describe('LocalEmbeddingRuntime', () => {
         expect(status.multimodalModelPath).toBe(path.join(mmprojDir, LOCAL_EMBEDDING_MMPROJ.file));
     });
 
-    it('删除模型会同时移除文本模型与多模态投影', async () => {
+    it('删除模型会同时移除文本模型、多模态投影与按需下载的 llama 运行时', async () => {
         directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dashplayer-embedding-'));
         const modelDir = path.join(directory, LOCAL_EMBEDDING_MODEL.id);
         const mmprojDir = path.join(directory, LOCAL_EMBEDDING_MMPROJ.id);
@@ -126,6 +151,7 @@ describe('LocalEmbeddingRuntime', () => {
         await fs.mkdir(mmprojDir, { recursive: true });
         await fs.writeFile(path.join(modelDir, LOCAL_EMBEDDING_MODEL.file), 'x');
         await fs.writeFile(path.join(mmprojDir, LOCAL_EMBEDDING_MMPROJ.file), 'y');
+        const runtimeDir = await seedMockRuntime(directory);
         const runtime = new LocalEmbeddingRuntime({
             provideDirectory: async () => directory!,
             ensurePathAccessible: async () => undefined,
@@ -136,6 +162,7 @@ describe('LocalEmbeddingRuntime', () => {
         expect(removed).toBe(2);
         expect(await runtime.isReady()).toBe(false);
         expect(await runtime.isMultimodalReady()).toBe(false);
+        await expect(fs.stat(runtimeDir)).rejects.toThrow();
     });
 
     it('启动轮询健康检查期间若被 shutdown 叫停，必须终止已生成的子进程而不留孤儿进程', async () => {

@@ -330,46 +330,6 @@ const downloadAndExtractBinaryFromArchive = async ({
     }
 };
 
-/**
- * 补建 llama.cpp linux 运行包缺失的 SONAME 别名。
- *
- * 官方 linux 发行包只带版本化动态库（如 libllama.so.0.4.0），不再包含
- * .so.0 别名符号链接；动态链接器按 SONAME 查找，缺别名时 llama-server
- * 启动即报 "cannot open shared object file: libllama-common.so.0"。
- * 本函数保证 pnpm run download 侧新装/存量都完整；运行时侧
- * （LocalAiRuntime.start）另有等价自愈，覆盖从不重跑下载脚本的安装。
- * @param {string} runtimeDir 运行时目录。
- */
-const ensureLlamaSonameAliases = (runtimeDir, targetPlatform = os.platform()) => {
-    if (targetPlatform === 'win32' || targetPlatform === 'darwin' || !fs.existsSync(runtimeDir)) return;
-    for (const entry of fs.readdirSync(runtimeDir)) {
-        const match = entry.match(/^(.+)\.so\.\d+\.\d+\.\d+$/);
-        if (!match) continue;
-        const alias = path.join(runtimeDir, `${match[1]}.so.0`);
-        const existing = fs.lstatSync(alias, { throwIfNoEntry: false });
-        if (existing) {
-            if (!existing.isSymbolicLink() || fs.existsSync(alias)) continue;
-            fs.unlinkSync(alias);
-        }
-        fs.symlinkSync(entry, alias);
-        console.info(chalk.green(`✅ runtime alias: ${match[1]}.so.0 -> ${entry}`));
-    }
-};
-
-/**
- * 判断 llama.cpp 官方运行包是否已完整安装。
- * @param {string} runtimeDir 运行时目录。
- * @param {string} executableName 可执行文件名。
- * @param {string[]} dependencyPrefixes 平台依赖库文件名前缀清单。
- * @returns {boolean} 可执行文件和平台动态库均存在时返回 true。
- */
-const isLlamaRuntimeReady = (runtimeDir, executableName, dependencyPrefixes) => {
-    const entries = fs.existsSync(runtimeDir) ? fs.readdirSync(runtimeDir) : [];
-    return fs.existsSync(path.join(runtimeDir, '.complete'))
-        && fs.existsSync(path.join(runtimeDir, executableName))
-        && dependencyPrefixes.every((prefix) => entries.some((entry) => entry.startsWith(prefix)));
-};
-
 ////////////////////
 setProxy();
 const dir = path.join(process.cwd(), 'lib');
@@ -377,14 +337,6 @@ mkdirp(dir);
 
 const platform = process.env.npm_config_platform || os.platform()
 const arch = process.env.npm_config_arch || os.arch()
-
-/**
- * llama.cpp 官方包的动态库命名：unix 系带 lib 前缀，Windows 不带。
- * isLlamaRuntimeReady 与安装后校验共用同一份按平台计算的清单。
- */
-const llamaDependencyPrefixesFor = (platform) => platform === 'win32'
-    ? ['mtmd', 'llama-common', 'llama-server-impl']
-    : ['libmtmd', 'libllama-common', 'libllama-server-impl'];
 
 {
     // ffmpeg
@@ -433,58 +385,60 @@ const llamaDependencyPrefixesFor = (platform) => platform === 'win32'
 }
 
 {
-    // sherpa-onnx 离线识别 CLI
+    // sherpa-onnx 共享动态库版本（3 个 CLI 共用同一份 libonnxruntime + libsherpa-onnx，相比静态链接省 ~65 MB）
     const platformDir = platform === 'darwin' ? 'darwin' : platform === 'win32' ? 'win32' : 'linux';
     const archDir = arch === 'arm64' ? 'arm64' : 'x64';
     const basePath = path.join(dir, 'sherpa-onnx', archDir, platformDir);
-    mkdirp(basePath);
 
     const exeName = platform === 'win32' ? 'sherpa-onnx-offline.exe' : 'sherpa-onnx-offline';
-    const exePath = path.join(basePath, exeName);
-    const res = await verifyExistence({ dir: basePath, file: exeName });
-
     const ttsExeName = platform === 'win32' ? 'sherpa-onnx-offline-tts.exe' : 'sherpa-onnx-offline-tts';
-    const ttsExePath = path.join(basePath, ttsExeName);
-    const ttsRes = await verifyExistence({ dir: basePath, file: ttsExeName });
-
-    // 离线说话人分离 CLI：与识别 CLI 同一个发行归档，按需单独提取。
-    // 场景切分用它把「短回应紧跟在问句后」的文本启发式升级为真实声纹分段。
     const diarizationExeName = platform === 'win32'
         ? 'sherpa-onnx-offline-speaker-diarization.exe'
         : 'sherpa-onnx-offline-speaker-diarization';
-    const diarizationExePath = path.join(basePath, diarizationExeName);
-    const diarizationRes = await verifyExistence({ dir: basePath, file: diarizationExeName });
 
     const version = '1.13.4';
+    const markerFile = '.runtime-source';
+    const expectedMarker = `v${version}-shared`;
     const releaseBase = `https://github.com/k2-fsa/sherpa-onnx/releases/download/v${version}`;
     const assetNames = {
         darwin: {
-            arm64: `sherpa-onnx-v${version}-osx-arm64-static.tar.bz2`,
-            x64: `sherpa-onnx-v${version}-osx-x64-static.tar.bz2`,
+            arm64: `sherpa-onnx-v${version}-osx-arm64-shared.tar.bz2`,
+            x64: `sherpa-onnx-v${version}-osx-x64-shared.tar.bz2`,
         },
         linux: {
-            arm64: `sherpa-onnx-v${version}-linux-aarch64-static.tar.bz2`,
-            x64: `sherpa-onnx-v${version}-linux-x64-static.tar.bz2`,
+            arm64: `sherpa-onnx-v${version}-linux-aarch64-shared-cpu.tar.bz2`,
+            x64: `sherpa-onnx-v${version}-linux-x64-shared.tar.bz2`,
         },
         win32: {
-            arm64: `sherpa-onnx-v${version}-win-arm64-static-MT-Release.tar.bz2`,
-            x64: `sherpa-onnx-v${version}-win-x64-static-MT-Release.tar.bz2`,
+            arm64: `sherpa-onnx-v${version}-win-arm64-shared-MT-Release.tar.bz2`,
+            x64: `sherpa-onnx-v${version}-win-x64-shared-MT-Release.tar.bz2`,
         },
     };
     const sherpaChecksums = {
         darwin: {
-            arm64: 'b1830ce2f19169070c23c2a44b70e1d416e0265e98870a2f62f7aa94811db342',
-            x64: '15cf31d64456ae033c9d81c52df796d9bf003893ed060eb8434012a297945103',
+            arm64: '809ab5d0c77bd8f358364a244e6ab17f2afecf9779eb9fd436fa469c3ff5375c',
+            x64: '6deec0a5477e521684c4511996703da4ad9a47bac72e5f64453568e59a8a579b',
         },
         linux: {
-            arm64: '418bda59e5d02b16d309c6c7850d967c5c855e71184ab6ac6a9b1c79456b2d8f',
-            x64: 'c98b4d91edbcba5087e7847e07529337001b834fe352931ff008ac7c5722fa6f',
+            arm64: '36c5a3c942358ed635471488f50a28a96181331c935b0dce75a02b7f49913dc2',
+            x64: '18887dc13c7d313d0e0f6c164ed31715c27c1c2c4f71acd7c0147dc84cf02514',
         },
         win32: {
-            arm64: 'f9fd39ad3d61cdf24d7d6e1e1f68d4e2be432436cda20a4248ee997be112edb9',
-            x64: 'a21026a1aabb307f4022ed4a60b103bf01ee6617bfc3a7fac70d6d6fbaaad4f8',
+            arm64: '5d5bf0841ba6dbbb9c14828ab06413c2f0cad8f4ad76b88364ff496074e61051',
+            x64: 'c312b30e55258d291067537ce4a6f90e155f1c16b6a10381a5729924e98b7879',
         },
     };
+    const expectedSharedLibs = platform === 'win32'
+        ? ['onnxruntime.dll', 'onnxruntime_providers_shared.dll', 'sherpa-onnx-c-api.dll', 'sherpa-onnx-cxx-api.dll']
+        : platform === 'darwin'
+            ? ['libonnxruntime.1.27.0.dylib', 'libsherpa-onnx-c-api.dylib', 'libsherpa-onnx-cxx-api.dylib']
+            : ['libonnxruntime.so', 'libsherpa-onnx-c-api.so', 'libsherpa-onnx-cxx-api.so'];
+    const extraCopyPatterns = platform === 'win32'
+        ? [/\.dll$/]
+        : platform === 'darwin'
+            ? [/\.dylib$/]
+            : [/\.so(\.|$)/];
+
     const assetName = assetNames[platform]?.[arch];
     const assetUrl = assetName ? `${releaseBase}/${assetName}` : null;
     const sherpaSha256 = sherpaChecksums[platform]?.[arch];
@@ -492,85 +446,63 @@ const llamaDependencyPrefixesFor = (platform) => platform === 'win32'
         throw new Error(`Unsupported sherpa-onnx platform/arch: ${platform}/${arch}`);
     }
 
-    const targets = [];
-    if (res === 'need_download') {
-        targets.push({ outputPath: exePath, binaryNameCandidates: [exeName] });
-    }
-    if (ttsRes === 'need_download') {
-        targets.push({ outputPath: ttsExePath, binaryNameCandidates: [ttsExeName] });
-    }
-    if (diarizationRes === 'need_download') {
-        targets.push({ outputPath: diarizationExePath, binaryNameCandidates: [diarizationExeName] });
-    }
-    if (targets.length > 0) {
-        console.info(chalk.blue(`=> sherpa-onnx targets: ${targets.map((t) => t.outputPath).join(', ')}`));
+    const markerPath = path.join(basePath, markerFile);
+    const currentMarker = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, 'utf8').trim() : null;
+    const allReady = currentMarker === expectedMarker
+        && [exeName, ttsExeName, diarizationExeName, ...expectedSharedLibs].every(
+            (name) => fs.existsSync(path.join(basePath, name)),
+        );
+
+    if (allReady) {
+        console.info(chalk.green(`✅ sherpa-onnx ${expectedMarker} already installed in ${basePath}`));
+    } else {
+        // 清掉旧版静态构建残留，避免 3 个 35MB 静态二进制与共享版混存
+        fs.rmSync(basePath, { recursive: true, force: true });
+        mkdirp(basePath);
+        const targets = [
+            { outputPath: path.join(basePath, exeName), binaryNameCandidates: [exeName] },
+            { outputPath: path.join(basePath, ttsExeName), binaryNameCandidates: [ttsExeName] },
+            { outputPath: path.join(basePath, diarizationExeName), binaryNameCandidates: [diarizationExeName] },
+        ];
+        console.info(chalk.blue(`=> sherpa-onnx (${expectedMarker}) targets: ${targets.map((t) => t.outputPath).join(', ')}`));
         await downloadAndExtractBinaryFromArchive({
             url: assetUrl,
             targets,
+            extraCopyPatterns,
             sha: sherpaSha256,
             algo: 'sha256',
         });
+        // macOS 归档内 libonnxruntime.dylib 与 libonnxruntime.1.27.0.dylib 是两份完全相同的实体副本（各 ~28MB），
+        // 可执行文件链接 @rpath/libonnxruntime.1.27.0.dylib，将无版本号别名改为软链即可直接省 ~28MB。
+        if (platform === 'darwin') {
+            const realDylib = path.join(basePath, 'libonnxruntime.1.27.0.dylib');
+            const aliasDylib = path.join(basePath, 'libonnxruntime.dylib');
+            if (fs.existsSync(realDylib) && fs.existsSync(aliasDylib) && !fs.lstatSync(aliasDylib).isSymbolicLink()) {
+                const [h1, h2] = await Promise.all([
+                    hashFile(realDylib, { algo: 'sha256' }),
+                    hashFile(aliasDylib, { algo: 'sha256' }),
+                ]);
+                if (h1 === h2) {
+                    fs.unlinkSync(aliasDylib);
+                    fs.symlinkSync('libonnxruntime.1.27.0.dylib', aliasDylib);
+                    console.info(chalk.green('✅ deduplicated sherpa-onnx macOS libonnxruntime.dylib -> libonnxruntime.1.27.0.dylib'));
+                }
+            }
+        }
+        for (const libName of expectedSharedLibs) {
+            if (!fs.existsSync(path.join(basePath, libName))) {
+                throw new Error(`sherpa-onnx 共享库缺失：${path.join(basePath, libName)}`);
+            }
+        }
+        fs.writeFileSync(markerPath, `${expectedMarker}\n`);
     }
 }
 
-// llama.cpp 本地推理运行时：按平台下载官方二进制包。
-// - macOS：Metal 包（arm64 走 GPU，Intel Mac 纯 CPU）
-// - linux / win32-x64：Vulkan 包（核显/独显推理；llama.cpp 官方未提供 win-arm64 Vulkan 包）
-// - win32-arm64：CPU 包
-{
-    const llamaVersion = 'b12292';
-    const llamaDir = path.join(dir, 'llama', llamaVersion, `${platform}-${arch}`);
-    mkdirp(llamaDir);
-    const exeName = platform === 'win32' ? 'llama-server.exe' : 'llama-server';
-    const assetNames = {
-        darwin: { arm64: `llama-${llamaVersion}-bin-macos-arm64.tar.gz`, x64: `llama-${llamaVersion}-bin-macos-x64.tar.gz` },
-        linux: { arm64: `llama-${llamaVersion}-bin-ubuntu-vulkan-arm64.tar.gz`, x64: `llama-${llamaVersion}-bin-ubuntu-vulkan-x64.tar.gz` },
-        win32: { arm64: `llama-${llamaVersion}-bin-win-cpu-arm64.zip`, x64: `llama-${llamaVersion}-bin-win-vulkan-x64.zip` },
-    };
-    // 固定到 b12292：EmbeddingGemma 2 的 `gemma-embedding2` 架构需要 b11500+，
-    // 低于该版本加载会报 unknown model architecture。升级同时覆盖对话模型路径，
-    // 已验证 Qwen3.5 2B 在同一运行时下正常生成。
-    const llamaChecksums = {
-        darwin: {
-            arm64: '94b860a529a64aecfe20c4b9ccb9ca6fb4cf9126b019f3380ee02d7951ca11ef',
-            x64: 'cf07bb8d2232bf48fbd2a11c75c1305bf5165e342201c563a8c89df3c7832690',
-        },
-        linux: {
-            arm64: '462b22e035311435d6f9708150216718e3480394cc6033c59d993e41a252ef27',
-            x64: '01a6e2a7caa8d6ab6cb2dd906bd7c5c435440849c259440b1c3d3724850fa8e7',
-        },
-        win32: {
-            arm64: 'd6a19ced6a43c02fd541ff6a14e4d30a52ada0fc3c621af5338fb66d615561fa',
-            x64: '0be8bc703e92734646bfadda874e5c16e28d9ea42dde8e6c08fe2431f6b4700b',
-        },
-    };
-    const assetName = assetNames[platform]?.[arch];
-    const llamaSha256 = llamaChecksums[platform]?.[arch];
-    if (!assetName || !llamaSha256) throw new Error(`本地推理不支持平台：${platform}/${arch}`);
-    const dependencyPrefixes = llamaDependencyPrefixesFor(platform);
-    // 可执行文件之外还需落地的运行包内容：unix 的动态库（含 .so.0 版本别名，
-    // 动态链接器按 SONAME 查找）；Windows 的 DLL；macOS 另有 Metal 着色器。
-    const extraCopyPatterns = platform === 'win32' ? [/\.dll$/] : [/\.dylib$/, /\.metal$/, /\.so(\.|$)/];
-    const exePath = path.join(llamaDir, exeName);
-    if (!isLlamaRuntimeReady(llamaDir, exeName, dependencyPrefixes)) {
-        await downloadAndExtractBinaryFromArchive({
-            url: `https://github.com/ggml-org/llama.cpp/releases/download/${llamaVersion}/${assetName}`,
-            outputPath: exePath,
-            binaryNameCandidates: [exeName],
-            extraCopyPatterns,
-            sha: llamaSha256,
-            algo: 'sha256',
-        });
-        if (!dependencyPrefixes.every((prefix) => fs.readdirSync(llamaDir).some((entry) => entry.startsWith(prefix)))) {
-            throw new Error(`llama.cpp 运行时包不完整，缺少依赖库（${dependencyPrefixes.join(', ')}），请重试 pnpm run download`);
-        }
-        // .complete 标记是“安装侧完成校验”的唯一凭据，LocalAiRuntime 只检查该标记，
-        // 不在运行时侧复刻依赖库清单，避免两份清单漂移。
-        fs.writeFileSync(path.join(llamaDir, '.complete'), `${llamaVersion}\n`);
-    }
-    // 官方包不再内含 .so.0 别名；必须在下载/解压完成后执行，
-    // 兼顾全新安装与存量安装（.complete 已存在）的幂等补链。
-    ensureLlamaSonameAliases(llamaDir, platform);
+// llama.cpp 已改为随 EmbeddingGemma 2 按需下载，主动清理历史 lib/llama 残留，防止被打进安装包。
+const legacyLlamaDir = path.join(dir, 'llama');
+if (fs.existsSync(legacyLlamaDir)) {
+    fs.rmSync(legacyLlamaDir, { recursive: true, force: true });
+    console.info(chalk.green(`✅ removed legacy bundled llama runtime directory: ${legacyLlamaDir}`));
 }
 
 /**
